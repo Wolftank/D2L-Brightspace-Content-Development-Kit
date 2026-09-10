@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Install the Skills</title>
+<style>
+  #cdk {
+    --cardinal:#B11226; --deep:#7E0C1A; --ink:#161616; --cream:#FAF7F2;
+    --blush:#FBE9EC; --blush-b:#F3D3D9; --sand:#F1EBE1; --warm-b:#EADFD0;
+    --divider:#E0D6C8; --body:#4a463f; --muted:#8a847c; --faint:#a59f96;
+    --on-dark:#cfc9c1; --on-dark-muted:#9a948c; --pink:#E8A9B2;
+    --loud:'Archivo','Arial Black','Helvetica Neue',Impact,sans-serif;
+    --warm:'Epilogue','Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+    --text:'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+    --mono:'SFMono-Regular',ui-monospace,Menlo,Consolas,monospace;
+    background:var(--sand); font-family:var(--text); color:var(--body);
+    padding-bottom:60px; -webkit-font-smoothing:antialiased;
+  }
+  #cdk *{box-sizing:border-box;}
+  #cdk .wrap{max-width:900px;margin:0 auto;padding:0 32px;}
+
+  #cdk .stephero{position:relative;overflow:hidden;background:var(--cardinal);
+    padding:34px 8%;display:flex;align-items:center;gap:26px;}
+  #cdk .stephero .corner{position:absolute;bottom:-40px;right:-20px;width:0;height:0;
+    border-bottom:190px solid rgba(0,0,0,.16);border-left:190px solid transparent;}
+  #cdk .stephero .num{position:relative;font-family:var(--loud);font-weight:900;
+    font-size:70px;line-height:.8;color:var(--cream);flex:none;}
+  #cdk .stephero .t{position:relative;flex:1;}
+  #cdk .stephero .kick{font-family:var(--loud);font-weight:800;font-size:12px;
+    letter-spacing:.2em;text-transform:uppercase;color:#F4C9CF;}
+  #cdk .stephero h1{font-family:var(--loud);font-weight:900;font-size:34px;line-height:1;
+    color:var(--cream);margin:8px 0 0;text-transform:uppercase;letter-spacing:-.01em;}
+  #cdk .stephero .arrow{position:relative;width:0;height:0;flex:none;
+    border-top:13px solid transparent;border-bottom:13px solid transparent;
+    border-left:22px solid var(--cream);}
+
+  #cdk .sec{display:flex;align-items:center;gap:14px;margin:46px 0 20px;}
+  #cdk .tri{width:0;height:0;border-left:11px solid transparent;
+    border-right:11px solid transparent;border-bottom:18px solid var(--cardinal);flex:none;}
+  #cdk .sec h2{font-family:var(--warm);font-weight:800;font-size:26px;color:var(--ink);margin:0;}
+  #cdk .sec .rule{flex:1;height:2px;background:var(--divider);}
+  #cdk .sec .note{font-size:13px;color:var(--muted);white-space:nowrap;}
+
+  #cdk .card{background:#fff;border:1px solid var(--warm-b);border-radius:20px;
+    padding:26px 30px;box-shadow:0 1px 3px rgba(0,0,0,.05);margin-bottom:18px;}
+  #cdk .card h3{font-family:var(--warm);font-weight:700;font-size:20px;color:var(--ink);
+    margin:0 0 8px;line-height:1.2;}
+  #cdk .card p{font-size:15.5px;line-height:1.6;margin:0 0 12px;}
+  #cdk .card p:last-child{margin-bottom:0;}
+  #cdk .label{font-size:12px;font-weight:700;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--cardinal);margin-bottom:6px;}
+
+  #cdk pre{background:var(--ink);color:var(--cream);border-radius:10px;
+    padding:16px 18px;overflow-x:auto;font-family:var(--mono);font-size:13px;
+    line-height:1.75;margin:14px 0;}
+  #cdk pre .c{color:var(--on-dark-muted);}
+  #cdk code{font-family:var(--mono);font-size:.92em;background:var(--blush);
+    color:var(--cardinal);padding:2px 6px;border-radius:4px;}
+  #cdk pre code{background:none;color:inherit;padding:0;}
+
+  #cdk ul.peaks{list-style:none;margin:0;padding:0;}
+  #cdk ul.peaks li{display:flex;align-items:flex-start;gap:12px;margin-bottom:11px;
+    font-size:15.5px;line-height:1.55;}
+  #cdk ul.peaks li:last-child{margin-bottom:0;}
+  #cdk ul.peaks li::before{content:"";margin-top:6px;flex:none;width:0;height:0;
+    border-left:5px solid transparent;border-right:5px solid transparent;
+    border-bottom:8px solid var(--cardinal);}
+
+  /* Download button. The href is relative, so it resolves against this topic's
+     own location in the course content folder, where the zip sits beside it. */
+  #cdk .dl{display:inline-flex;align-items:center;gap:16px;text-decoration:none;
+    background:var(--cardinal);color:var(--cream);border-radius:30px;
+    padding:16px 28px 16px 22px;margin:6px 0 4px;
+    box-shadow:0 3px 12px rgba(177,18,38,.22);transition:background .12s;}
+  #cdk .dl:hover{background:var(--deep);}
+  #cdk .dl:focus-visible{outline:3px solid var(--ink);outline-offset:3px;}
+  #cdk .dl .ico{width:0;height:0;flex:none;border-left:11px solid transparent;
+    border-right:11px solid transparent;border-top:17px solid var(--cream);}
+  #cdk .dl .tx{display:flex;flex-direction:column;gap:2px;}
+  #cdk .dl .tx b{font-family:var(--warm);font-weight:700;font-size:17px;line-height:1.1;}
+  #cdk .dl .tx span{font-family:var(--mono);font-size:11.5px;color:#F4C9CF;letter-spacing:.03em;}
+  #cdk .dlnote{font-size:13.5px;color:var(--muted);margin:10px 0 0;line-height:1.5;}
+
+  #cdk .checkpoint{background:var(--blush);border:1px solid var(--blush-b);
+    border-radius:20px;padding:24px 28px;margin-bottom:18px;}
+  #cdk .checkpoint h3{font-family:var(--warm);font-weight:700;font-size:20px;
+    color:var(--ink);margin:0 0 8px;}
+  #cdk .checkpoint p{font-size:15px;line-height:1.55;color:#7a4148;margin:0 0 10px;}
+  #cdk .checkpoint p:last-child{margin-bottom:0;}
+
+  #cdk figure{margin:0;}
+  #cdk figcaption{font-family:var(--mono);font-size:11px;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--muted);margin-bottom:10px;}
+  #cdk svg{width:100%;height:auto;display:block;}
+
+  #cdk .next{display:flex;align-items:center;gap:16px;margin-top:26px;
+    background:#fff;border:1px solid var(--warm-b);border-radius:20px;padding:22px 26px;}
+  #cdk .next .n{font-family:var(--loud);font-weight:900;font-size:40px;line-height:.85;
+    color:var(--cardinal);flex:none;}
+  #cdk .next h3{font-family:var(--warm);font-weight:700;font-size:20px;color:var(--ink);margin:0 0 4px;}
+  #cdk .next p{margin:0;font-size:14.5px;line-height:1.5;color:var(--body);}
+</style>
+</head>
+<body>
+<div id="cdk">
+
+  <div class="stephero">
+    <div class="corner"></div>
+    <div class="num">03</div>
+    <div class="t">
+      <div class="kick">Step Three</div>
+      <h1>Install the Skills</h1>
+    </div>
+    <span class="arrow"></span>
+  </div>
+
+  <div class="wrap">
+
+    <div class="sec"><span class="tri"></span><h2>What a skill actually is</h2>
+      <div class="rule"></div><span class="note">no magic involved</span></div>
+
+    <div class="card">
+      <p>A skill is a folder of written instructions that Claude reads when the task
+         matches. That is genuinely all it is. There is no plugin to install, no service
+         to sign up for, and nothing running in the background.</p>
+      <p>What makes these ones worth having is their contents: every rule in them was
+         measured against our own D2L, including a dozen behaviours that are either absent
+         from the vendor documentation or contradict it. Without them, Claude will build
+         you something reasonable that fails in ways nobody can see.</p>
+    </div>
+
+    <div class="sec"><span class="tri"></span><h2>What you are installing</h2>
+      <div class="rule"></div><span class="note">six skills, one toolkit</span></div>
+
+    <div class="card">
+      <figure>
+        <figcaption>Which skill does what</figcaption>
+        <svg viewBox="0 0 860 356" role="img" aria-label="The router asks eleven questions and sends you to one of five outcomes: use a built-in D2L tool and build nothing, an external page needing no skill, a content topic skill, a SCORM package skill, or a homepage widget skill. All three build skills feed into the tenant QA gate, which feeds into the deployer.">
+          <defs>
+            <marker id="a3" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto">
+              <path d="M0,0 L8,4 L0,8 z" fill="#B11226"/>
+            </marker>
+          </defs>
+          <g font-family="Public Sans,sans-serif">
+
+            <rect x="290" y="0" width="280" height="56" rx="9" fill="#161616"/>
+            <polygon points="308,18 316,32 300,32" fill="#B11226"/>
+            <text x="324" y="31" font-family="ui-monospace,monospace" font-size="12.5" fill="#FAF7F2">d2l-experience-router</text>
+            <text x="308" y="48" font-size="12" fill="#9a948c">eleven questions, start here</text>
+
+            <line x1="430" y1="58" x2="430" y2="82" stroke="#B11226" stroke-width="2.5"/>
+            <line x1="80" y1="86" x2="780" y2="86" stroke="#E0D6C8" stroke-width="2"/>
+            <line x1="80"  y1="86" x2="80"  y2="102" stroke="#E0D6C8" stroke-width="2"/>
+            <line x1="255" y1="86" x2="255" y2="102" stroke="#E0D6C8" stroke-width="2"/>
+            <line x1="430" y1="86" x2="430" y2="102" stroke="#B11226" stroke-width="2.5" marker-end="url(#a3)"/>
+            <line x1="605" y1="86" x2="605" y2="102" stroke="#B11226" stroke-width="2.5" marker-end="url(#a3)"/>
+            <line x1="780" y1="86" x2="780" y2="102" stroke="#B11226" stroke-width="2.5" marker-end="url(#a3)"/>
+
+            <rect x="0" y="106" width="160" height="66" rx="9" fill="#F1EBE1" stroke="#E0D6C8"/>
+            <text x="13" y="129" font-weight="700" font-size="12.5" fill="#8a847c">Built-in D2L tool</text>
+            <text x="13" y="148" font-size="12" fill="#a59f96">Build nothing</text>
+            <text x="13" y="164" font-size="12" fill="#a59f96">at all</text>
+
+            <rect x="175" y="106" width="160" height="66" rx="9" fill="#F1EBE1" stroke="#E0D6C8"/>
+            <text x="188" y="129" font-weight="700" font-size="12.5" fill="#8a847c">External page</text>
+            <text x="188" y="148" font-size="12" fill="#a59f96">No skill needed</text>
+
+            <rect x="350" y="106" width="160" height="66" rx="9" fill="#fff" stroke="#EADFD0"/>
+            <text x="363" y="128" font-family="ui-monospace,monospace" font-size="11" fill="#161616">d2l-content-topic</text>
+            <text x="363" y="148" font-size="12" fill="#8a847c">In the sequence.</text>
+            <text x="363" y="164" font-size="12" fill="#8a847c">Knows who and role.</text>
+
+            <rect x="525" y="106" width="160" height="66" rx="9" fill="#fff" stroke="#EADFD0"/>
+            <text x="538" y="128" font-family="ui-monospace,monospace" font-size="11" fill="#161616">d2l-scorm-package</text>
+            <text x="538" y="148" font-size="12" fill="#8a847c">Writes a grade.</text>
+            <text x="538" y="164" font-size="12" fill="#8a847c">Remembers you.</text>
+
+            <rect x="700" y="106" width="160" height="66" rx="9" fill="#fff" stroke="#F3D3D9"/>
+            <rect x="700" y="106" width="6" height="66" rx="3" fill="#B11226"/>
+            <text x="716" y="128" font-family="ui-monospace,monospace" font-size="11" fill="#161616">d2l-homepage-</text>
+            <text x="716" y="142" font-family="ui-monospace,monospace" font-size="11" fill="#161616">widget</text>
+            <text x="716" y="162" font-size="12" fill="#8a847c">Seen without looking.</text>
+
+            <line x1="430" y1="174" x2="430" y2="198" stroke="#B11226" stroke-width="2.5"/>
+            <line x1="605" y1="174" x2="605" y2="198" stroke="#B11226" stroke-width="2.5"/>
+            <line x1="780" y1="174" x2="780" y2="198" stroke="#B11226" stroke-width="2.5"/>
+            <line x1="430" y1="198" x2="780" y2="198" stroke="#B11226" stroke-width="2.5"/>
+            <line x1="605" y1="198" x2="605" y2="216" stroke="#B11226" stroke-width="2.5" marker-end="url(#a3)"/>
+
+            <rect x="480" y="220" width="250" height="56" rx="9" fill="#161616"/>
+            <polygon points="498,238 506,252 490,252" fill="#B11226"/>
+            <text x="514" y="251" font-family="ui-monospace,monospace" font-size="12.5" fill="#FAF7F2">d2l-tenant-qa</text>
+            <text x="498" y="268" font-size="12" fill="#9a948c">the gate: zero errors to ship</text>
+
+            <line x1="605" y1="278" x2="605" y2="296" stroke="#B11226" stroke-width="2.5" marker-end="url(#a3)"/>
+
+            <rect x="480" y="300" width="250" height="52" rx="9" fill="#fff" stroke="#EADFD0"/>
+            <text x="498" y="322" font-family="ui-monospace,monospace" font-size="11.5" fill="#161616">d2l-activity-deployer</text>
+            <text x="498" y="341" font-size="12" fill="#8a847c">upload, place, verify</text>
+          </g>
+        </svg>
+      </figure>
+    </div>
+
+    <div class="sec"><span class="tri"></span><h2>Get the kit</h2><div class="rule"></div></div>
+
+    <div class="card">
+      <div class="label">One folder, everything in it</div>
+      <h3>Download and unzip</h3>
+
+      <a class="dl" href="d2l-content-development-kit.zip" download>
+        <span class="ico" aria-hidden="true"></span>
+        <span class="tx">
+          <b>Download the kit</b>
+          <span>d2l-content-development-kit.zip &middot; 151 KB</span>
+        </span>
+      </a>
+      <p class="dlnote">Nothing to install and nothing that runs in the background. It is a
+         folder of text files: written instructions for Claude, the checking tools, and the
+         measurements those tools enforce.</p>
+
+      <p style="margin-top:16px;">Unzip it wherever you keep projects. The path does not
+         matter, but <strong>keep it together</strong>: the skills call the checking tools
+         by relative path, so splitting the folder apart breaks the gate.</p>
+      <pre><code><span class="c"># wherever you keep work</span>
+cd ~/projects
+<span class="c"># unzip the kit here, giving you:</span>
+D2L_Code/
+  skills/     <span class="c">the six skills</span>
+  harness/    <span class="c">the checking tools</span>
+  probes/     <span class="c">the evidence they rest on</span>
+  builds/     <span class="c">examples, including these pages</span>
+  docs/       <span class="c">design notes and planning</span></code></pre>
+    </div>
+
+    <div class="sec"><span class="tri"></span><h2>Point Claude at it</h2>
+      <div class="rule"></div><span class="note">one command</span></div>
+
+    <div class="card">
+      <p>Open a terminal in the kit folder and start Claude Code there. It will find the
+         skills automatically, because they sit in the project it is working in.</p>
+      <pre><code>cd D2L_Code
+claude</code></pre>
+      <p>That is the whole installation. If you would rather have the skills available in
+         <em>every</em> project rather than just this one, copy the <code>skills/</code>
+         folder into your personal Claude configuration directory instead. Ask Claude to
+         do it for you if you are not sure where that is.</p>
+    </div>
+
+    <div class="sec"><span class="tri"></span><h2>Check it worked</h2>
+      <div class="rule"></div><span class="note">worth thirty seconds</span></div>
+
+    <div class="checkpoint">
+      <h3>Run the tests before you trust it</h3>
+      <p>The kit checks itself. Run this and you should see three suites pass. If they do
+         not, something did not unzip correctly, and you want to know that now rather
+         than halfway through building.</p>
+      <pre><code>node harness/emulator.test.js
+node harness/lint/lint.test.js</code></pre>
+      <p>Then try the gate on one of the included examples. It should report
+         <strong>Clean. No findings.</strong></p>
+      <pre><code>node harness/lint/lint.js skills/d2l-scorm-package/assets/starter --avenue scorm</code></pre>
+    </div>
+
+    <div class="card">
+      <div class="label">If something looks wrong</div>
+      <h3>Ask Claude, in the kit folder</h3>
+      <p>Genuinely. It has the skills, the tools and the evidence in front of it. Say what
+         you ran and what you saw. Fixing a broken install is the easiest thing it will do
+         for you all day.</p>
+    </div>
+
+    <div class="next">
+      <div class="n">4</div>
+      <div>
+        <h3>Next: build locally</h3>
+        <p>Describe what you want, let Claude route and build it, and watch it in a browser
+           before D2L ever sees it.</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

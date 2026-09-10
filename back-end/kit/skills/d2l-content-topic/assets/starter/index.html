@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>RENAME ME</title>
+<style>
+  /* Fixed pixel height, never viewport units: the D2L content iframe
+     auto-resizes to its content, so vh/vw do not mean "the visible area".
+     For the same reason, position:fixed is unreliable in here. */
+  #root {
+    height: 700px; overflow: auto; box-sizing: border-box; padding: 22px 26px;
+    background: #fff; color: #1c2126;
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  }
+  #root * { box-sizing: border-box; }
+  h1 { font-size: 21px; margin: 0 0 4px; }
+  .sub { color: #6d7883; font-size: 14px; margin: 0 0 16px; }
+  .card { border: 1px solid #d5dce2; border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; }
+  .card h2 { font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
+             color: #6d7883; margin: 0 0 8px; }
+  .instructor-only { border-left: 4px solid #a6192e; background: #fbfcfd; }
+  .instructor-only[hidden] { display: none; }
+  .warn { background: #fdf1e7; border-left: 4px solid #d9a406; padding: 9px 13px;
+          font-size: 14px; margin-bottom: 12px; }
+  .warn[hidden] { display: none; }
+  button {
+    font: 600 14px/1 inherit; padding: 9px 14px; border: 1px solid #c3ccd4;
+    border-radius: 6px; background: #fff; color: #2c353d; cursor: pointer;
+  }
+  button:hover { background: #eef2f5; }
+</style>
+</head>
+<body>
+<div id="root">
+  <h1>RENAME ME</h1>
+  <p class="sub">Replace this with your activity. The wiring below is the part worth keeping.</p>
+
+  <div class="warn" id="warn" hidden></div>
+
+  <div class="card">
+    <h2>Everyone sees this</h2>
+    <div id="main">Loading…</div>
+    <p><button type="button" id="mark">Mark this section as read</button></p>
+  </div>
+
+  <div class="card instructor-only" id="instructorPanel" hidden>
+    <h2>Instructors and TAs see this too</h2>
+    <div id="instructorBody"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ------------------------------------------------------- storage */
+
+  /* Same-origin with the whole LMS, so this store is shared with every other
+     topic AND with D2L's own code: namespace everything. It also THROWS rather
+     than returning null in private mode, under policy, or over quota, so an
+     unwrapped call here would take the whole activity down and render blank. */
+  var NS = 'renameme:v1:';
+  function lsGet(key, fallback) {
+    try {
+      var v = localStorage.getItem(NS + key);
+      return v === null ? fallback : JSON.parse(v);
+    } catch (e) { return fallback; }
+  }
+  function lsSet(key, val) {
+    try { localStorage.setItem(NS + key, JSON.stringify(val)); } catch (e) { /* fine */ }
+  }
+
+  var seen = lsGet('seen', []);
+
+  /* ---------------------------------------------------- data load */
+
+  /* Loaded by injection, NOT a static <script src>: that tag executes in some
+     courses and is silently inert in others, on the same tenant. Injection
+     works either way. A fetch() bootstrap is equally fine. */
+  function loadData(done) {
+    var s = document.createElement('script');
+    s.src = 'data.js';                      // sets window.RENAMEME_DATA
+    s.onload = function () { done(window.RENAMEME_DATA || null); };
+    s.onerror = function () { done(null); };
+    document.head.appendChild(s);
+  }
+
+  /* ------------------------------------------- optional role check */
+
+  /* Only needed if the page must behave differently for instructors. Delete
+     this block otherwise. NOTE: this is presentation only. Your JS is served to
+     the student and can be read, so never hide anything that actually matters
+     behind it. D2L's own server-side permissions are the real boundary. */
+  function currentOrgUnit() {
+    var m = null;
+    try { m = String(window.top.location.href).match(/[?&]ou=(\d+)/); } catch (e) {}
+    if (!m) { try { m = String(location.href).match(/\/content\/\d+\/(\d+)-/); } catch (e) {} }
+    return m ? m[1] : null;
+  }
+
+  function detectRole(done) {
+    var ou = currentOrgUnit();
+    if (!ou || typeof fetch !== 'function') { done(null); return; }
+    fetch('/d2l/api/lp/1.44/enrollments/myenrollments/' + ou, { credentials: 'include' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { done(j && j.Access ? j.Access.ClasslistRoleName : null); })
+      .catch(function () { done(null); });   // degrade quietly, never block render
+  }
+
+  /* --------------------------------------------------------- render */
+
+  function render(data) {
+    document.getElementById('main').textContent = data
+      ? ('Loaded ' + data.items.length + ' items. You have marked ' + seen.length + ' as read.')
+      : 'Content could not load. Refresh the page, and tell your instructor if it keeps happening.';
+
+    if (!data) {
+      var w = document.getElementById('warn');
+      w.textContent = 'Some content is unavailable right now.';
+      w.hidden = false;
+    }
+  }
+
+  document.getElementById('mark').addEventListener('click', function () {
+    if (seen.indexOf('main') < 0) {
+      seen.push('main');
+      lsSet('seen', seen);            // write on change
+    }
+    render(window.RENAMEME_DATA || null);
+  });
+
+  function init(data) {
+    render(data);                     // state was rehydrated before first paint
+
+    detectRole(function (role) {
+      if (role === 'Instructor') {
+        document.getElementById('instructorBody').textContent =
+          'Notes, exemplars or marking guidance go here.';
+        document.getElementById('instructorPanel').hidden = false;
+      }
+    });
+
+    window.RENAMEME_READY = true;     // lets a deploy check confirm real init
+  }
+
+  loadData(init);
+})();
+</script>
+</body>
+</html>

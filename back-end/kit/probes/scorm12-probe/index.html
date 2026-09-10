@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SCSU D2L Tenant Probe v2</title>
+<style>
+  /* v2 lesson, learned live: the embedded SCORM player does not scroll a tall
+     child reliably. Keep the whole probe inside ~560px and run everything
+     automatically, so nothing important is below the fold. */
+  #r {
+    height: 560px; overflow: auto; box-sizing: border-box; padding: 14px 16px;
+    font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    color: #16191c; background: #fff;
+  }
+  #r h1 { font-size: 16px; margin: 0 0 2px; }
+  #r .sub { color: #6e7b87; font-size: 12px; margin: 0 0 10px; }
+  #r h2 {
+    font-size: 11px; margin: 12px 0 4px; color: #46535e; text-transform: uppercase;
+    letter-spacing: .05em; border-bottom: 1px solid #e3e9ef; padding-bottom: 2px;
+  }
+  #r table { border-collapse: collapse; width: 100%; }
+  #r td { padding: 2px 6px; border-bottom: 1px solid #f2f5f8; font: 11px Consolas, monospace; vertical-align: top; }
+  #r td.k { width: 40%; color: #46535e; }
+  #r .p { display: inline-block; padding: 0 6px; border-radius: 8px; font-size: 10px; font-weight: 700; }
+  #r .y { background: #d8f0dd; color: #1d5c2c; }
+  #r .n { background: #fadcdc; color: #8a1c1c; }
+  #r .i { background: #dde8f7; color: #1f4a86; }
+  #r .banner {
+    background: #1f4a86; color: #fff; padding: 8px 12px; border-radius: 5px;
+    font-size: 13px; font-weight: 600; margin-bottom: 10px;
+  }
+  #r textarea {
+    width: 100%; height: 110px; font: 10px/1.35 Consolas, monospace; margin-top: 8px;
+    border: 1px solid #b8c4cf; border-radius: 4px; padding: 6px; box-sizing: border-box;
+  }
+</style>
+</head>
+<body>
+<div id="r">
+  <h1>SCSU D2L Tenant Probe v2</h1>
+  <p class="sub">Everything runs automatically on load. No scrolling required.</p>
+  <div class="banner" id="banner">running…</div>
+  <div id="out"></div>
+  <textarea id="j" readonly></textarea>
+</div>
+
+<!-- Must precede the engine: whether this tag executes is a test result. -->
+<script src="probe-sibling.js"></script>
+
+<script>
+(function () {
+  'use strict';
+  var R = {}, rows = [];
+  function esc(s){ return String(s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];}); }
+  function p(k,t){ return '<span class="p '+k+'">'+esc(t)+'</span>'; }
+  function sec(t){ rows.push('<h2>'+esc(t)+'</h2><table>'); }
+  function row(k,v){ rows.push('<tr><td class="k">'+esc(k)+'</td><td>'+v+'</td></tr>'); }
+  function endsec(){ rows.push('</table>'); }
+
+  /* ---- find the API ---- */
+  var api = null, ver = null, depth = -1, w = window, d = 0;
+  while (d < 12) {
+    try { if (w.API_1484_11) { api = w.API_1484_11; ver='2004'; depth=d; break; }
+          if (w.API)         { api = w.API;         ver='1.2';  depth=d; break; } } catch(e){}
+    var nx; try { nx = w.parent; } catch(e){ break; }
+    if (!nx || nx === w) break; w = nx; d++;
+  }
+  var is04 = ver === '2004';
+  function I(){ return is04 ? api.Initialize('') : api.LMSInitialize(''); }
+  function G(k){ return is04 ? api.GetValue(k) : api.LMSGetValue(k); }
+  function S(k,v){ return is04 ? api.SetValue(k,v) : api.LMSSetValue(k,v); }
+  function C(){ return is04 ? api.Commit('') : api.LMSCommit(''); }
+  function T(){ return is04 ? api.Terminate('') : api.LMSFinish(''); }
+  function E(){ return is04 ? api.GetLastError() : api.LMSGetLastError(); }
+
+  R.environment = { origin: location.origin, href: location.href.slice(0, 200) };
+
+  if (!api) {
+    document.getElementById('banner').textContent = 'No SCORM API found. Opened outside the player?';
+    R.scorm = { apiFound: false };
+  } else {
+    var initR = I();
+    var K = is04
+      ? { id:'cmi.learner_id', name:'cmi.learner_name', status:'cmi.completion_status',
+          score:'cmi.score.raw', max:'cmi.score.max', min:'cmi.score.min',
+          loc:'cmi.location', credit:'cmi.credit', mode:'cmi.mode', entry:'cmi.entry' }
+      : { id:'cmi.core.student_id', name:'cmi.core.student_name', status:'cmi.core.lesson_status',
+          score:'cmi.core.score.raw', max:'cmi.core.score.max', min:'cmi.core.score.min',
+          loc:'cmi.core.lesson_location', credit:'cmi.core.credit',
+          mode:'cmi.core.lesson_mode', entry:'cmi.core.entry' };
+
+    var learnerId = G(K.id), learnerName = G(K.name);
+    var isPreview = /preview/i.test(learnerId) || G(K.credit) === 'no-credit';
+
+    sec('Identity');
+    row('version', (is04 ? 'SCORM 2004' : 'SCORM 1.2') + ' at parent depth ' + depth);
+    row('learner id', esc(learnerId));
+    row('learner name', esc(learnerName));
+    row('credit', esc(G(K.credit)));
+    row('mode', esc(G(K.mode)));
+    row('entry', esc(G(K.entry)));
+    row('prior status', esc(G(K.status)));
+    row('prior score', esc(G(K.score) || '(none)'));
+    row('tracking', isPreview ? p('n','PREVIEW, NOT TRACKED') : p('y','REAL ATTEMPT'));
+    endsec();
+
+    /* ---- suspend_data capacity ---- */
+    var prior = G('cmi.suspend_data');
+    var cap = 0, capRows = [];
+    [1024, 4000, 4096, 4097, 8192, 16384, 64000].forEach(function (n) {
+      var ok = S('cmi.suspend_data', new Array(n + 1).join('x')) !== 'false' && E() === '0';
+      if (ok) { var back = G('cmi.suspend_data'); ok = (back.length === n); if (ok) cap = n; }
+      capRows.push([n, ok]);
+    });
+    S('cmi.suspend_data', prior || '');
+    sec('suspend_data capacity');
+    capRows.forEach(function (x) { row(x[0] + ' chars', x[1] ? p('y','accepted') : p('n','rejected')); });
+    row('LARGEST ACCEPTED', '<b>' + cap + '</b> chars');
+    endsec();
+    R.suspendDataCapacity = cap;
+
+    /* ---- attempt-aware score, so three launches test best-of-3 ---- */
+    /* Counter MUST be keyed by learner. localStorage here belongs to the shared
+       content-service origin, not to the tenant and not to the D2L user, so a
+       single global key is polluted by every other launch in the same browser,
+       including instructor previews. Measured the hard way. */
+    var SEQ = [50, 90, 70], n = 0;
+    var CK = 'scsu:probe:launches:' + learnerId;
+    try { n = parseInt(localStorage.getItem(CK) || '0', 10) || 0; } catch (e) {}
+    var score = SEQ[Math.min(n, SEQ.length - 1)];
+    try { localStorage.setItem(CK, String(n + 1)); } catch (e) {}
+
+    var w1 = S(K.score, String(score)), e1 = E();
+    S(K.max, '100'); S(K.min, '0');
+    var w2 = S(K.status, is04 ? 'completed' : 'completed'), e2 = E();
+    S(K.loc, 'probe-v2');
+    var cm = C(), ce = E();
+
+    sec('Write test');
+    row('launch number', String(n + 1) + ' (scripted sequence 50, 90, 70)');
+    row('wrote score', w1 !== 'false' && e1 === '0' ? p('y', String(score)) : p('n','failed err ' + e1));
+    row('wrote status', w2 !== 'false' && e2 === '0' ? p('y','completed') : p('n','failed err ' + e2));
+    row('commit', cm !== 'false' && ce === '0' ? p('y','ok') : p('n','failed err ' + ce));
+    row('read back score', esc(G(K.score)));
+    endsec();
+
+    R.scorm = {
+      apiFound: true, version: ver, depth: depth, initialize: initR,
+      learnerId: learnerId, learnerName: learnerName,
+      credit: G(K.credit), mode: G(K.mode), entry: G(K.entry),
+      isPreview: isPreview, launchNumber: n + 1, scoreWritten: score,
+      scoreReadBack: G(K.score), committed: cm
+    };
+
+    document.getElementById('banner').textContent =
+      (isPreview ? 'PREVIEW MODE, nothing tracked. ' : 'Real attempt. ')
+      + 'suspend_data cap ' + cap + ' chars. Wrote score ' + score + ' on launch ' + (n + 1) + '.';
+
+    /* Deliberately NOT calling Terminate/LMSFinish here.
+       Measured on this tenant: terminating immediately makes the D2L player
+       replace the package with "This activity is complete." and the learner
+       never sees the content. Commit has already persisted the data; D2L
+       closes the attempt when the learner navigates away. Only terminate at a
+       point where the learner is genuinely finished looking at things. */
+  }
+
+  /* ---- file loading and storage, quick ---- */
+  var fl = { staticTag: !!(window.SCSU_PROBE_SIBLING && window.SCSU_PROBE_SIBLING.loaded) };
+  try { localStorage.setItem('scsu:probe:t','1'); localStorage.removeItem('scsu:probe:t'); fl.localStorage = true; }
+  catch (e) { fl.localStorage = 'threw'; }
+  R.fileLoading = fl;
+  sec('Environment');
+  row('origin', esc(location.origin));
+  row('static script tag', fl.staticTag ? p('y','ran') : p('n','inert'));
+  row('localStorage', fl.localStorage === true ? p('y','ok') : p('n', String(fl.localStorage)));
+  endsec();
+
+  document.getElementById('out').innerHTML = rows.join('');
+  document.getElementById('j').value = JSON.stringify(R, null, 1);
+  window.SCSU_PROBE_READY = true;
+})();
+</script>
+</body>
+</html>

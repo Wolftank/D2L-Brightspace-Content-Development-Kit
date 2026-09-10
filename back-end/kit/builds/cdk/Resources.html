@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Resources</title>
+<style>
+  #cdk {
+    --cardinal:#B11226; --deep:#7E0C1A; --ink:#161616; --cream:#FAF7F2;
+    --blush:#FBE9EC; --blush-b:#F3D3D9; --sand:#F1EBE1; --warm-b:#EADFD0;
+    --divider:#E0D6C8; --body:#4a463f; --muted:#8a847c; --faint:#a59f96;
+    --on-dark:#cfc9c1; --on-dark-muted:#9a948c; --pink:#E8A9B2;
+    --loud:'Archivo','Arial Black','Helvetica Neue',Impact,sans-serif;
+    --warm:'Epilogue','Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+    --text:'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+    --mono:'SFMono-Regular',ui-monospace,Menlo,Consolas,monospace;
+    background:var(--sand); font-family:var(--text); color:var(--body);
+    padding-bottom:60px; -webkit-font-smoothing:antialiased;
+  }
+  #cdk *{box-sizing:border-box;}
+  #cdk .wrap{max-width:900px;margin:0 auto;padding:0 32px;}
+
+  #cdk .hero{position:relative;overflow:hidden;background:var(--ink);padding:44px 8% 40px;}
+  #cdk .hero .wedge{position:absolute;inset:0;left:62%;background:var(--cardinal);
+    clip-path:polygon(26% 0,100% 0,100% 100%,0% 100%);opacity:.92;}
+  #cdk .hero .peak{position:absolute;top:32px;right:8%;width:0;height:0;
+    border-left:16px solid transparent;border-right:16px solid transparent;
+    border-bottom:26px solid var(--cream);opacity:.9;z-index:2;}
+  #cdk .hero .inner{position:relative;z-index:3;max-width:560px;}
+  #cdk .hero .kick{font-family:var(--loud);font-weight:800;font-size:12px;
+    letter-spacing:.22em;text-transform:uppercase;color:var(--pink);}
+  #cdk .hero h1{font-family:var(--loud);font-weight:900;font-size:40px;line-height:1;
+    color:var(--cream);margin:14px 0 0;text-transform:uppercase;letter-spacing:-.015em;}
+  #cdk .hero p{font-size:16.5px;line-height:1.55;color:var(--on-dark);margin:16px 0 0;}
+
+  #cdk .sec{display:flex;align-items:center;gap:14px;margin:46px 0 20px;}
+  #cdk .tri{width:0;height:0;border-left:11px solid transparent;
+    border-right:11px solid transparent;border-bottom:18px solid var(--cardinal);flex:none;}
+  #cdk .sec h2{font-family:var(--warm);font-weight:800;font-size:26px;color:var(--ink);margin:0;}
+  #cdk .sec .rule{flex:1;height:2px;background:var(--divider);}
+  #cdk .sec .note{font-size:13px;color:var(--muted);white-space:nowrap;}
+
+  #cdk .card{background:#fff;border:1px solid var(--warm-b);border-radius:20px;
+    padding:26px 30px;box-shadow:0 1px 3px rgba(0,0,0,.05);margin-bottom:18px;}
+  #cdk .card h3{font-family:var(--warm);font-weight:700;font-size:20px;color:var(--ink);
+    margin:0 0 8px;line-height:1.2;}
+  #cdk .card p{font-size:15.5px;line-height:1.6;margin:0 0 12px;}
+  #cdk .card p:last-child{margin-bottom:0;}
+  #cdk .label{font-size:12px;font-weight:700;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--cardinal);margin-bottom:6px;}
+  #cdk .opt{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--muted);background:var(--sand);
+    border:1px solid var(--divider);padding:4px 11px;border-radius:20px;margin-left:8px;
+    vertical-align:middle;}
+
+  #cdk .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+  @media (max-width:740px){#cdk .grid2{grid-template-columns:1fr;}}
+
+  /* Download button. The href is relative, so it resolves against this topic's
+     own location in the course content folder, where the zip sits beside it. */
+  #cdk .dl{display:inline-flex;align-items:center;gap:16px;text-decoration:none;
+    background:var(--cardinal);color:var(--cream);border-radius:30px;
+    padding:16px 28px 16px 22px;margin:6px 0 4px;
+    box-shadow:0 3px 12px rgba(177,18,38,.22);transition:background .12s;}
+  #cdk .dl:hover{background:var(--deep);}
+  #cdk .dl:focus-visible{outline:3px solid var(--ink);outline-offset:3px;}
+  #cdk .dl .ico{width:0;height:0;flex:none;border-left:11px solid transparent;
+    border-right:11px solid transparent;border-top:17px solid var(--cream);}
+  #cdk .dl .tx{display:flex;flex-direction:column;gap:2px;}
+  #cdk .dl .tx b{font-family:var(--warm);font-weight:700;font-size:17px;line-height:1.1;}
+  #cdk .dl .tx span{font-family:var(--mono);font-size:11.5px;color:#F4C9CF;letter-spacing:.03em;}
+  #cdk .dlnote{font-size:13.5px;color:var(--muted);margin:10px 0 0;line-height:1.5;}
+
+  #cdk pre{background:var(--ink);color:var(--cream);border-radius:10px;
+    padding:15px 18px;overflow-x:auto;font-family:var(--mono);font-size:13px;
+    line-height:1.75;margin:13px 0;}
+  #cdk pre .c{color:var(--on-dark-muted);}
+  #cdk code{font-family:var(--mono);font-size:.92em;background:var(--blush);
+    color:var(--cardinal);padding:2px 6px;border-radius:4px;}
+  #cdk pre code{background:none;color:inherit;padding:0;}
+
+  #cdk table{width:100%;border-collapse:collapse;margin-top:6px;}
+  #cdk th{text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--faint);font-weight:400;
+    padding:0 10px 8px 0;border-bottom:1px solid var(--divider);}
+  #cdk td{padding:11px 10px 11px 0;border-bottom:1px solid #F1EBE1;
+    font-size:14.5px;line-height:1.5;vertical-align:top;}
+  #cdk td.term{font-family:var(--warm);font-weight:700;color:var(--ink);width:31%;}
+
+  #cdk ul.peaks{list-style:none;margin:0;padding:0;}
+  #cdk ul.peaks li{display:flex;align-items:flex-start;gap:12px;margin-bottom:11px;
+    font-size:15.5px;line-height:1.55;}
+  #cdk ul.peaks li:last-child{margin-bottom:0;}
+  #cdk ul.peaks li::before{content:"";margin-top:6px;flex:none;width:0;height:0;
+    border-left:5px solid transparent;border-right:5px solid transparent;
+    border-bottom:8px solid var(--cardinal);}
+
+  /* Stat row. Deliberately restrained: Archivo numerals in cardinal, so it
+     reads as data rather than as marketing. */
+  #cdk .stats{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0 4px;}
+  #cdk .stat{flex:1 1 110px;background:var(--sand);border:1px solid var(--divider);
+    border-radius:12px;padding:14px 16px;}
+  #cdk .stat b{display:block;font-family:var(--loud);font-weight:900;font-size:26px;
+    line-height:1;color:var(--cardinal);letter-spacing:-.01em;}
+  #cdk .stat span{display:block;font-size:12.5px;color:var(--muted);margin-top:5px;line-height:1.3;}
+
+  #cdk .swatches{display:flex;gap:9px;flex-wrap:wrap;margin:14px 0 4px;}
+  #cdk .sw{text-align:center;}
+  #cdk .sw i{display:block;width:58px;height:58px;border-radius:3px;}
+  #cdk .sw span{display:block;font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:7px;}
+</style>
+</head>
+<body>
+<div id="cdk">
+
+  <div class="hero">
+    <div class="wedge"></div><span class="peak"></span>
+    <div class="inner">
+      <div class="kick">Content Development Kit</div>
+      <h1>Resources</h1>
+      <p>Reference material, the evidence behind the advice, and an optional design
+         system if you want your activity to look like it belongs here.</p>
+    </div>
+  </div>
+
+  <div class="wrap">
+
+    <div class="sec"><span class="tri"></span><h2>What is in the kit</h2>
+      <div class="rule"></div><span class="note">one folder</span></div>
+
+    <div class="card">
+      <pre><code>D2L_Code/
+  skills/     <span class="c">six skills: router, three build paths, the gate, the deployer</span>
+  harness/    <span class="c">the checking tools and the tenant profile</span>
+  probes/     <span class="c">the measurements everything else rests on</span>
+  builds/     <span class="c">working examples, including these pages</span>
+  docs/       <span class="c">design notes and planning</span></code></pre>
+      <p>Keep it together. The skills call the checking tools by relative path, so
+         splitting the folder apart breaks the gate.</p>
+    </div>
+
+    <div class="sec"><span class="tri"></span><h2>The evidence</h2><div class="rule"></div>
+      <span class="note">read this if you doubt a claim</span></div>
+
+    <div class="grid2">
+      <div class="card">
+        <div class="label">probes/RESULTS.md</div>
+        <h3>What we measured, and how</h3>
+        <p>Every claim in this kit traces back to here: what was tested, against which
+           course, with which account, and what came back. Several findings contradict the
+           vendor documentation outright.</p>
+      </div>
+      <div class="card">
+        <div class="label">harness/tenant-profile.json</div>
+        <h3>What the tools enforce</h3>
+        <p>The machine-readable version. Every entry carries a <code>verified</code> flag,
+           and anything still marked false is a conservative guess rather than a
+           measurement. The tools say so out loud when they lean on one.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label">Why we are strict about this</div>
+      <h3>The habit exists for a reason</h3>
+      <p>This project started with a confident and wrong belief: that a widget which read
+         gradebook data was a SCORM object. It was not, and an entire architecture was
+         nearly built on top of that. Everything since has been measured rather than
+         assumed, and anything unmeasured is labelled.</p>
+    </div>
+
+    <div class="sec"><span class="tri"></span><h2>Design system<span class="opt">Optional</span></h2>
+      <div class="rule"></div><span class="note">makes it look like SCSU</span></div>
+
+    <div class="card">
+      <p>The <strong>Husky Course Kit</strong> is a set of paste-ready HTML blocks in SCSU's
+         visual language. These very pages are built with it. Using it is entirely optional,
+         and nothing in the kit depends on it, but it is the difference between an activity
+         that looks bolted on and one that looks like part of the course.</p>
+
+      <div class="swatches">
+        <div class="sw"><i style="background:#B11226;"></i><span>#B11226</span></div>
+        <div class="sw"><i style="background:#7E0C1A;"></i><span>#7E0C1A</span></div>
+        <div class="sw"><i style="background:#161616;"></i><span>#161616</span></div>
+        <div class="sw"><i style="background:#FAF7F2;border:1px solid #EADFD0;"></i><span>#FAF7F2</span></div>
+        <div class="sw"><i style="background:#FBE9EC;border:1px solid #F3D3D9;"></i><span>#FBE9EC</span></div>
+      </div>
+
+      <a class="dl" style="margin-top:18px;" href="scsu-d2l-design-system.zip" download>
+        <span class="ico" aria-hidden="true"></span>
+        <span class="tx">
+          <b>Download the design system</b>
+          <span>scsu-d2l-design-system.zip &middot; 48 KB</span>
+        </span>
+      </a>
+      <p class="dlnote">Open any <code>.dc.html</code> file in a browser to browse the blocks,
+         keeping <code>support.js</code> beside them. Copy a block's HTML and paste it into
+         your own page, or point Claude at the folder and say which file to take the look
+         from. A README inside explains the two tiers and the palette.</p>
+
+      <p style="margin-top:16px;">It works in two tiers. <strong>Loud</strong> is ink and
+         cardinal with hard diagonal wedges, for the few things that must be noticed:
+         headers, dividers, the one warning that matters. <strong>Warm</strong> is cream
+         cards with rounded corners and a softer voice, for everything explanatory. The
+         triangle you keep seeing is the Husky peak, and it is what makes unrelated blocks
+         read as one system.</p>
+
+      <p><strong>One adaptation worth copying.</strong> The original kit pulls its fonts
+         from Google. These pages name the same fonts but ship no external link, because
+         campus network policy can block outside hosts and a blocked font should degrade
+         rather than break the page. That is the same rule the gate enforces on your
+         builds.</p>
+    </div>
+
+    <div class="sec"><span class="tri"></span><h2>Synthetic students<span class="opt">Optional</span></h2>
+      <div class="rule"></div><span class="note">run a semester before anyone takes it</span></div>
+
+    <div class="card">
+      <p>A corpus of <strong>500 fictional students</strong>, built so an agent can play them.
+         Point Claude at a course you have built, hand it a slice of these personas, and it
+         can work through your material the way a real cohort would: submitting late,
+         misreading instructions, skimming, over-writing, and in some cases cutting corners.</p>
+      <p>The point is to find out where a course breaks <em>before</em> students find out for
+         you. It is also the easiest way to stress test something, since you can regenerate
+         the corpus at any size.</p>
+
+      <div class="stats">
+        <div class="stat"><b>500</b><span>students</span></div>
+        <div class="stat"><b>52</b><span>majors</span></div>
+        <div class="stat"><b>29</b><span>nationalities</span></div>
+        <div class="stat"><b>79</b><span>with accommodations</span></div>
+        <div class="stat"><b>150</b><span>cheat-prone</span></div>
+      </div>
+
+      <a class="dl" style="margin-top:18px;" href="synthetic-students.zip" download>
+        <span class="ico" aria-hidden="true"></span>
+        <span class="tx">
+          <b>Download the synthetic students</b>
+          <span>synthetic-students.zip &middot; 406 KB</span>
+        </span>
+      </a>
+      <p class="dlnote">The corpus in three formats, plus Python scripts to regenerate it at
+         any size or with a different mix. Same seed gives byte-identical output, so a test
+         run is reproducible.</p>
+
+      <div class="label" style="margin-top:22px;">The field you will actually use</div>
+      <h3 style="font-family:'Epilogue','Segoe UI',Roboto,sans-serif;font-weight:700;font-size:20px;color:#161616;margin:0 0 8px;">
+        <code>agent_brief</code></h3>
+      <p>Every student carries a self-contained, second-person paragraph covering who they
+         are, how they write, how they use the LMS, and how they behave under pressure. Drop
+         it straight into a prompt. For most simulation work you can ignore the structured
+         fields entirely.</p>
+
+      <div class="label" style="margin-top:22px;">One design choice worth knowing about</div>
+      <h3 style="font-family:'Epilogue','Segoe UI',Roboto,sans-serif;font-weight:700;font-size:20px;color:#161616;margin:0 0 8px;">
+        Cheating is independent of demographics</h3>
+      <p>Academic dishonesty is dealt across the corpus as a balanced, shuffled allocation
+         rather than sampled per student, so it does not correlate with nationality, native
+         language, English proficiency, age, major, or residency. The verification script
+         enforces this with a tolerance check and <strong>fails the build if any group
+         drifts</strong>.</p>
+      <p>This matters more than it might look. If you tuned or trained a detector against a
+         corpus with an accidental correlation in it, you would be teaching it to flag
+         international students. There is not one here, by construction.</p>
+
+      <p style="margin-top:16px;">Every student, name and ID is fabricated. IDs use a
+         deliberately non-standard format so they cannot collide with real institutional
+         ones, and nothing in the corpus is modelled on a real person.</p>
+    </div>
+
+    <div class="sec"><span class="tri"></span><h2>Words you will run into</h2>
+      <div class="rule"></div></div>
+
+    <div class="card">
+      <table>
+        <tr><th>Term</th><th>What it actually means</th></tr>
+        <tr>
+          <td class="term">Content topic</td>
+          <td>An HTML file you upload into the course that shows up as a page. Runs inside
+              D2L, so it can tell who is looking at it.</td>
+        </tr>
+        <tr>
+          <td class="term">SCORM package</td>
+          <td>A zipped-up activity in a standard format that can put a score in the
+              gradebook by itself. Runs in a sealed box, so it cannot see anything else
+              about the course.</td>
+        </tr>
+        <tr>
+          <td class="term">Origin</td>
+          <td>The web address a piece of code is served from. Browsers use it to decide
+              what that code is allowed to touch. This is why the three approaches differ.</td>
+        </tr>
+        <tr>
+          <td class="term">The gate</td>
+          <td>A command that checks your build against measured tenant behaviour. Zero
+              errors and you can deploy.</td>
+        </tr>
+        <tr>
+          <td class="term">Preview mode</td>
+          <td>What D2L gives an instructor opening their own SCORM package. Looks normal,
+              records nothing, reports no error.</td>
+        </tr>
+        <tr>
+          <td class="term">Attempt</td>
+          <td>One run at an activity by one student. Attempt limits and best-of-N are D2L
+              settings, not something you build.</td>
+        </tr>
+        <tr>
+          <td class="term">Skill</td>
+          <td>A folder of written instructions Claude reads when the task matches. No
+              installation, no service, no background process.</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="sec"><span class="tri"></span><h2>Getting help</h2><div class="rule"></div></div>
+
+    <div class="card">
+      <ul class="peaks">
+        <li><strong>Ask Claude, inside the kit folder.</strong> It has the skills, the tools
+            and the evidence in front of it. Describe what you did and what you saw.</li>
+        <li><strong>Test locally before you involve D2L.</strong> The emulator enforces our
+            tenant's real behaviour on your own computer, so most problems surface without
+            a single request to anyone.</li>
+        <li><strong>Recruit a TA or colleague for the live check.</strong> For anything
+            graded they need to be enrolled as a student, since instructor permissions only
+            ever produce a preview.</li>
+        <li><strong>Bring findings back.</strong> If you hit a D2L behaviour that is not in
+            the kit, it should be measured and added, so nobody hits it twice.</li>
+      </ul>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

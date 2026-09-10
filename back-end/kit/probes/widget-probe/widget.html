@@ -1,0 +1,208 @@
+<!-- ===================================================================
+     SCSU D2L Widget Probe
+     Tests the OTHER pattern: a custom widget making session-authenticated
+     Brightspace API calls. This is what the IT demo actually used.
+
+     HOW TO INSTALL
+       Course Admin  ->  Widgets  ->  Create Widget
+       Name: "ZZ Tenant Probe"  (leading ZZ keeps it out of the way)
+       Content tab -> open the source-code editor (< >) -> paste ALL of this
+       Save, then add the widget to the course homepage.
+
+     Run it once signed in as an instructor, once as a student.
+     The class-wide calls are the role boundary test.
+
+     NOTE: the replace strings below are intentionally left as literal text.
+     If D2L substitutes them you will see values. If you see the braces
+     themselves, this tenant does not process replace strings in widgets.
+     =================================================================== -->
+
+<div id="scsuWidgetProbe" style="font:13px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#16191c;">
+
+  <div style="background:#fadcdc;border-left:4px solid #8a1c1c;padding:9px 12px;margin-bottom:10px;" id="scsuNoScript">
+    <strong>Script did not run.</strong> If this red box is still visible, the widget
+    editor stripped the inline script. That is itself a finding: record it and use an
+    iframe-rendered widget instead.
+  </div>
+
+  <div id="scsuWidgetOut"></div>
+
+  <div style="margin-top:10px;">
+    <button type="button" id="scsuBtnSelf"  style="font:600 12px inherit;padding:7px 12px;margin-right:6px;border:1px solid #b8c4cf;border-radius:5px;background:#f4f7fa;cursor:pointer;">Test self endpoints</button>
+    <button type="button" id="scsuBtnClass" style="font:600 12px inherit;padding:7px 12px;margin-right:6px;border:1px solid #b8c4cf;border-radius:5px;background:#f4f7fa;cursor:pointer;">Test class-wide endpoints</button>
+    <button type="button" id="scsuBtnCopy"  style="font:600 12px inherit;padding:7px 12px;border:1px solid #1f4a86;border-radius:5px;background:#1f4a86;color:#fff;cursor:pointer;">Copy JSON</button>
+  </div>
+
+  <textarea id="scsuWidgetJson" readonly style="width:100%;height:170px;margin-top:9px;font:11px/1.4 Consolas,monospace;border:1px solid #b8c4cf;border-radius:5px;padding:8px;box-sizing:border-box;background:#fbfcfd;"></textarea>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var out = {};
+  var box = document.getElementById('scsuWidgetOut');
+  var ns  = document.getElementById('scsuNoScript');
+  if (ns) { ns.parentNode.removeChild(ns); }
+
+  function esc(s) {
+    return String(s).replace(/[&<>]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c];
+    });
+  }
+
+  function pill(kind, text) {
+    var bg = { yes: '#d8f0dd', no: '#fadcdc', warn: '#fdeecf', info: '#dde8f7' }[kind];
+    var fg = { yes: '#1d5c2c', no: '#8a1c1c', warn: '#7a4c05', info: '#1f4a86' }[kind];
+    return '<span style="display:inline-block;padding:1px 7px;border-radius:9px;font-size:11px;' +
+           'font-weight:600;background:' + bg + ';color:' + fg + '">' + esc(text) + '</span>';
+  }
+
+  function table(title, rows) {
+    var h = '<div style="font-size:13px;font-weight:700;margin:14px 0 5px;color:#46535e;' +
+            'text-transform:uppercase;letter-spacing:.04em;border-bottom:2px solid #e3e9ef;' +
+            'padding-bottom:3px;">' + esc(title) + '</div><table style="border-collapse:collapse;width:100%">';
+    rows.forEach(function (r) {
+      h += '<tr>' +
+           '<td style="padding:4px 7px;border-bottom:1px solid #eef2f5;width:36%;' +
+           'font:11px Consolas,monospace;color:#46535e;vertical-align:top">' + esc(r[0]) + '</td>' +
+           '<td style="padding:4px 7px;border-bottom:1px solid #eef2f5;' +
+           'font:11px Consolas,monospace;word-break:break-word">' + r[1] + '</td></tr>';
+    });
+    return h + '</table>';
+  }
+
+  function add(title, rows) {
+    var d = document.createElement('div');
+    d.innerHTML = table(title, rows);
+    box.appendChild(d);
+    dump();
+  }
+
+  function dump() {
+    document.getElementById('scsuWidgetJson').value = JSON.stringify(out, null, 2);
+  }
+
+  /* ------------------------------------------------ replace strings ---- */
+  /* Each value below is a literal replace string in the source. If the
+     tenant substitutes it, we see data. If not, we see the braces back. */
+
+  var replaceStrings = {
+    OrgUnitId:    '{OrgUnitId}',
+    OrgUnitName:  '{OrgUnitName}',
+    OrgUnitCode:  '{OrgUnitCode}',
+    UserName:     '{UserName}',
+    FirstName:    '{FirstName}',
+    LastName:     '{LastName}',
+    RoleId:       '{RoleId}',
+    OrgDefinedId: '{OrgDefinedId}'
+  };
+
+  var rsRows = [], substituted = {};
+  Object.keys(replaceStrings).forEach(function (k) {
+    var v = replaceStrings[k];
+    var didSub = !(v.charAt(0) === '{' && v.charAt(v.length - 1) === '}');
+    substituted[k] = didSub ? v : null;
+    rsRows.push(['{' + k + '}', didSub ? pill('yes', 'SUBSTITUTED') + ' ' + esc(v)
+                                       : pill('no', 'literal') + ' not processed']);
+  });
+  out.replaceStrings = substituted;
+  add('Replace strings', rsRows);
+
+  /* ------------------------------------------------------ environment -- */
+
+  var origin = '(unknown)', inIframe = false, topReadable = false;
+  try { origin = window.location.origin; } catch (e) {}
+  try { inIframe = (window.self !== window.top); } catch (e) { inIframe = true; }
+  try { void window.top.location.href; topReadable = true; } catch (e) {}
+
+  out.environment = { origin: origin, inIframe: inIframe, topSameOrigin: topReadable };
+  add('Environment', [
+    ['origin', esc(origin)],
+    ['rendered in an iframe', inIframe ? pill('info', 'yes') : pill('info', 'no')],
+    ['top window readable', topReadable ? pill('yes', 'YES') : pill('no', 'NO')]
+  ]);
+
+  /* ------------------------------------------------------------- API --- */
+
+  function apiFetch(path) {
+    if (typeof window.fetch !== 'function') {
+      return Promise.resolve({ path: path, status: 'no fetch()' });
+    }
+    return fetch(path, { credentials: 'include', headers: { Accept: 'application/json' } })
+      .then(function (r) {
+        return r.text().then(function (t) {
+          var parsed = null;
+          try { parsed = JSON.parse(t); } catch (e) {}
+          return { path: path, status: r.status, ok: r.ok,
+                   body: parsed !== null ? parsed : t.slice(0, 300) };
+        });
+      })
+      .catch(function (e) { return { path: path, status: 'network/CORS error', error: e.message }; });
+  }
+
+  function renderApi(title, results) {
+    add(title, results.map(function (x) {
+      var mark = x.status === 200 ? pill('yes', '200')
+               : x.status === 403 ? pill('warn', '403 forbidden')
+               : x.status === 401 ? pill('warn', '401 unauthorized')
+               : x.status === 404 ? pill('info', '404')
+               : pill('no', String(x.status));
+      var body = x.body ? esc(JSON.stringify(x.body).slice(0, 240))
+               : (x.error ? esc(x.error) : '');
+      return [x.path, mark + '<br>' + body];
+    }));
+  }
+
+  function currentOu() {
+    var v = out.replaceStrings && out.replaceStrings.OrgUnitId;
+    if (v) return v;
+    var m = null;
+    try { m = String(window.top.location.href).match(/ou=(\d+)/); } catch (e) {}
+    if (!m) { try { m = String(window.location.href).match(/ou=(\d+)/); } catch (e) {} }
+    return m ? m[1] : null;
+  }
+
+  document.getElementById('scsuBtnSelf').onclick = function () {
+    Promise.all([
+      '/d2l/api/versions/',
+      '/d2l/api/lp/1.5/users/whoami',
+      '/d2l/api/lp/1.9/users/whoami',
+      '/d2l/api/lp/1.5/enrollments/myenrollments/'
+    ].map(apiFetch)).then(function (res) {
+      out.apiSelf = res;
+      renderApi('API: self endpoints', res);
+    });
+  };
+
+  document.getElementById('scsuBtnClass').onclick = function () {
+    var ou = currentOu();
+    if (!ou) {
+      add('API: class-wide', [['org unit id', pill('no', 'could not determine')]]);
+      return;
+    }
+    out.orgUnitUsed = ou;
+    Promise.all([
+      '/d2l/api/lp/1.5/' + ou + '/classlist/',
+      '/d2l/api/le/1.34/' + ou + '/grades/',
+      '/d2l/api/le/1.34/' + ou + '/grades/values/myGradeValues/',
+      '/d2l/api/le/1.34/' + ou + '/dropbox/folders/'
+    ].map(apiFetch)).then(function (res) {
+      out.apiClass = res;
+      renderApi('API: class-wide endpoints (ou ' + ou + ')', res);
+    });
+  };
+
+  document.getElementById('scsuBtnCopy').onclick = function () {
+    var t = document.getElementById('scsuWidgetJson');
+    dump(); t.select();
+    try { document.execCommand('copy'); this.textContent = 'Copied'; } catch (e) {}
+    var b = this;
+    setTimeout(function () { b.textContent = 'Copy JSON'; }, 1800);
+  };
+
+  out.probeVersion = '1.0';
+  dump();
+  window.SCSU_WIDGET_PROBE_READY = true;
+})();
+</script>

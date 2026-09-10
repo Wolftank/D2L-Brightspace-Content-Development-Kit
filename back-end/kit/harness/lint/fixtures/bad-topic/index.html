@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<!-- Deliberately broken content-topic build. Every rule in the topic set
+     should fire. Do not "fix" this file; the lint test asserts its defects. -->
+<html>
+<head>
+<style>
+  #root { height: 100vh; }   /* shared/no-viewport-units */
+</style>
+<script src="data.js"></script>                              <!-- topic/no-static-script-src -->
+<script src="https://cdn.example.com/lib.js"></script>       <!-- shared/external-cdn -->
+</head>
+<body>
+<div id="root"><img src="img/gone.png"></div>                <!-- shared/missing-assets -->
+<script>
+// topic/unwrapped-storage : no try/catch, throws in private mode
+var seen = localStorage.getItem('visited');
+
+// topic/namespaced-storage : no namespace prefix
+localStorage.setItem('visited', '1');
+
+// topic/no-storage-for-grades : authoritative record in browser storage
+localStorage.setItem('finalGrade', '95');
+
+// topic/no-grade-writes : will 403, and looks like tampering
+fetch('/d2l/api/le/1.96/12345/grades/999/values/5024307', {
+  method: 'PUT',
+  credentials: 'include',
+  body: JSON.stringify({ PointsNumerator: 100 })
+});
+</script>
+</body>
+</html>

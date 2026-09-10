@@ -1,0 +1,284 @@
+{
+  "$comment": [
+    "What our D2L tenant allows and restricts. The local harness enforces this,",
+    "so a package that passes locally is a package that will work in D2L.",
+    "",
+    "Every entry carries a 'verified' flag. Anything false is a CONSERVATIVE GUESS,",
+    "not a measurement. Run probes/ and update this file, then flip the flag.",
+    "The harness warns loudly when it enforces an unverified constraint, because",
+    "an unverified constraint is exactly how we got the SCORM/widget mixup."
+  ],
+
+  "tenant": "stcloudstate.learn.minnstate.edu",
+  "profileVersion": "0.3-scorm-measured",
+  "lastMeasured": "2026-07-30",
+  "measuredBy": "live session, Mark Gill (user 1975996), instructor in ou 2613967 and student in ou 713141 / 3755604",
+
+  "scorm": {
+    "available": {
+      "value": true,
+      "verified": true,
+      "note": "MEASURED. Enabled. Path is Content -> unit -> Add Existing -> SCORM/xAPI Object -> Bulk Upload. It is NOT in Course Admin, which is why it looks missing at first."
+    },
+    "version": {
+      "value": "1.2",
+      "verified": true,
+      "note": "MEASURED. The player exposes window.API (SCORM 1.2) at parent depth 1. API_1484_11 was not present, so plan for 4096-char suspend_data."
+    },
+    "suspendDataMaxChars": {
+      "value": 4096,
+      "verified": false,
+      "note": "Still a guess. The capacity test needs a real student attempt, because an instructor gets preview mode with no tracking."
+    },
+    "commitRequiredForPersistence": { "value": true, "verified": false },
+    "scoreWritesToGradebook": {
+      "value": true,
+      "verified": true,
+      "note": "MEASURED END TO END. Student wrote 50, 90, 70 across three launches. Gradebook returned DisplayedGrade '90 / 100' via /d2l/api/le/1.34/{ou}/grades/{id}/values/{userId}. Three distinct attempts were recorded, since a single overwritten attempt would have shown 70."
+    },
+    "completedStatusLocksFurtherAttempts": {
+      "value": true,
+      "verified": true,
+      "note": "MEASURED AND DESIGN-CRITICAL. Once the activity reports lesson_status = 'completed', later launches come back with mode = 'review' and credit = 'no-credit', and every write is rejected with error code 0. If an activity marks itself completed too early the learner can never improve their score and best-of-N silently stops working. Do not write 'completed' until the learner is genuinely finished."
+    },
+    "noCreditMeansNotRecorded": {
+      "value": true,
+      "verified": true,
+      "note": "MEASURED. credit = 'no-credit' covers BOTH instructor preview and post-completion review. It is the single reliable 'this launch will not be recorded' signal. Check it before relying on any write."
+    },
+    "gradeCalculation": {
+      "value": "highest",
+      "verified": true,
+      "note": "MEASURED. Set per instance at add time. Confirmed options, verbatim: Highest Attempt, Lowest Attempt, Average of all Attempts, Last Attempt, First Attempt. Highest Attempt is the default. 'Best of 3' is a setting, not something to build."
+    },
+    "gradeItemAutoCreated": {
+      "value": true,
+      "verified": true,
+      "note": "MEASURED. The add flow asks 'Do you want a grade item created for this instance?' and defaults to Yes."
+    },
+    "versionControl": {
+      "value": "always-latest",
+      "verified": true,
+      "note": "MEASURED. Choice of 'Always display the latest version' or 'Display this version even if a new version is added'. Matters when republishing a package that has live attempts."
+    },
+    "maxAttempts": { "value": 3, "verified": false },
+    "suspendDataCarriesAcrossAttempts": {
+      "value": false,
+      "verified": false,
+      "note": "If false, each attempt starts clean. Affects any resume design."
+    },
+    "exposesRole": {
+      "value": false,
+      "verified": true,
+      "note": "Verified by specification and by measurement. No role field in 1.2 or 2004."
+    },
+    "instructorViewIsPreviewOnly": {
+      "value": true,
+      "verified": true,
+      "note": "MEASURED AND IMPORTANT. Instructor gets student_id = 'preview', student_name = 'Without Tracking, Preview', credit = 'no-credit', lesson_mode = 'browse'. Student gets a real id, credit = 'credit', lesson_mode = 'normal'."
+    },
+    "taRoleGetsPreviewMode": {
+      "value": true,
+      "verified": false,
+      "note": "OPEN, but not blocking. We have measured Instructor (RoleId 1015 -> preview, no-credit) and one real student (credit, normal), and nothing in between. Conservative guess is true, since TA roles usually carry grading permissions. This does NOT gate the kit's testing advice: an instructor assigns the enrolment role, so a helper is enrolled AS A STUDENT for a SCORM check regardless of their job title, and re-enrolled at other roles to check role-aware views. Worth measuring eventually because it tells us whether a TA can self-serve a SCORM check without a role change. Settle by having a TA-role enrolee launch the v2 probe and reading credit/lesson_mode."
+    },
+    "previewRejectsAllWrites": {
+      "value": true,
+      "verified": true,
+      "note": "MEASURED. In preview mode EVERY SetValue is refused. suspend_data accepted 0 chars at all sizes tested, score write failed, status write failed. Notably the failures come back with error code 0, so a naive activity that only checks GetLastError sees no error while silently persisting nothing. Instructor self-testing of SCORM is not merely untracked, it is inert."
+    },
+    "terminateHidesContent": {
+      "value": true,
+      "verified": true,
+      "note": "MEASURED. Calling LMSFinish/Terminate makes the D2L player immediately replace the package with 'This activity is complete.' Do not terminate until the learner is genuinely done looking at the content. Commit alone persists data."
+    },
+    "newVersionRequiresExplicitPublish": {
+      "value": true,
+      "verified": true,
+      "note": "MEASURED. Manage Versions -> upload -> the version stages and must be explicitly Published. D2L warns: 'This will update the asset everywhere it is inserted and set to use the latest version. This will be the only version available for users to insert.' Old versions remain listed but are not insertable."
+    },
+    "servedOrigin": {
+      "value": "https://content.us-east-1.content-service.brightspace.com",
+      "verified": true,
+      "note": "MEASURED. SCORM content is served from a separate Brightspace content-service origin, NOT the tenant. Frame depth 3, top window not readable. This single fact drives the API and storage findings below."
+    }
+  },
+
+  "fileLoading": {
+    "$comment": "All MEASURED inside a live SCORM package on 2026-07-30. Everything works.",
+    "staticScriptTag": {
+      "value": true,
+      "verified": true,
+      "note": "MEASURED as EXECUTING inside a SCORM package. Note this differs from the HTML-topic case, where the finding has flipped between courses. Inside a package the content is plain static hosting, which is why it behaves normally. Still prefer injection or fetch for anything that must also work as an HTML topic."
+    },
+    "injectedScript": { "value": true, "verified": true },
+    "fetchSibling": { "value": true, "verified": true },
+    "relativeImg": { "value": true, "verified": true },
+    "externalCdn": {
+      "value": false,
+      "verified": false,
+      "note": "Not measured. Campus network policy may block. Never depend on it."
+    }
+  },
+
+  "storage": {
+    "localStorage": { "value": true, "verified": true },
+    "sharedAcrossEntireLms": {
+      "value": false,
+      "verified": true,
+      "note": "MEASURED, AND IT DIFFERS FROM HTML TOPICS. A SCORM package runs on the content-service origin, so its localStorage is scoped there and is NOT the tenant's store. The 'storage is shared LMS-wide' rule applies to HTML topics, not to packages."
+    },
+    "sharedAcrossAllPackagesAndUsers": {
+      "value": true,
+      "verified": true,
+      "note": "MEASURED THE HARD WAY. Every SCORM package in every course shares the single content-service origin, and that store is per BROWSER, not per D2L user. Signing out of D2L and back in as a different user does not change it. A probe counter keyed globally was polluted by instructor previews and would have corrupted the student run. ALWAYS key package localStorage by learner id, and never treat it as private to a user."
+    },
+    "mayThrow": {
+      "value": true,
+      "verified": true,
+      "note": "Private mode, policy, or quota. Always wrap in try/catch."
+    }
+  },
+
+  "brightspaceApi": {
+    "sessionAuthWorks": {
+      "value": true,
+      "verified": true,
+      "note": "MEASURED. Plain fetch with credentials:'include' from a page on the tenant origin returns 200. No OAuth needed. /d2l/api/lp/1.5/users/whoami returns the caller identity."
+    },
+    "reachableFromScorm": {
+      "value": false,
+      "verified": true,
+      "note": "MEASURED AND SETTLED. A SCORM package runs on content.us-east-1.content-service.brightspace.com, which is cross-origin to the tenant. Relative /d2l/api/ paths hit the content CDN and return 403 MissingKey. The absolute tenant URL fails CORS outright ('Failed to fetch'), and no session cookie is sent. There is no path from inside a SCORM package to the Brightspace API. The conservative default was correct."
+    },
+    "reachableFromWidget": {
+      "value": true,
+      "verified": true,
+      "note": "MEASURED from tenant page context, which is the same origin and session a widget runs in."
+    },
+    "roleDetection": {
+      "value": "/d2l/api/lp/1.44/enrollments/myenrollments/{ou} -> Access.ClasslistRoleName",
+      "verified": true,
+      "note": "MEASURED. Returns 'Instructor' or 'Student'. This is the mechanism that makes role-aware widgets possible. Access also carries LISRoles, IsActive, CanAccess, LastAccessed."
+    },
+    "studentBlockedFromClassData": {
+      "value": false,
+      "verified": true,
+      "note": "MEASURED AND IT DOES NOT HOLD. A student-role user got HTTP 200 on /d2l/api/le/1.34/{ou}/classlist/ (486KB in ou 713141, 312KB in ou 3755604). See RESULTS.md section 3. Do not assume the API enforces an instructor-only boundary."
+    },
+    "studentBlockedFromOrgUnitUsers": {
+      "value": true,
+      "verified": true,
+      "note": "MEASURED. /d2l/api/lp/1.44/enrollments/orgUnits/{ou}/users/ correctly returns 403 to a student. This boundary does hold."
+    },
+    "gradeValuesScopedToSelf": {
+      "value": true,
+      "verified": true,
+      "note": "MEASURED. myGradeValues returns only the caller's own values. grades/ returns grade ITEM definitions to students, which is the same as what the UI shows them."
+    },
+    "replaceStringsInWidgets": {
+      "value": true,
+      "verified": true,
+      "note": "MEASURED. All eight substituted on a live homepage widget: OrgUnitId, OrgUnitName, OrgUnitCode, UserName, FirstName, LastName, RoleId, OrgDefinedId. Server-side substitution into the HTML, no API call needed."
+    },
+    "widgetRoleIdReplaceString": {
+      "value": true,
+      "verified": true,
+      "note": "MEASURED AND NOTABLE. {RoleId} substituted to 1015, which the roles API confirms is Instructor. A widget can therefore branch on role with NO API call at all. Caveat: the substituted value is baked into HTML the viewer receives, so it tells the page who is looking but is NOT a security boundary. Release conditions are the boundary."
+    },
+    "latestLeVersion": {
+      "value": "1.96",
+      "verified": true,
+      "note": "MEASURED. Some routes exist only on newer versions. /dropbox/folders/{id}/feedback/user/{uid} is present on 1.96 and 404s on 1.34."
+    },
+    "writesWorkWithSessionAuth": {
+      "value": true,
+      "verified": true,
+      "note": "MEASURED. POST and PUT succeed with the session cookie plus an XSRF token from D2L.LP.Web.Authentication.Xsrf.GetXsrfToken(), sent as the X-Csrf-Token header. An entire course can be built by script: assignment, grade item, feedback and grade values were all created this way."
+    },
+    "silentlyDiscardsPayloadFields": {
+      "value": true,
+      "verified": true,
+      "note": "MEASURED TWICE AND CRITICAL. The API returns 200 while discarding parts of the payload. Feedback sent as the documented RichTextInput {Content, Type} stores NOTHING; the working shape is {Text, Html}. A folder PUT carrying GradeItemId returned 200 while the field stayed null. NEVER trust a 2xx. Read back and assert after every write."
+    },
+    "feedbackAndGradeCommentShareOneField": {
+      "value": true,
+      "verified": true,
+      "note": "MEASURED. Assignment feedback and the gradebook comment are the same underlying store. Writing a grade value's Comments DESTROYS existing assignment feedback, byte-identical on read-back from both endpoints, with no warning. Worth telling faculty independently of any tooling."
+    },
+    "textSubmissionAlsoProducesHtmlFile": {
+      "value": true,
+      "verified": true,
+      "note": "MEASURED. A text submission is retrievable as Submissions[0].Comment AND is auto-rendered by D2L into a downloadable .html artifact attached to the submission."
+    },
+    "studentCanForgeOwnGrade": {
+      "value": false,
+      "verified": true,
+      "note": "MEASURED, AND THE BOUNDARY HOLDS. From a student session with a valid XSRF token: PUT own grade value -> 403 Forbidden. POST own dropbox feedback -> failed (500). POST create grade item -> 403 Not Authorized. Nothing was changed; the grade stayed 7/10 and no stray item was created. Important nuance: the XSRF token IS available to students, so the protection is server-side permission, not client-side secrecy. That is the correct architecture."
+    },
+    "studentFeedbackWriteReturns500": {
+      "value": true,
+      "verified": true,
+      "note": "MEASURED. A student attempting to write dropbox feedback gets HTTP 500 rather than a clean 403. It correctly fails, but a script cannot distinguish 'not permitted' from 'server error'. Treat any non-2xx here as denial."
+    },
+    "studentSubmissionsCollectionFiltering": {
+      "value": null,
+      "verified": false,
+      "note": "OPEN AND IMPORTANT. A student got HTTP 200 on /dropbox/folders/{id}/submissions/. With only one submitter we cannot tell whether it is filtered to self or returns the whole class. If unfiltered, students can read classmates' work and grades. The classlist boundary already failed, so do not assume the safe answer. Requires a second student account to settle."
+    }
+  },
+
+  "homepageWidget": {
+    "$comment": "MEASURED 2026-08-01 by running probes/widget-probe/widget.html as a live course homepage widget.",
+    "instructorCanCreate": {
+      "value": true,
+      "verified": true,
+      "note": "MEASURED. Course Admin -> Widgets -> Create Widget is available to an Instructor. Widgets are a genuine faculty build target, not admin-only."
+    },
+    "supportsReleaseConditions": {
+      "value": true,
+      "verified": true,
+      "note": "MEASURED. The widget editor has a Release Conditions tab with Attach Existing / Create and Attach. This is SERVER-ENFORCED visibility, which no content topic can offer. It is the strongest role boundary available for custom work."
+    },
+    "inlineScriptExecutes": {
+      "value": true,
+      "verified": true,
+      "note": "MEASURED. Script ran on the live homepage. IMPORTANT CAVEAT: you must paste via the source-code (</>) view. The WYSIWYG surface shows the script as stripped and a DOM query finds zero script tags, because TinyMCE swaps it for a placeholder while editing. The saved source keeps it and it executes on render."
+    },
+    "renderedInIframe": {
+      "value": false,
+      "verified": true,
+      "note": "MEASURED. A widget renders DIRECTLY in the LMS page: origin is the tenant, inIframe false, top window readable. That is a materially better environment than a content topic, which is iframed. There is a 'Render in IFrame' option if you want isolation, not tested."
+    },
+    "apiReachable": {
+      "value": true,
+      "verified": true,
+      "note": "MEASURED FROM AN ACTUAL WIDGET, not inferred. /d2l/api/versions/, whoami (1.5 and 1.9) and myenrollments all returned 200. Course grades and dropbox folders returned 200 for an instructor."
+    },
+    "activeHomepageMayBeOrgShared": {
+      "value": true,
+      "verified": true,
+      "note": "MEASURED, AND IT IS THE REAL FRICTION. The DEV course's active homepage was shared from the org and therefore not editable. To place a widget an instructor must Create Homepage, add the widget to it, and set it active. Doable without admin, but it is an extra step nobody expects and it changes what everyone in the course sees."
+    }
+  },
+
+  "rendering": {
+    "iframeAutoResizes": { "value": true, "verified": true },
+    "viewportUnitsUnreliable": { "value": true, "verified": true },
+    "frameDepth": {
+      "value": 3,
+      "verified": true,
+      "note": "MEASURED for a SCORM package in the embedded player. The SCORM API sits at parent depth 1."
+    },
+    "embeddedPlayerScrollsInternally": {
+      "value": true,
+      "verified": true,
+      "note": "MEASURED the hard way. A tall fixed-height root inside the embedded player does not scroll with the outer page and is awkward to reach. Keep package UI SHORT, or set the instance to 'Open player in new window'."
+    },
+    "injectsOwnChrome": {
+      "value": true,
+      "verified": true,
+      "note": "ReadSpeaker bar plus D2L scripts. Namespace globals and DOM ids."
+    }
+  }
+}

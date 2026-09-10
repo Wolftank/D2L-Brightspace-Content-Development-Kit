@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Build Locally</title>
+<style>
+  #cdk {
+    --cardinal:#B11226; --deep:#7E0C1A; --ink:#161616; --cream:#FAF7F2;
+    --blush:#FBE9EC; --blush-b:#F3D3D9; --sand:#F1EBE1; --warm-b:#EADFD0;
+    --divider:#E0D6C8; --body:#4a463f; --muted:#8a847c; --faint:#a59f96;
+    --on-dark:#cfc9c1; --on-dark-muted:#9a948c; --pink:#E8A9B2;
+    --loud:'Archivo','Arial Black','Helvetica Neue',Impact,sans-serif;
+    --warm:'Epilogue','Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+    --text:'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+    --mono:'SFMono-Regular',ui-monospace,Menlo,Consolas,monospace;
+    background:var(--sand); font-family:var(--text); color:var(--body);
+    padding-bottom:60px; -webkit-font-smoothing:antialiased;
+  }
+  #cdk *{box-sizing:border-box;}
+  #cdk .wrap{max-width:900px;margin:0 auto;padding:0 32px;}
+
+  #cdk .stephero{position:relative;overflow:hidden;background:var(--cardinal);
+    padding:34px 8%;display:flex;align-items:center;gap:26px;}
+  #cdk .stephero .corner{position:absolute;bottom:-40px;right:-20px;width:0;height:0;
+    border-bottom:190px solid rgba(0,0,0,.16);border-left:190px solid transparent;}
+  #cdk .stephero .num{position:relative;font-family:var(--loud);font-weight:900;
+    font-size:70px;line-height:.8;color:var(--cream);flex:none;}
+  #cdk .stephero .t{position:relative;flex:1;}
+  #cdk .stephero .kick{font-family:var(--loud);font-weight:800;font-size:12px;
+    letter-spacing:.2em;text-transform:uppercase;color:#F4C9CF;}
+  #cdk .stephero h1{font-family:var(--loud);font-weight:900;font-size:34px;line-height:1;
+    color:var(--cream);margin:8px 0 0;text-transform:uppercase;letter-spacing:-.01em;}
+  #cdk .stephero .arrow{position:relative;width:0;height:0;flex:none;
+    border-top:13px solid transparent;border-bottom:13px solid transparent;
+    border-left:22px solid var(--cream);}
+
+  #cdk .sec{display:flex;align-items:center;gap:14px;margin:46px 0 20px;}
+  #cdk .tri{width:0;height:0;border-left:11px solid transparent;
+    border-right:11px solid transparent;border-bottom:18px solid var(--cardinal);flex:none;}
+  #cdk .sec h2{font-family:var(--warm);font-weight:800;font-size:26px;color:var(--ink);margin:0;}
+  #cdk .sec .rule{flex:1;height:2px;background:var(--divider);}
+  #cdk .sec .note{font-size:13px;color:var(--muted);white-space:nowrap;}
+
+  #cdk .card{background:#fff;border:1px solid var(--warm-b);border-radius:20px;
+    padding:26px 30px;box-shadow:0 1px 3px rgba(0,0,0,.05);margin-bottom:18px;}
+  #cdk .card h3{font-family:var(--warm);font-weight:700;font-size:20px;color:var(--ink);
+    margin:0 0 8px;line-height:1.2;}
+  #cdk .card p{font-size:15.5px;line-height:1.6;margin:0 0 12px;}
+  #cdk .card p:last-child{margin-bottom:0;}
+  #cdk .label{font-size:12px;font-weight:700;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--cardinal);margin-bottom:6px;}
+
+  #cdk pre{background:var(--ink);color:var(--cream);border-radius:10px;
+    padding:16px 18px;overflow-x:auto;font-family:var(--mono);font-size:13px;
+    line-height:1.75;margin:14px 0;}
+  #cdk pre .c{color:var(--on-dark-muted);}
+  #cdk code{font-family:var(--mono);font-size:.92em;background:var(--blush);
+    color:var(--cardinal);padding:2px 6px;border-radius:4px;}
+  #cdk pre code{background:none;color:inherit;padding:0;}
+
+  /* A thing you say to Claude */
+  #cdk .say{background:#fff;border:1px solid var(--warm-b);border-left:4px solid var(--cardinal);
+    border-radius:0 14px 14px 0;padding:18px 22px;margin:14px 0;}
+  #cdk .say .who{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--faint);margin-bottom:7px;}
+  #cdk .say p{margin:0;font-size:15.5px;line-height:1.6;color:var(--ink);}
+
+  #cdk ul.peaks{list-style:none;margin:0;padding:0;}
+  #cdk ul.peaks li{display:flex;align-items:flex-start;gap:12px;margin-bottom:11px;
+    font-size:15.5px;line-height:1.55;}
+  #cdk ul.peaks li:last-child{margin-bottom:0;}
+  #cdk ul.peaks li::before{content:"";margin-top:6px;flex:none;width:0;height:0;
+    border-left:5px solid transparent;border-right:5px solid transparent;
+    border-bottom:8px solid var(--cardinal);}
+
+  #cdk .loud{position:relative;overflow:hidden;background:var(--ink);padding:28px 32px;
+    border-radius:6px;margin-bottom:18px;}
+  #cdk .loud .corner{position:absolute;bottom:0;right:0;width:0;height:0;
+    border-bottom:140px solid var(--cardinal);border-left:140px solid transparent;}
+  #cdk .loud .in{position:relative;z-index:2;max-width:560px;}
+  #cdk .loud .kick{font-family:var(--loud);font-weight:800;font-size:12px;
+    letter-spacing:.2em;text-transform:uppercase;color:var(--pink);}
+  #cdk .loud h3{font-family:var(--loud);font-weight:900;font-size:26px;line-height:1.02;
+    color:var(--cream);margin:10px 0 12px;text-transform:uppercase;letter-spacing:-.01em;}
+  #cdk .loud p{font-size:15px;line-height:1.55;color:var(--on-dark);margin:0 0 10px;}
+  #cdk .loud p:last-child{margin-bottom:0;}
+  #cdk .loud strong{color:var(--cream);}
+
+  #cdk figure{margin:0;}
+  #cdk figcaption{font-family:var(--mono);font-size:11px;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--muted);margin-bottom:10px;}
+  #cdk svg{width:100%;height:auto;display:block;}
+
+  #cdk .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+  @media (max-width:740px){#cdk .grid2{grid-template-columns:1fr;}}
+
+  #cdk .next{display:flex;align-items:center;gap:16px;margin-top:26px;
+    background:var(--blush);border:1px solid var(--blush-b);border-radius:20px;padding:22px 26px;}
+  #cdk .next .n{font-family:var(--loud);font-weight:900;font-size:40px;line-height:.85;
+    color:var(--cardinal);flex:none;}
+  #cdk .next h3{font-family:var(--warm);font-weight:700;font-size:20px;color:var(--ink);margin:0 0 4px;}
+  #cdk .next p{margin:0;font-size:14.5px;line-height:1.5;color:#7a4148;}
+</style>
+</head>
+<body>
+<div id="cdk">
+
+  <div class="stephero">
+    <div class="corner"></div>
+    <div class="num">04</div>
+    <div class="t">
+      <div class="kick">Step Four</div>
+      <h1>Build Locally</h1>
+    </div>
+    <span class="arrow"></span>
+  </div>
+
+  <div class="wrap">
+
+    <div class="loud">
+      <div class="corner"></div>
+      <div class="in">
+        <div class="kick">The rule that saves the most time</div>
+        <h3>D2L is where finished things go</h3>
+        <p>It is not where you build them. Every trip through D2L costs you an upload, a
+           click path, and a wait, and it hides what went wrong. <strong>Build and check
+           locally until it is genuinely finished</strong>, then deploy once.</p>
+      </div>
+    </div>
+
+    <div class="sec"><span class="tri"></span><h2>The loop</h2><div class="rule"></div>
+      <span class="note">minutes, not uploads</span></div>
+
+    <div class="card">
+      <figure>
+        <figcaption>What you actually do, over and over</figcaption>
+        <svg viewBox="0 0 860 210" role="img" aria-label="A loop: describe what you want, Claude builds it, you look at it in a browser, then run the gate. If the gate finds errors you go back to building. When it is clean you move to deploy.">
+          <defs>
+            <marker id="a4" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto">
+              <path d="M0,0 L8,4 L0,8 z" fill="#B11226"/>
+            </marker>
+          </defs>
+          <g font-family="Public Sans,sans-serif">
+            <rect x="0" y="34" width="176" height="70" rx="9" fill="#fff" stroke="#EADFD0"/>
+            <polygon points="18,52 26,66 10,66" fill="#B11226"/>
+            <text x="34" y="65" font-weight="700" font-size="14.5" fill="#161616">Describe it</text>
+            <text x="18" y="88" font-size="12.5" fill="#8a847c">in plain language</text>
+
+            <line x1="178" y1="69" x2="202" y2="69" stroke="#B11226" stroke-width="2.5" marker-end="url(#a4)"/>
+
+            <rect x="206" y="34" width="176" height="70" rx="9" fill="#fff" stroke="#EADFD0"/>
+            <polygon points="224,52 232,66 216,66" fill="#B11226"/>
+            <text x="240" y="65" font-weight="700" font-size="14.5" fill="#161616">Claude builds</text>
+            <text x="224" y="88" font-size="12.5" fill="#8a847c">using the skills</text>
+
+            <line x1="384" y1="69" x2="408" y2="69" stroke="#B11226" stroke-width="2.5" marker-end="url(#a4)"/>
+
+            <rect x="412" y="34" width="176" height="70" rx="9" fill="#fff" stroke="#EADFD0"/>
+            <polygon points="430,52 438,66 422,66" fill="#B11226"/>
+            <text x="446" y="65" font-weight="700" font-size="14.5" fill="#161616">Look at it</text>
+            <text x="430" y="88" font-size="12.5" fill="#8a847c">in a real browser</text>
+
+            <line x1="590" y1="69" x2="614" y2="69" stroke="#B11226" stroke-width="2.5" marker-end="url(#a4)"/>
+
+            <rect x="618" y="28" width="176" height="82" rx="9" fill="#161616"/>
+            <polygon points="636,48 644,62 628,62" fill="#B11226"/>
+            <text x="652" y="61" font-family="Archivo,Arial Black,sans-serif" font-weight="900" font-size="15" fill="#FAF7F2">THE GATE</text>
+            <text x="636" y="84" font-size="12.5" fill="#cfc9c1">Errors are things we</text>
+            <text x="636" y="100" font-size="12.5" fill="#cfc9c1">measured breaking.</text>
+
+            <path d="M706,114 L706,148 L294,148 L294,108" fill="none" stroke="#B11226"
+                  stroke-width="2.5" stroke-dasharray="6 5" marker-end="url(#a4)"/>
+            <text x="500" y="167" font-size="13" fill="#8a847c" text-anchor="middle">any errors: fix and run it again</text>
+
+            <line x1="796" y1="69" x2="826" y2="69" stroke="#6a9c5a" stroke-width="2.5"/>
+            <text x="836" y="60" font-size="12" fill="#6a9c5a" font-weight="700">clean</text>
+            <text x="836" y="78" font-size="12" fill="#8a847c">step 5</text>
+          </g>
+        </svg>
+      </figure>
+    </div>
+
+    <div class="sec"><span class="tri"></span><h2>Starting the conversation</h2>
+      <div class="rule"></div><span class="note">say what, not how</span></div>
+
+    <div class="card">
+      <p>Describe the <em>experience</em>, not the technology. Claude will run the routing
+         questions with you and pick the approach. If you name a technology up front you
+         may skip the question that would have caught a mismatch.</p>
+
+      <div class="say">
+        <div class="who">Say something like</div>
+        <p>"I want students to drag the parts of a cell onto a diagram and get told what
+           they got wrong. It should be worth 10 points and they can try three times."</p>
+      </div>
+
+      <p>That description contains everything the router needs: it is interactive rather
+         than a quiz, it is graded automatically, and it needs attempts. You do not have
+         to know that adds up to a SCORM package. That is the skill's job.</p>
+
+      <div class="say">
+        <div class="who">Or if you already ran step 2</div>
+        <p>"Step 2 said content topic. Build me a page that shows students the assignment
+           brief and shows me the marking notes on the same page."</p>
+      </div>
+    </div>
+
+    <div class="sec"><span class="tri"></span><h2>Seeing it</h2><div class="rule"></div>
+      <span class="note">before D2L, always</span></div>
+
+    <div class="card">
+      <p>Ask Claude to serve the folder and open it. Do not open the file directly from
+         your file manager: a page opened that way cannot load its own data files, so it
+         will look broken for a reason that has nothing to do with your build.</p>
+      <div class="say">
+        <div class="who">Say</div>
+        <p>"Serve this locally and show me what it looks like."</p>
+      </div>
+      <p>Then actually use it. Click every button. Answer wrongly on purpose. Reload the
+         page halfway through and see whether it remembers. Most defects show up in the
+         first two minutes of genuinely using the thing.</p>
+    </div>
+
+    <div class="sec"><span class="tri"></span><h2>The gate</h2><div class="rule"></div>
+      <span class="note">zero errors to ship</span></div>
+
+    <div class="card">
+      <p>When it looks right, check it against the tenant. This catches the failures that
+         are invisible in a local browser because they only happen inside D2L.</p>
+      <pre><code>node harness/lint/lint.js &lt;your-folder&gt; --avenue scorm|topic|external</code></pre>
+      <p>Every finding explains <strong>why</strong>, quoting the behaviour we measured.
+         The point is that you learn the constraint, not just silence the check. Warnings
+         are advisory; errors are things we watched break.</p>
+      <div class="say">
+        <div class="who">Or just</div>
+        <p>"Run the gate on this and fix anything it finds."</p>
+      </div>
+    </div>
+
+    <div class="sec"><span class="tri"></span><h2>Worth knowing while you build</h2>
+      <div class="rule"></div></div>
+
+    <div class="grid2">
+      <div class="card">
+        <div class="label">Do it first, not later</div>
+        <h3>Name the file now</h3>
+        <p>The file name becomes the topic title in D2L, and <strong>renaming a live topic
+           silently corrupts it</strong>. Decide the exact wording students will see before
+           anything is uploaded.</p>
+      </div>
+      <div class="card">
+        <div class="label">Especially for SCORM</div>
+        <h3>Keep it short</h3>
+        <p>The embedded player will not scroll a tall activity. Anything past roughly 600
+           pixels becomes unreachable. Design it to fit, or plan to open it in a new
+           window.</p>
+      </div>
+      <div class="card">
+        <div class="label">A real limit</div>
+        <h3>About 4000 characters of memory</h3>
+        <p>That is all a SCORM package can save per student. Plenty for answers and
+           progress. Not enough for anything essay-shaped.</p>
+      </div>
+      <div class="card">
+        <div class="label">Ask for it out loud</div>
+        <h3>Make it work on a phone</h3>
+        <p>A meaningful number of students will open this on a phone in a hallway. It is
+           much cheaper to ask for that now than to retrofit it.</p>
+      </div>
+    </div>
+
+    <div class="next">
+      <div class="n">5</div>
+      <div>
+        <h3>Next: deploy</h3>
+        <p>Several stages, in order, and one of them is impossible to do from your own
+           account. Worth reading before you start rather than during.</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Deploy</title>
+<style>
+  #cdk {
+    --cardinal:#B11226; --deep:#7E0C1A; --ink:#161616; --cream:#FAF7F2;
+    --blush:#FBE9EC; --blush-b:#F3D3D9; --sand:#F1EBE1; --warm-b:#EADFD0;
+    --divider:#E0D6C8; --body:#4a463f; --muted:#8a847c; --faint:#a59f96;
+    --on-dark:#cfc9c1; --on-dark-muted:#9a948c; --pink:#E8A9B2;
+    --loud:'Archivo','Arial Black','Helvetica Neue',Impact,sans-serif;
+    --warm:'Epilogue','Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+    --text:'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+    --mono:'SFMono-Regular',ui-monospace,Menlo,Consolas,monospace;
+    background:var(--sand); font-family:var(--text); color:var(--body);
+    padding-bottom:60px; -webkit-font-smoothing:antialiased;
+  }
+  #cdk *{box-sizing:border-box;}
+  #cdk .wrap{max-width:900px;margin:0 auto;padding:0 32px;}
+
+  #cdk .stephero{position:relative;overflow:hidden;background:var(--cardinal);
+    padding:34px 8%;display:flex;align-items:center;gap:26px;}
+  #cdk .stephero .corner{position:absolute;bottom:-40px;right:-20px;width:0;height:0;
+    border-bottom:190px solid rgba(0,0,0,.16);border-left:190px solid transparent;}
+  #cdk .stephero .num{position:relative;font-family:var(--loud);font-weight:900;
+    font-size:70px;line-height:.8;color:var(--cream);flex:none;}
+  #cdk .stephero .t{position:relative;flex:1;}
+  #cdk .stephero .kick{font-family:var(--loud);font-weight:800;font-size:12px;
+    letter-spacing:.2em;text-transform:uppercase;color:#F4C9CF;}
+  #cdk .stephero h1{font-family:var(--loud);font-weight:900;font-size:34px;line-height:1;
+    color:var(--cream);margin:8px 0 0;text-transform:uppercase;letter-spacing:-.01em;}
+  #cdk .stephero .arrow{position:relative;width:0;height:0;flex:none;
+    border-top:13px solid transparent;border-bottom:13px solid transparent;
+    border-left:22px solid var(--cream);}
+
+  #cdk .sec{display:flex;align-items:center;gap:14px;margin:46px 0 20px;}
+  #cdk .tri{width:0;height:0;border-left:11px solid transparent;
+    border-right:11px solid transparent;border-bottom:18px solid var(--cardinal);flex:none;}
+  #cdk .sec h2{font-family:var(--warm);font-weight:800;font-size:26px;color:var(--ink);margin:0;}
+  #cdk .sec .rule{flex:1;height:2px;background:var(--divider);}
+  #cdk .sec .note{font-size:13px;color:var(--muted);white-space:nowrap;}
+
+  #cdk .card{background:#fff;border:1px solid var(--warm-b);border-radius:20px;
+    padding:26px 30px;box-shadow:0 1px 3px rgba(0,0,0,.05);margin-bottom:18px;}
+  #cdk .card h3{font-family:var(--warm);font-weight:700;font-size:20px;color:var(--ink);
+    margin:0 0 8px;line-height:1.2;}
+  #cdk .card p{font-size:15.5px;line-height:1.6;margin:0 0 12px;}
+  #cdk .card p:last-child{margin-bottom:0;}
+  #cdk .label{font-size:12px;font-weight:700;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--cardinal);margin-bottom:6px;}
+
+  /* Numbered stage card */
+  #cdk .stage{display:flex;gap:22px;background:#fff;border:1px solid var(--warm-b);
+    border-radius:20px;padding:26px 30px;box-shadow:0 1px 3px rgba(0,0,0,.05);margin-bottom:16px;}
+  #cdk .stage .sn{font-family:var(--loud);font-weight:900;font-size:38px;line-height:.85;
+    color:var(--blush-b);flex:none;width:52px;}
+  #cdk .stage .sb{flex:1;}
+  #cdk .stage h3{font-family:var(--warm);font-weight:700;font-size:20px;color:var(--ink);
+    margin:0 0 8px;line-height:1.2;}
+  #cdk .stage p{font-size:15.5px;line-height:1.6;margin:0 0 11px;}
+  #cdk .stage p:last-child{margin-bottom:0;}
+  #cdk .stage.danger{border-color:var(--blush-b);background:var(--blush);}
+  #cdk .stage.danger .sn{color:var(--cardinal);}
+  #cdk .stage.danger p{color:#7a4148;}
+
+  #cdk pre{background:var(--ink);color:var(--cream);border-radius:10px;
+    padding:15px 18px;overflow-x:auto;font-family:var(--mono);font-size:13px;
+    line-height:1.75;margin:13px 0;}
+  #cdk pre .c{color:var(--on-dark-muted);}
+  #cdk code{font-family:var(--mono);font-size:.92em;background:var(--blush);
+    color:var(--cardinal);padding:2px 6px;border-radius:4px;}
+  #cdk pre code{background:none;color:inherit;padding:0;}
+
+  #cdk .path{font-family:var(--mono);font-size:13px;background:#F1EBE1;
+    border:1px solid var(--divider);border-radius:8px;padding:12px 15px;
+    margin:12px 0;color:var(--ink);line-height:1.7;}
+
+  #cdk ul.peaks{list-style:none;margin:0;padding:0;}
+  #cdk ul.peaks li{display:flex;align-items:flex-start;gap:12px;margin-bottom:11px;
+    font-size:15.5px;line-height:1.55;}
+  #cdk ul.peaks li:last-child{margin-bottom:0;}
+  #cdk ul.peaks li::before{content:"";margin-top:6px;flex:none;width:0;height:0;
+    border-left:5px solid transparent;border-right:5px solid transparent;
+    border-bottom:8px solid var(--cardinal);}
+
+  #cdk .loud{position:relative;overflow:hidden;background:var(--ink);padding:30px 34px;
+    border-radius:6px;margin-bottom:18px;}
+  #cdk .loud .corner{position:absolute;bottom:0;right:0;width:0;height:0;
+    border-bottom:150px solid var(--cardinal);border-left:150px solid transparent;}
+  #cdk .loud .in{position:relative;z-index:2;max-width:570px;}
+  #cdk .loud .kick{font-family:var(--loud);font-weight:800;font-size:12px;
+    letter-spacing:.2em;text-transform:uppercase;color:var(--pink);}
+  #cdk .loud h3{font-family:var(--loud);font-weight:900;font-size:28px;line-height:1.02;
+    color:var(--cream);margin:10px 0 12px;text-transform:uppercase;letter-spacing:-.01em;}
+  #cdk .loud p{font-size:15px;line-height:1.55;color:var(--on-dark);margin:0 0 10px;}
+  #cdk .loud p:last-child{margin-bottom:0;}
+  #cdk .loud strong{color:var(--cream);}
+
+  #cdk figure{margin:0;}
+  #cdk figcaption{font-family:var(--mono);font-size:11px;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--muted);margin-bottom:10px;}
+  #cdk svg{width:100%;height:auto;display:block;}
+</style>
+</head>
+<body>
+<div id="cdk">
+
+  <div class="stephero">
+    <div class="corner"></div>
+    <div class="num">05</div>
+    <div class="t">
+      <div class="kick">Step Five</div>
+      <h1>Deploy</h1>
+    </div>
+    <span class="arrow"></span>
+  </div>
+
+  <div class="wrap">
+
+    <div class="loud">
+      <div class="corner"></div>
+      <div class="in">
+        <div class="kick">Set expectations</div>
+        <h3>This is not one button</h3>
+        <p>Deploying is five stages, and they have to happen in order. Two of them are
+           effectively <strong>permanent</strong>, and one of them
+           <strong>cannot be done from your own account at all</strong>.</p>
+        <p>None of that is difficult. It is just genuinely worth reading before you begin
+           rather than discovering halfway through.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <figure>
+        <figcaption>The five stages, in order</figcaption>
+        <svg viewBox="0 0 860 130" role="img" aria-label="Five deployment stages in order: name it, which is permanent; upload; configure; verify as a student, which you cannot do from your own account; and update, which republishes everywhere.">
+          <defs>
+            <marker id="a5" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto">
+              <path d="M0,0 L8,4 L0,8 z" fill="#B11226"/>
+            </marker>
+          </defs>
+          <g font-family="Public Sans,sans-serif">
+            <rect x="0" y="30" width="150" height="62" rx="9" fill="#FBE9EC" stroke="#F3D3D9"/>
+            <text x="14" y="52" font-family="Archivo,Arial Black,sans-serif" font-weight="900" font-size="15" fill="#B11226">1</text>
+            <text x="34" y="52" font-weight="700" font-size="14" fill="#161616">Name it</text>
+            <text x="14" y="76" font-size="12" fill="#7a4148">permanent</text>
+
+            <line x1="152" y1="61" x2="172" y2="61" stroke="#B11226" stroke-width="2.5" marker-end="url(#a5)"/>
+
+            <rect x="176" y="30" width="150" height="62" rx="9" fill="#fff" stroke="#EADFD0"/>
+            <text x="190" y="52" font-family="Archivo,Arial Black,sans-serif" font-weight="900" font-size="15" fill="#B11226">2</text>
+            <text x="210" y="52" font-weight="700" font-size="14" fill="#161616">Upload</text>
+            <text x="190" y="76" font-size="12" fill="#8a847c">path differs by type</text>
+
+            <line x1="328" y1="61" x2="348" y2="61" stroke="#B11226" stroke-width="2.5" marker-end="url(#a5)"/>
+
+            <rect x="352" y="30" width="150" height="62" rx="9" fill="#fff" stroke="#EADFD0"/>
+            <text x="366" y="52" font-family="Archivo,Arial Black,sans-serif" font-weight="900" font-size="15" fill="#B11226">3</text>
+            <text x="386" y="52" font-weight="700" font-size="14" fill="#161616">Configure</text>
+            <text x="366" y="76" font-size="12" fill="#8a847c">grade, attempts</text>
+
+            <line x1="504" y1="61" x2="524" y2="61" stroke="#B11226" stroke-width="2.5" marker-end="url(#a5)"/>
+
+            <rect x="528" y="24" width="150" height="74" rx="9" fill="#161616"/>
+            <text x="542" y="48" font-family="Archivo,Arial Black,sans-serif" font-weight="900" font-size="15" fill="#FAF7F2">4</text>
+            <text x="562" y="48" font-weight="700" font-size="14" fill="#FAF7F2">Verify</text>
+            <text x="542" y="70" font-size="12" fill="#E8A9B2">as a student,</text>
+            <text x="542" y="86" font-size="12" fill="#E8A9B2">not as you</text>
+
+            <line x1="680" y1="61" x2="700" y2="61" stroke="#B11226" stroke-width="2.5" marker-end="url(#a5)"/>
+
+            <rect x="704" y="30" width="150" height="62" rx="9" fill="#fff" stroke="#EADFD0"/>
+            <text x="718" y="52" font-family="Archivo,Arial Black,sans-serif" font-weight="900" font-size="15" fill="#B11226">5</text>
+            <text x="738" y="52" font-weight="700" font-size="14" fill="#161616">Update</text>
+            <text x="718" y="76" font-size="12" fill="#8a847c">changes everywhere</text>
+          </g>
+        </svg>
+      </figure>
+    </div>
+
+    <div class="sec"><span class="tri"></span><h2>The stages</h2><div class="rule"></div>
+      <span class="note">in order, no skipping</span></div>
+
+    <div class="stage danger">
+      <div class="sn">1</div>
+      <div class="sb">
+        <h3>Name it, and mean it</h3>
+        <p>The file name becomes the topic title students see. <strong>Renaming a live
+           topic re-saves the page and silently destroys anything interactive in it.</strong>
+           So does opening it in D2L's built-in HTML editor, even if you cancel.</p>
+        <p>Get the wording right now. This is the single most common way a working activity
+           becomes a blank one.</p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="sn">2</div>
+      <div class="sb">
+        <h3>Upload</h3>
+        <p>Where you go depends on what you built.</p>
+        <p style="margin-bottom:6px;"><strong>A content topic</strong> goes in through the
+           Lessons drop zone, which uploads the file and creates the topic in one move:</p>
+        <div class="path">Content &rarr; a unit &rarr; Add Existing &rarr; drop the file</div>
+        <p style="margin-bottom:6px;"><strong>A SCORM package</strong> has its own path, and
+           it is not where most people look first. It is not in Course Admin:</p>
+        <div class="path">Content &rarr; a unit &rarr; Add Existing &rarr; SCORM/xAPI Object &rarr; Bulk Upload</div>
+        <p>Claude can drive either of these for you if you would rather not click. Ask it
+           to deploy the build and tell it which course.</p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="sn">3</div>
+      <div class="sb">
+        <h3>Configure, while it is asking</h3>
+        <p>A SCORM package asks a few questions as you add it, and these are much easier to
+           set now than to change later.</p>
+        <ul class="peaks">
+          <li><strong>Create a grade item?</strong> Usually yes. This is what makes the
+              score land somewhere.</li>
+          <li><strong>Grade calculation method.</strong> Highest Attempt is the default and
+              is usually what people mean by "best of three". Lowest, Average, First and
+              Last are all there too.</li>
+          <li><strong>Player.</strong> Embedded looks tidier. Choose <em>new window</em> if
+              your activity is tall, because the embedded player will not scroll.</li>
+        </ul>
+        <p style="margin-top:12px;">You do not have to build attempt limits or best-of-N
+           yourself. It is a setting.</p>
+      </div>
+    </div>
+
+    <div class="stage danger">
+      <div class="sn">4</div>
+      <div class="sb">
+        <h3>Verify as a student, because you cannot verify as yourself</h3>
+        <p>For a SCORM package this is not a nicety. When <em>you</em> open your own
+           package, D2L gives you a preview that <strong>throws away every score and every
+           saved answer, and reports no error while doing it</strong>. Everything will look
+           like it worked. Nothing will have been recorded.</p>
+        <p>Ask a TA, intern, or colleague enrolled as a <em>student</em> to open it once.
+           Check that it opens, that finishing it puts a number in the gradebook, and that
+           a second attempt behaves the way you expect. This is the one thing the emulator
+           cannot do for you, and it takes about five minutes of someone else's time.</p>
+        <p>For a content topic you can check it yourself, but still confirm that a student
+           sees the student version and not your instructor view.</p>
+        <p>If it shows different things to different roles, one helper can check all of
+           them. Change their enrolment role, have them reload, and look again. The same
+           person enrolled as a student, then as a TA, exercises every branch you built
+           without involving anyone else.</p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="sn">5</div>
+      <div class="sb">
+        <h3>Updating later</h3>
+        <p>For a content topic, upload the changed file again and choose to overwrite.
+           Never rename it while doing so.</p>
+        <p>For SCORM, upload a new version and then <strong>publish it explicitly</strong>,
+           which is a separate click:</p>
+        <div class="path">Add Existing &rarr; SCORM/xAPI Object &rarr; the package's &hellip; menu &rarr; Manage Versions</div>
+        <p>D2L will warn you that publishing updates the package <em>everywhere it is
+           used</em>. If you have put the same activity in several places, they all change
+           at once.</p>
+      </div>
+    </div>
+
+    <div class="sec"><span class="tri"></span><h2>If something looks wrong afterwards</h2>
+      <div class="rule"></div><span class="note">in order of likelihood</span></div>
+
+    <div class="card">
+      <ul class="peaks">
+        <li><strong>You tested it yourself.</strong> For SCORM that proves nothing. Have
+            someone enrolled as a student open it.</li>
+        <li><strong>The topic was renamed, or opened in the HTML editor.</strong> Both
+            silently corrupt it. Not repairable; redeploy a fresh copy.</li>
+        <li><strong>It reports complete immediately.</strong> Then every later attempt is
+            read-only and best-of-N has stopped working. Rebuild so completion only
+            happens when the student actually finishes.</li>
+        <li><strong>Progress is not saving.</strong> Check whether the activity is trying to
+            store more than about 4000 characters, or whether it is relying on browser
+            storage, which follows the computer rather than the person.</li>
+      </ul>
+      <p style="margin-top:14px;">When in doubt, tell Claude what you saw. It has the
+         measured behaviour in front of it and the list of things that fail silently is
+         short.</p>
+    </div>
+
+    <div class="loud">
+      <div class="corner"></div>
+      <div class="in">
+        <div class="kick">One last thing</div>
+        <h3>Do it in your own course first</h3>
+        <p>Every one of these stages is reversible in a course of your own and awkward in
+           one students are taking. Build there, deploy there, break it there, and move the
+           finished thing across once you are happy.</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

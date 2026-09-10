@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<!-- A content-topic build that should lint clean. Reference implementation
+     for the patterns the rules are trying to enforce. -->
+<html>
+<head>
+<style>
+  /* Fixed pixel height, never viewport units: the iframe auto-sizes. */
+  #root { height: 700px; overflow: auto; }
+</style>
+</head>
+<body>
+<div id="root">Loading…</div>
+<script>
+(function () {
+  'use strict';
+
+  // Storage is shared with the whole LMS, so namespace it. And it throws
+  // rather than returning null, so every access is wrapped.
+  var NS = 'gamedesign:wk1:';
+  function lsGet(key, fallback) {
+    try {
+      var v = localStorage.getItem(NS + key);
+      return v === null ? fallback : JSON.parse(v);
+    } catch (e) { return fallback; }
+  }
+  function lsSet(key, val) {
+    try { localStorage.setItem(NS + key, JSON.stringify(val)); } catch (e) {}
+  }
+
+  // Data is loaded by injection, not a static <script src>, because the
+  // static tag executes in some courses and is silently inert in others.
+  function loadData(done) {
+    var s = document.createElement('script');
+    s.src = 'data.js';
+    s.onload = function () { done(window.WK1_DATA || null); };
+    s.onerror = function () { done(null); };
+    document.head.appendChild(s);
+  }
+
+  function init(data) {
+    var visited = lsGet('visited', []);
+    document.getElementById('root').textContent =
+      data ? ('Loaded ' + data.items.length + ' items. Seen ' + visited.length + '.')
+           : 'Content could not load. Refresh, or tell your instructor.';
+    window.WK1_READY = true;
+  }
+
+  loadData(init);
+})();
+</script>
+</body>
+</html>

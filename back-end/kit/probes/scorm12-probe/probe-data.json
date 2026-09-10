@@ -1,0 +1,5 @@
+{
+  "ok": true,
+  "note": "If you can read this from inside the SCORM package, fetch() of a sibling JSON file works.",
+  "marker": "SCSU_PROBE_JSON_OK"
+}

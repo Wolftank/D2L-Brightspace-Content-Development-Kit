@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Start Here</title>
+<style>
+  /* SCSU Husky Course Kit, Blended. Fonts are named with system fallbacks and
+     no CDN link on purpose: campus policy may block an external host, and a
+     blocked font should degrade rather than break the page. */
+  #cdk {
+    --cardinal:#B11226; --deep:#7E0C1A; --ink:#161616; --cream:#FAF7F2;
+    --blush:#FBE9EC; --blush-b:#F3D3D9; --sand:#F1EBE1; --warm-b:#EADFD0;
+    --divider:#E0D6C8; --body:#4a463f; --muted:#8a847c; --faint:#a59f96;
+    --on-dark:#cfc9c1; --on-dark-muted:#9a948c; --pink:#E8A9B2;
+    --loud:'Archivo','Arial Black','Helvetica Neue',Impact,sans-serif;
+    --warm:'Epilogue','Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+    --text:'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+    --mono:'SFMono-Regular',ui-monospace,Menlo,Consolas,monospace;
+    background:var(--sand); font-family:var(--text); color:var(--body);
+    padding-bottom:60px; -webkit-font-smoothing:antialiased;
+  }
+  #cdk *{box-sizing:border-box;}
+  #cdk .wrap{max-width:900px;margin:0 auto;padding:0 32px;}
+
+  /* Loud hero */
+  #cdk .hero{position:relative;overflow:hidden;background:var(--ink);padding:58px 8% 52px;}
+  #cdk .hero .wedge{position:absolute;inset:0;left:56%;background:var(--cardinal);
+    clip-path:polygon(26% 0,100% 0,100% 100%,0% 100%);}
+  #cdk .hero .wedge2{position:absolute;inset:0;left:56%;background:var(--deep);
+    clip-path:polygon(54% 0,70% 0,26% 100%,10% 100%);opacity:.7;}
+  #cdk .hero .peak{position:absolute;top:38px;right:8%;width:0;height:0;
+    border-left:18px solid transparent;border-right:18px solid transparent;
+    border-bottom:29px solid var(--cream);opacity:.9;z-index:2;}
+  #cdk .hero .inner{position:relative;z-index:3;max-width:560px;}
+  #cdk .kicker{font-family:var(--loud);font-weight:800;font-size:12px;
+    letter-spacing:.22em;text-transform:uppercase;color:var(--pink);}
+  #cdk .hero h1{font-family:var(--loud);font-weight:900;font-size:52px;line-height:.97;
+    color:var(--cream);margin:16px 0 0;text-transform:uppercase;letter-spacing:-.015em;}
+  #cdk .hero p{font-size:18px;line-height:1.55;color:var(--on-dark);margin:20px 0 0;}
+  #cdk .hero strong{color:var(--cream);}
+
+  /* Section head */
+  #cdk .sec{display:flex;align-items:center;gap:14px;margin:52px 0 22px;}
+  #cdk .tri{width:0;height:0;border-left:11px solid transparent;
+    border-right:11px solid transparent;border-bottom:18px solid var(--cardinal);flex:none;}
+  #cdk .sec h2{font-family:var(--warm);font-weight:800;font-size:27px;color:var(--ink);margin:0;}
+  #cdk .sec .rule{flex:1;height:2px;background:var(--divider);}
+  #cdk .sec .note{font-size:13px;color:var(--muted);white-space:nowrap;}
+
+  /* Warm card */
+  #cdk .card{background:#fff;border:1px solid var(--warm-b);border-radius:20px;
+    padding:28px 30px;box-shadow:0 1px 3px rgba(0,0,0,.05);}
+  #cdk .card h3{font-family:var(--warm);font-weight:700;font-size:21px;color:var(--ink);
+    margin:0 0 8px;line-height:1.2;}
+  #cdk .card p{font-size:15.5px;line-height:1.6;margin:0 0 12px;}
+  #cdk .card p:last-child{margin-bottom:0;}
+  #cdk .label{font-size:12px;font-weight:700;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--cardinal);margin-bottom:6px;}
+
+  #cdk .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+  @media (max-width:740px){#cdk .grid2{grid-template-columns:1fr;}}
+
+  /* Peak bullets */
+  #cdk ul.peaks{list-style:none;margin:0;padding:0;}
+  #cdk ul.peaks li{display:flex;align-items:flex-start;gap:12px;margin-bottom:11px;
+    font-size:15.5px;line-height:1.55;}
+  #cdk ul.peaks li:last-child{margin-bottom:0;}
+  #cdk ul.peaks li::before{content:"";margin-top:6px;flex:none;width:0;height:0;
+    border-left:5px solid transparent;border-right:5px solid transparent;
+    border-bottom:8px solid var(--cardinal);}
+
+  /* Pills */
+  #cdk .pill{display:inline-block;font-size:13px;font-weight:600;color:var(--cardinal);
+    background:var(--blush);padding:6px 14px;border-radius:20px;margin:0 7px 7px 0;}
+
+  /* Loud callout */
+  #cdk .loud{position:relative;overflow:hidden;background:var(--ink);padding:30px 34px;
+    border-radius:6px;margin-top:18px;}
+  #cdk .loud .corner{position:absolute;bottom:0;right:0;width:0;height:0;
+    border-bottom:150px solid var(--cardinal);border-left:150px solid transparent;}
+  #cdk .loud .in{position:relative;z-index:2;max-width:560px;}
+  #cdk .loud h3{font-family:var(--loud);font-weight:900;font-size:28px;line-height:1;
+    color:var(--cream);margin:10px 0 12px;text-transform:uppercase;letter-spacing:-.01em;}
+  #cdk .loud p{font-size:15px;line-height:1.55;color:var(--on-dark);margin:0 0 10px;}
+  #cdk .loud p:last-child{margin-bottom:0;}
+  #cdk .loud strong{color:var(--cream);}
+
+  #cdk figure{margin:0;}
+  #cdk figcaption{font-family:var(--mono);font-size:11px;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--muted);margin-bottom:10px;}
+  #cdk svg{width:100%;height:auto;display:block;}
+
+  #cdk .next{display:flex;align-items:center;gap:16px;margin-top:16px;
+    background:var(--blush);border:1px solid var(--blush-b);border-radius:20px;padding:22px 26px;}
+  #cdk .next .n{font-family:var(--loud);font-weight:900;font-size:40px;line-height:.85;
+    color:var(--cardinal);flex:none;}
+  #cdk .next h3{font-family:var(--warm);font-weight:700;font-size:20px;color:var(--ink);margin:0 0 4px;}
+  #cdk .next p{margin:0;font-size:14.5px;line-height:1.5;color:#7a4148;}
+</style>
+</head>
+<body>
+<div id="cdk">
+
+  <div class="hero">
+    <div class="wedge"></div><div class="wedge2"></div><span class="peak"></span>
+    <div class="inner">
+      <div class="kicker">St. Cloud State University &middot; D2L</div>
+      <h1>Content<br>Development Kit</h1>
+      <p>Build custom interactive activities for your D2L course, with AI help, and
+         <strong>test them against our own D2L</strong> before anything goes live.</p>
+    </div>
+  </div>
+
+  <div class="wrap">
+
+    <div class="sec"><span class="tri"></span><h2>What this is</h2><div class="rule"></div>
+      <span class="note">five steps, about an hour</span></div>
+
+    <div class="card">
+      <p>D2L will happily host something you build yourself: a self-marking drill, an
+         interactive diagram, a simulation, a dashboard. What it will not do is warn you
+         when you have built it the wrong way. Several things fail <strong>silently</strong>
+         here, and the most expensive of them look like success right up until a student
+         reports a problem.</p>
+      <p>This kit is the accumulated answer to that. It points you at the right approach,
+         gives Claude the rules for building it, and checks the result against how our D2L
+         actually behaves before any student sees it.</p>
+      <p style="margin-top:16px;">
+        <span class="pill">Tested against our own D2L</span>
+        <span class="pill">Built on your computer first</span>
+        <span class="pill">Checked before students see it</span>
+      </p>
+    </div>
+
+    <div class="sec"><span class="tri"></span><h2>Four ways to build</h2><div class="rule"></div>
+      <span class="note">they are not interchangeable</span></div>
+
+    <div class="card">
+      <p>Two things decide which one fits. <strong>How much of the course it is allowed to
+         see</strong>, which sets what it can do. And <strong>whether a student has to go
+         looking for it</strong>, which sets whether they will ever see it at all. The
+         second is the one people forget, and it causes more rebuilding than the first.</p>
+
+      <figure style="margin-top:20px;">
+        <figcaption>What each one can and cannot do</figcaption>
+        <svg viewBox="0 0 860 400" role="img" aria-label="Four ways to build, split into two groups. Three are destinations a student has to decide to go to: an external page hosted by you, which knows nothing about the learner; a content topic, which knows who is looking and their role but cannot grade; and a SCORM package, which grades but is sealed off from everything D2L knows. The fourth, a homepage widget, is not a destination. It is always present and needs no decision to look, and it is the only one D2L can genuinely hide from students, but it also cannot grade.">
+          <!-- ===== group one: destinations ===== -->
+          <text x="0" y="12" font-family="ui-monospace,monospace" font-size="11"
+                letter-spacing="1.5" fill="#a59f96">DESTINATIONS &#183; A STUDENT HAS TO DECIDE TO GO THERE</text>
+          <line x1="0" y1="22" x2="860" y2="22" stroke="#E0D6C8" stroke-width="2"/>
+
+          <!-- A -->
+          <rect x="0" y="36" width="273" height="186" rx="10" fill="#ffffff" stroke="#EADFD0"/>
+          <rect x="0" y="36" width="273" height="40" rx="10" fill="#F1EBE1"/>
+          <rect x="0" y="64" width="273" height="12" fill="#F1EBE1"/>
+          <text x="16" y="62" font-family="ui-monospace,monospace" font-size="11" fill="#8a847c">outside D2L entirely</text>
+          <polygon points="16,94 24,108 8,108" fill="#B11226"/>
+          <text x="32" y="107" font-family="Epilogue,Segoe UI,sans-serif" font-weight="700" font-size="16" fill="#161616">External page</text>
+          <text x="16" y="134" font-family="Public Sans,sans-serif" font-size="13" fill="#4a463f">Easiest to build and change.</text>
+          <text x="16" y="153" font-family="Public Sans,sans-serif" font-size="13" fill="#4a463f">Anything the web can do.</text>
+          <text x="16" y="182" font-family="ui-monospace,monospace" font-size="10.5" letter-spacing="1" fill="#B11226">KNOWS NOTHING</text>
+          <text x="16" y="201" font-family="Public Sans,sans-serif" font-size="12.5" fill="#8a847c">No names, no grades, no course data.</text>
+
+          <!-- B -->
+          <rect x="293" y="36" width="273" height="186" rx="10" fill="#ffffff" stroke="#EADFD0"/>
+          <rect x="293" y="36" width="273" height="40" rx="10" fill="#FBE9EC"/>
+          <rect x="293" y="64" width="273" height="12" fill="#FBE9EC"/>
+          <text x="309" y="62" font-family="ui-monospace,monospace" font-size="11" fill="#B11226">inside your course</text>
+          <polygon points="309,94 317,108 301,108" fill="#B11226"/>
+          <text x="325" y="107" font-family="Epilogue,Segoe UI,sans-serif" font-weight="700" font-size="16" fill="#161616">Content topic</text>
+          <text x="309" y="134" font-family="Public Sans,sans-serif" font-size="13" fill="#4a463f">In the content sequence.</text>
+          <text x="309" y="153" font-family="Public Sans,sans-serif" font-size="13" fill="#4a463f">Room to be as big as it needs.</text>
+          <text x="309" y="182" font-family="ui-monospace,monospace" font-size="10.5" letter-spacing="1" fill="#B11226">KNOWS STUDENT FROM INSTRUCTOR</text>
+          <text x="309" y="201" font-family="Public Sans,sans-serif" font-size="12.5" fill="#8a847c">But cannot write a grade.</text>
+
+          <!-- C -->
+          <rect x="586" y="36" width="274" height="186" rx="10" fill="#161616"/>
+          <rect x="586" y="36" width="274" height="40" rx="10" fill="#2a2422"/>
+          <rect x="586" y="64" width="274" height="12" fill="#2a2422"/>
+          <text x="602" y="62" font-family="ui-monospace,monospace" font-size="11" fill="#E8A9B2">inside your course, in a sealed box</text>
+          <polygon points="602,94 610,108 594,108" fill="#B11226"/>
+          <text x="618" y="107" font-family="Archivo,Arial Black,sans-serif" font-weight="900" font-size="15" fill="#FAF7F2">SCORM PACKAGE</text>
+          <text x="602" y="134" font-family="Public Sans,sans-serif" font-size="13" fill="#cfc9c1">Writes a score by itself.</text>
+          <text x="602" y="153" font-family="Public Sans,sans-serif" font-size="13" fill="#cfc9c1">Remembers across devices.</text>
+          <text x="602" y="182" font-family="ui-monospace,monospace" font-size="10.5" letter-spacing="1" fill="#E8A9B2">CANNOT SEE THE COURSE</text>
+          <text x="602" y="201" font-family="Public Sans,sans-serif" font-size="12.5" fill="#9a948c">It knows a name, and nothing more.</text>
+
+          <!-- ===== group two: not a destination ===== -->
+          <text x="0" y="266" font-family="ui-monospace,monospace" font-size="11"
+                letter-spacing="1.5" fill="#B11226">NOT A DESTINATION &#183; IT IS SIMPLY THERE</text>
+          <line x1="0" y1="276" x2="860" y2="276" stroke="#B11226" stroke-width="2"/>
+
+          <rect x="0" y="290" width="860" height="104" rx="10" fill="#ffffff" stroke="#F3D3D9"/>
+          <rect x="0" y="290" width="13" height="104" fill="#B11226"/>
+          <polygon points="40,312 48,326 32,326" fill="#B11226"/>
+          <text x="56" y="325" font-family="Epilogue,Segoe UI,sans-serif" font-weight="700" font-size="16" fill="#161616">Homepage widget</text>
+          <text x="238" y="325" font-family="ui-monospace,monospace" font-size="11" fill="#B11226">on the course homepage</text>
+          <text x="32" y="352" font-family="Public Sans,sans-serif" font-size="13" fill="#4a463f">Seen without anyone deciding to look, which reaches the people who would not go looking.</text>
+          <text x="32" y="379" font-family="ui-monospace,monospace" font-size="10.5" letter-spacing="1" fill="#B11226">THE ONLY ONE D2L CAN GENUINELY HIDE</text>
+          <text x="404" y="379" font-family="Public Sans,sans-serif" font-size="12.5" fill="#8a847c">Also cannot write a grade.</text>
+        </svg>
+      </figure>
+
+      <p style="margin-top:18px;">Two things cannot be combined. Step 2 will stop you before
+         you build the wrong one, but they are worth knowing now.</p>
+
+      <ul class="peaks" style="margin-top:14px;">
+        <li><strong>Something that grades itself cannot know anything about your course.</strong>
+            The trade for putting a score in the gradebook on its own is that it sits in a
+            sealed box. It is handed the student's name and nothing else: no gradebook, no
+            roster, and no way to tell whether the person looking is a student or you.</li>
+        <li><strong>Something on the homepage cannot be graded.</strong> Homepage panels do
+            not put scores anywhere.</li>
+      </ul>
+
+      <p style="margin-top:14px;">Neither is much of an obstacle in practice. Build the
+         graded activity, then build a small panel that points at it. That pairing is common,
+         and it fixes a problem the activity has on its own: students never noticed it was
+         there.</p>
+    </div>
+
+    <div class="sec"><span class="tri"></span><h2>The process</h2><div class="rule"></div>
+      <span class="note">local first, D2L last</span></div>
+
+    <div class="card">
+      <figure>
+        <figcaption>Five steps, and where the checks happen</figcaption>
+        <svg viewBox="0 0 860 190" role="img" aria-label="Five step process. Determine your path, install the skills, build locally, then a gate that must pass with zero errors, then deploy and verify as a student. Building and gating loop until clean.">
+          <defs>
+            <marker id="ar2" markerWidth="9" markerHeight="9" refX="7" refY="4" orient="auto">
+              <path d="M0,0 L8,4 L0,8 z" fill="#B11226"/>
+            </marker>
+          </defs>
+
+          <g font-family="Public Sans,sans-serif">
+            <rect x="0" y="40" width="150" height="66" rx="9" fill="#fff" stroke="#EADFD0"/>
+            <text x="14" y="64" font-family="ui-monospace,monospace" font-size="10" letter-spacing="1.4" fill="#a59f96">STEP 2</text>
+            <text x="14" y="86" font-weight="700" font-size="14.5" fill="#161616">Determine</text>
+            <text x="14" y="102" font-size="12.5" fill="#8a847c">your path</text>
+
+            <line x1="152" y1="73" x2="176" y2="73" stroke="#B11226" stroke-width="2.5" marker-end="url(#ar2)"/>
+
+            <rect x="180" y="40" width="150" height="66" rx="9" fill="#fff" stroke="#EADFD0"/>
+            <text x="194" y="64" font-family="ui-monospace,monospace" font-size="10" letter-spacing="1.4" fill="#a59f96">STEP 3</text>
+            <text x="194" y="86" font-weight="700" font-size="14.5" fill="#161616">Install</text>
+            <text x="194" y="102" font-size="12.5" fill="#8a847c">the skills</text>
+
+            <line x1="332" y1="73" x2="356" y2="73" stroke="#B11226" stroke-width="2.5" marker-end="url(#ar2)"/>
+
+            <rect x="360" y="40" width="150" height="66" rx="9" fill="#fff" stroke="#EADFD0"/>
+            <text x="374" y="64" font-family="ui-monospace,monospace" font-size="10" letter-spacing="1.4" fill="#a59f96">STEP 4</text>
+            <text x="374" y="86" font-weight="700" font-size="14.5" fill="#161616">Build</text>
+            <text x="374" y="102" font-size="12.5" fill="#8a847c">locally</text>
+
+            <line x1="512" y1="73" x2="536" y2="73" stroke="#B11226" stroke-width="2.5" marker-end="url(#ar2)"/>
+
+            <rect x="540" y="34" width="128" height="78" rx="9" fill="#161616"/>
+            <polygon points="554,52 562,66 546,66" fill="#B11226"/>
+            <text x="570" y="65" font-family="Archivo,Arial Black,sans-serif" font-weight="900" font-size="14" fill="#FAF7F2">THE GATE</text>
+            <text x="554" y="88" font-size="12.5" fill="#cfc9c1">Zero errors,</text>
+            <text x="554" y="104" font-size="12.5" fill="#cfc9c1">or it does not ship.</text>
+
+            <line x1="670" y1="73" x2="694" y2="73" stroke="#B11226" stroke-width="2.5" marker-end="url(#ar2)"/>
+
+            <rect x="698" y="40" width="150" height="66" rx="9" fill="#fff" stroke="#EADFD0"/>
+            <text x="712" y="64" font-family="ui-monospace,monospace" font-size="10" letter-spacing="1.4" fill="#a59f96">STEP 5</text>
+            <text x="712" y="86" font-weight="700" font-size="14.5" fill="#161616">Deploy</text>
+            <text x="712" y="102" font-size="12.5" fill="#8a847c">and verify</text>
+
+            <!-- fix-and-retry loop -->
+            <path d="M604,116 L604,148 L435,148 L435,110" fill="none" stroke="#B11226"
+                  stroke-width="2.5" stroke-dasharray="6 5" marker-end="url(#ar2)"/>
+            <text x="519" y="166" font-size="12.5" fill="#8a847c" text-anchor="middle">fix and run it again</text>
+          </g>
+        </svg>
+      </figure>
+    </div>
+
+    <div class="sec"><span class="tri"></span><h2>Four things that will bite you</h2>
+      <div class="rule"></div><span class="note">nothing warns you about any of these</span></div>
+
+    <div class="grid2">
+      <div class="card">
+        <div class="label">Nothing will tell you</div>
+        <h3>You will not be able to test it yourself</h3>
+        <p>Open a graded activity you built and D2L shows you a preview. It looks like it
+           works. Nothing you do in it is saved, and nothing says so. The emulator in Step 3
+           reproduces this on your own computer, which is where you should be catching it.
+           For the final look in D2L, ask a TA or a colleague who is enrolled as a
+           <em>student</em> — anyone with instructor permissions gets the same dead preview
+           you do.</p>
+      </div>
+      <div class="card">
+        <div class="label">Nothing will tell you</div>
+        <h3>Students may get one attempt when you meant three</h3>
+        <p>If the activity decides too early that a student has finished, D2L closes it for
+           good. They cannot go back and improve. You will not see a warning, and the
+           gradebook will look perfectly normal.</p>
+      </div>
+      <div class="card">
+        <div class="label">Nothing will tell you</div>
+        <h3>Progress can follow the computer, not the student</h3>
+        <p>With some approaches, a student who starts in the lab and finishes on their own
+           laptop begins again from nothing. Two students sharing a lab computer can end up
+           seeing each other's work. Step 2 tells you which approaches do this.</p>
+      </div>
+      <div class="card">
+        <div class="label">Nothing will tell you</div>
+        <h3>Students can read the answers</h3>
+        <p>Anything built custom hands the student's computer everything it knows, including
+           which answers are right. That is fine for practice. For anything that really
+           counts, use D2L's own quiz tool, which keeps the answers on its side.</p>
+      </div>
+    </div>
+
+    <div class="loud">
+      <div class="corner"></div>
+      <div class="in">
+        <div class="kicker">Why we are confident about this</div>
+        <h3>Everything here was measured</h3>
+        <p>None of the above comes from vendor documentation. Each was tested directly
+           against <strong>our own D2L</strong>, and several findings contradict the
+           documentation outright.</p>
+        <p>Where something has not been tested yet, the kit says so out loud instead of
+           pretending. That habit exists because this project began with a confident, wrong
+           belief, and nearly built everything on top of it.</p>
+      </div>
+    </div>
+
+    <div class="sec"><span class="tri"></span><h2>Before you start</h2><div class="rule"></div></div>
+
+    <div class="card">
+      <ul class="peaks">
+        <li><strong>Claude Code</strong>, or another agent that can read a folder and run commands.</li>
+        <li><strong>A course you can experiment in.</strong> Your own development shell is
+            fine. Do not build in a course students are currently taking.</li>
+        <li><strong>Nothing to request from IT.</strong> The emulator in Step 3 reproduces
+            our D2L's behaviour on your own computer, including the parts that fail
+            silently, so nearly all testing happens before D2L is involved at all.</li>
+        <li><strong>A TA, intern, or colleague</strong> for the final look. For anything
+            graded they need to be enrolled as a <em>student</em>, which is a course
+            enrolment rather than a new account.</li>
+        <li><strong>About an hour</strong> for your first activity. Much less after that.</li>
+      </ul>
+    </div>
+
+    <div class="next">
+      <div class="n">2</div>
+      <div>
+        <h3>Next: determine your path</h3>
+        <p>Eleven plain questions. It tells you which of the four approaches fits, what
+           that approach costs you, and whether you have accidentally asked for two things
+           at once.</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

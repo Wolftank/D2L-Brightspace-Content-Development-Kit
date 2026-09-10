@@ -1,0 +1,146 @@
+<!-- ===================================================================
+     RENAME ME  ·  D2L course homepage widget
+
+     HOW TO INSTALL
+       Course Admin -> Widgets -> Create Widget
+       Properties tab   name it
+       Content tab      click the source-code button </>  and paste ALL of this
+                        VERIFY THE SCRIPT IS STILL THERE IN THE SOURCE VIEW
+                        (the visual editor will look like it stripped it; it did not)
+       Release Conditions   attach one if this must be hidden from students
+
+     THEN PLACE IT
+       Course Admin -> Homepages -> Create Homepage (the active one is often
+       org-shared and not editable) -> Add Widgets -> yours -> set it Active.
+       That swaps the homepage for everyone in the course.
+
+     WHY THE CODE LOOKS LIKE THIS
+       A widget is NOT in an iframe. It renders directly in the LMS page and
+       shares the document with D2L's own chrome and every other widget. So:
+       every CSS selector is scoped to the root id, all JS is inside an IIFE,
+       and every element id carries a prefix. A bare "button { }" rule here
+       would restyle the entire homepage.
+     =================================================================== -->
+
+<div id="rmWidget">
+  <style>
+    /* Every selector is scoped to #rmWidget. Nothing here can escape. */
+    #rmWidget {
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      color: #1c2126;
+    }
+    #rmWidget .rm-greet { font-size: 15px; margin: 0 0 10px; }
+    #rmWidget .rm-greet b { font-weight: 700; }
+    #rmWidget .rm-rows { margin: 0; padding: 0; list-style: none; }
+    #rmWidget .rm-row {
+      display: flex; align-items: baseline; gap: 10px;
+      padding: 7px 0; border-bottom: 1px solid #eef2f5;
+    }
+    #rmWidget .rm-row:last-child { border-bottom: 0; }
+    #rmWidget .rm-row .rm-what { flex: 1; }
+    #rmWidget .rm-row .rm-when { font-size: 13px; color: #6d7883; white-space: nowrap; }
+    #rmWidget .rm-note { font-size: 13px; color: #6d7883; margin: 10px 0 0; }
+    #rmWidget .rm-role {
+      display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+      text-transform: uppercase; color: #1f4a86; background: #eef4fa;
+      padding: 3px 9px; border-radius: 10px; margin-left: 8px;
+    }
+  </style>
+
+  <p class="rm-greet">Welcome back, <b>{FirstName}</b>.</p>
+
+  <ul class="rm-rows" id="rmWidgetRows">
+    <li class="rm-row"><span class="rm-what">Loading&hellip;</span></li>
+  </ul>
+
+  <p class="rm-note" id="rmWidgetNote"></p>
+</div>
+
+<script>
+/* Everything is inside an IIFE. The homepage is shared global scope: a stray
+   top-level `var state` collides with the next widget that does the same. */
+(function () {
+  'use strict';
+
+  /* Replace strings are substituted SERVER-SIDE before this HTML is sent, so
+     they cost no network call and cannot fail. Prefer them over the API for
+     identity. Reach for the API only for data these cannot give you. */
+  var ORG_UNIT = '{OrgUnitId}';
+  var ROLE_ID  = '{RoleId}';          // 1015 = Instructor on this tenant
+
+  /* IMPORTANT: this is displayed as information, not used to hide anything.
+     {RoleId} is baked into HTML the viewer already has, so it tells the page
+     who is looking; it does not stop anyone reading the rest. If something
+     genuinely must not reach students, attach a RELEASE CONDITION to the
+     widget instead. That is enforced on the server and the widget does not
+     render at all. */
+  var ROLE_LABEL = (ROLE_ID === '1015') ? 'Instructor view' : '';
+
+  var rows = document.getElementById('rmWidgetRows');
+  var note = document.getElementById('rmWidgetNote');
+
+  function render(items) {
+    rows.textContent = '';
+    if (!items.length) {
+      var empty = document.createElement('li');
+      empty.className = 'rm-row';
+      empty.textContent = 'Nothing due right now.';
+      rows.appendChild(empty);
+      return;
+    }
+    items.slice(0, 4).forEach(function (item) {     // keep it SHORT
+      var li = document.createElement('li');
+      li.className = 'rm-row';
+      var what = document.createElement('span');
+      what.className = 'rm-what';
+      what.textContent = item.what;
+      var when = document.createElement('span');
+      when.className = 'rm-when';
+      when.textContent = item.when;
+      li.appendChild(what);
+      li.appendChild(when);
+      rows.appendChild(li);
+    });
+  }
+
+  /* A broken widget is on the homepage, so EVERYONE sees it. Fail to a short
+     honest line rather than an error, a stack trace, or an empty box. */
+  function degrade(message) {
+    rows.textContent = '';
+    var li = document.createElement('li');
+    li.className = 'rm-row';
+    li.textContent = message;
+    rows.appendChild(li);
+  }
+
+  function load() {
+    if (typeof fetch !== 'function') { degrade('Unavailable in this browser.'); return; }
+
+    fetch('/d2l/api/le/1.34/' + ORG_UNIT + '/dropbox/folders/',
+          { credentials: 'include', headers: { Accept: 'application/json' } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (folders) {
+        if (!folders) { degrade('Could not load right now.'); return; }
+        render(folders
+          .filter(function (f) { return f.DueDate; })
+          .map(function (f) {
+            return { what: f.Name, when: new Date(f.DueDate).toLocaleDateString() };
+          }));
+      })
+      .catch(function () { degrade('Could not load right now.'); });
+  }
+
+  if (ROLE_LABEL) {
+    var tag = document.createElement('span');
+    tag.className = 'rm-role';
+    tag.textContent = ROLE_LABEL;
+    document.querySelector('#rmWidget .rm-greet').appendChild(tag);
+  }
+
+  note.textContent = 'Showing the next few due dates.';
+  load();
+
+  /* Lets a deploy check confirm the widget truly initialised, not just rendered. */
+  window.RM_WIDGET_READY = true;
+})();
+</script>

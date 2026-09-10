@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Determine Your Path</title>
+<style>
+  #cdk {
+    --cardinal:#B11226; --deep:#7E0C1A; --ink:#161616; --cream:#FAF7F2;
+    --blush:#FBE9EC; --blush-b:#F3D3D9; --sand:#F1EBE1; --warm-b:#EADFD0;
+    --divider:#E0D6C8; --body:#4a463f; --muted:#8a847c; --faint:#a59f96;
+    --on-dark:#cfc9c1; --on-dark-muted:#9a948c; --pink:#E8A9B2;
+    --loud:'Archivo','Arial Black','Helvetica Neue',Impact,sans-serif;
+    --warm:'Epilogue','Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+    --text:'Public Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+    --mono:'SFMono-Regular',ui-monospace,Menlo,Consolas,monospace;
+    background:var(--sand); font-family:var(--text); color:var(--body);
+    padding-bottom:60px; -webkit-font-smoothing:antialiased;
+  }
+  #cdk *{box-sizing:border-box;}
+  #cdk .wrap{max-width:900px;margin:0 auto;padding:0 32px;}
+
+  #cdk .stephero{position:relative;overflow:hidden;background:var(--cardinal);
+    padding:34px 8%;display:flex;align-items:center;gap:26px;}
+  #cdk .stephero .corner{position:absolute;bottom:-40px;right:-20px;width:0;height:0;
+    border-bottom:190px solid rgba(0,0,0,.16);border-left:190px solid transparent;}
+  #cdk .stephero .num{position:relative;font-family:var(--loud);font-weight:900;
+    font-size:70px;line-height:.8;color:var(--cream);flex:none;}
+  #cdk .stephero .t{position:relative;flex:1;}
+  #cdk .stephero .kick{font-family:var(--loud);font-weight:800;font-size:12px;
+    letter-spacing:.2em;text-transform:uppercase;color:#F4C9CF;}
+  #cdk .stephero h1{font-family:var(--loud);font-weight:900;font-size:34px;line-height:1;
+    color:var(--cream);margin:8px 0 0;text-transform:uppercase;letter-spacing:-.01em;}
+  #cdk .stephero .arrow{position:relative;width:0;height:0;flex:none;
+    border-top:13px solid transparent;border-bottom:13px solid transparent;
+    border-left:22px solid var(--cream);}
+
+  #cdk .sec{display:flex;align-items:center;gap:14px;margin:44px 0 18px;}
+  #cdk .tri{width:0;height:0;border-left:11px solid transparent;
+    border-right:11px solid transparent;border-bottom:18px solid var(--cardinal);flex:none;}
+  #cdk .sec h2{font-family:var(--warm);font-weight:800;font-size:26px;color:var(--ink);margin:0;}
+  #cdk .sec .rule{flex:1;height:2px;background:var(--divider);}
+  #cdk .sec .note{font-size:13px;color:var(--muted);white-space:nowrap;}
+
+  #cdk .intro{background:#fff;border:1px solid var(--warm-b);border-radius:20px;
+    padding:24px 28px;box-shadow:0 1px 3px rgba(0,0,0,.05);margin-top:26px;}
+  #cdk .intro p{font-size:15.5px;line-height:1.6;margin:0 0 10px;}
+  #cdk .intro p:last-child{margin-bottom:0;}
+
+  #cdk .qlist{background:#fff;border:1px solid var(--warm-b);border-radius:20px;
+    padding:6px 28px;box-shadow:0 1px 3px rgba(0,0,0,.05);}
+  #cdk .grouphead{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--faint);padding:20px 0 4px;
+    border-bottom:1px solid #F4EFE7;margin-bottom:2px;}
+  #cdk .grouphead:first-child{padding-top:14px;}
+  #cdk .q{display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center;
+    padding:18px 0;border-bottom:1px solid #F4EFE7;}
+  #cdk .q:last-of-type{border-bottom:0;}
+  #cdk .q .t{display:flex;align-items:flex-start;gap:12px;font-size:15.5px;
+    line-height:1.5;max-width:56ch;color:var(--ink);}
+  #cdk .q .t::before{content:"";margin-top:7px;flex:none;width:0;height:0;
+    border-left:5px solid transparent;border-right:5px solid transparent;
+    border-bottom:8px solid var(--cardinal);}
+  #cdk .q .n{font-family:var(--mono);font-size:12px;color:var(--faint);margin-right:2px;}
+
+  #cdk .help{font:600 13px/1 var(--text);padding:9px 13px;border:1px solid var(--warm-b);
+    border-radius:20px;background:var(--sand);color:var(--muted);cursor:pointer;white-space:nowrap;}
+  #cdk .help:hover{background:var(--blush);border-color:var(--blush-b);color:var(--cardinal);}
+  #cdk .help:focus-visible{outline:3px solid var(--cardinal);outline-offset:2px;}
+
+  #cdk .toggle{display:flex;border:1px solid var(--warm-b);border-radius:24px;overflow:hidden;}
+  #cdk .toggle button{font:700 14px/1 var(--text);padding:10px 19px;border:0;
+    background:#fff;color:var(--muted);cursor:pointer;min-width:64px;}
+  #cdk .toggle button + button{border-left:1px solid var(--warm-b);}
+  #cdk .toggle button:hover{background:var(--sand);}
+  #cdk .toggle button[aria-pressed="true"]{background:var(--cardinal);color:#fff;}
+  #cdk .toggle button:focus-visible{outline:3px solid var(--ink);outline-offset:-3px;}
+
+  #cdk .panel{background:var(--sand);border:1px solid var(--divider);
+    border-left:4px solid var(--cardinal);border-radius:0 14px 14px 0;
+    padding:20px 24px;margin:0 0 18px;}
+  #cdk .panel[hidden]{display:none;}
+  #cdk .panel > p:first-child{margin-top:0;}
+  #cdk .panel p{margin:0 0 14px;font-size:15px;line-height:1.6;max-width:62ch;}
+  #cdk .panel h3{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--faint);margin:18px 0 8px;font-weight:400;}
+  #cdk .eg{border-left:2px solid var(--blush-b);padding:2px 0 2px 14px;margin-bottom:12px;}
+  #cdk .eg .who{font-family:var(--warm);font-size:13px;font-weight:700;
+    color:var(--cardinal);display:block;margin-bottom:2px;}
+  #cdk .eg .what{font-size:14.5px;line-height:1.55;}
+  #cdk .yn{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:4px;}
+  @media (max-width:620px){#cdk .yn{grid-template-columns:1fr;}}
+  #cdk .yn div{font-size:14.5px;line-height:1.55;}
+  #cdk .yn .lab{font-family:var(--warm);font-weight:700;font-size:13px;
+    display:block;margin-bottom:3px;color:var(--ink);}
+
+  #cdk .actions{margin-top:20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
+  #cdk .actions button{font:600 14px/1 var(--text);padding:11px 18px;
+    border:1px solid var(--warm-b);border-radius:24px;background:#fff;
+    color:var(--body);cursor:pointer;}
+  #cdk .actions button:hover{background:var(--blush);border-color:var(--blush-b);}
+  #cdk .progress{color:var(--muted);font-size:13.5px;}
+
+  #cdk .result{margin-top:26px;border-radius:20px;overflow:hidden;
+    border:1px solid var(--warm-b);background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.05);}
+  #cdk .result .bar{padding:22px 28px;border-bottom:1px solid var(--warm-b);background:#fff;}
+  #cdk .result .bar .kick{font-size:12px;font-weight:700;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--cardinal);display:block;margin-bottom:6px;}
+  #cdk .result .bar h2{margin:0;font-family:var(--warm);font-weight:700;
+    font-size:25px;color:var(--ink);line-height:1.15;}
+  #cdk .result .body{padding:24px 28px 26px;}
+
+  #cdk .result.is-idle{border-style:dashed;}
+  #cdk .result.is-idle .bar{background:var(--sand);}
+  #cdk .result.is-idle .bar .kick{color:var(--muted);}
+
+  #cdk .result.is-advice{border-color:var(--ink);}
+  #cdk .result.is-advice .bar{position:relative;overflow:hidden;
+    background:var(--ink);border-bottom-color:var(--ink);}
+  #cdk .result.is-advice .bar::after{content:"";position:absolute;bottom:0;right:0;
+    width:0;height:0;border-bottom:120px solid var(--cardinal);
+    border-left:120px solid transparent;opacity:.9;}
+  #cdk .result.is-advice .bar .kick{color:var(--pink);position:relative;z-index:2;}
+  #cdk .result.is-advice .bar h2{font-family:var(--loud);font-weight:900;
+    text-transform:uppercase;letter-spacing:-.01em;font-size:29px;
+    color:var(--cream);position:relative;z-index:2;max-width:78%;}
+
+  #cdk .result.is-conflict{border-color:var(--blush-b);}
+  #cdk .result.is-conflict .bar{background:var(--blush);border-bottom-color:var(--blush-b);}
+
+  #cdk .lead{margin:0 0 18px;font-size:15.5px;line-height:1.6;max-width:70ch;}
+  #cdk .cols{display:grid;grid-template-columns:1fr 1fr;gap:24px;}
+  @media (max-width:720px){#cdk .cols{grid-template-columns:1fr;}}
+  #cdk .cols h3{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--faint);margin:0 0 9px;font-weight:400;}
+  #cdk .cols ul{list-style:none;margin:0;padding:0;}
+  #cdk .cols li{display:flex;align-items:flex-start;gap:11px;margin-bottom:9px;
+    font-size:14.5px;line-height:1.5;}
+  #cdk .cols li::before{content:"";margin-top:6px;flex:none;width:0;height:0;
+    border-left:4px solid transparent;border-right:4px solid transparent;
+    border-bottom:7px solid var(--divider);}
+  #cdk .cols .cost li::before{border-bottom-color:var(--cardinal);}
+
+  #cdk .next,#cdk .caveat{margin-top:20px;padding-top:16px;border-top:1px solid #F4EFE7;
+    font-size:14.5px;line-height:1.55;max-width:72ch;}
+  #cdk .next strong,#cdk .caveat strong{display:block;margin-bottom:5px;
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--faint);font-weight:400;}
+  #cdk .caveat{color:#7a4148;}
+  #cdk .caveat strong{color:var(--cardinal);}
+
+  #cdk .override{margin-top:20px;padding-top:16px;border-top:1px solid #F4EFE7;}
+  #cdk .override p{margin:0 0 12px;font-size:14.5px;line-height:1.55;max-width:70ch;}
+  #cdk .override button{font:700 14px/1 var(--text);padding:12px 20px;
+    border:1px solid var(--cardinal);border-radius:24px;background:#fff;
+    color:var(--cardinal);cursor:pointer;}
+  #cdk .override button:hover{background:var(--cardinal);color:#fff;}
+</style>
+</head>
+<body>
+<div id="cdk">
+
+  <div class="stephero">
+    <div class="corner"></div>
+    <div class="num">02</div>
+    <div class="t">
+      <div class="kick">Step Two</div>
+      <h1>Determine Your Path</h1>
+    </div>
+    <span class="arrow"></span>
+  </div>
+
+  <div class="wrap">
+
+    <div class="intro">
+      <p>Eleven questions about what you want to build. This tells you which of the four
+         approaches fits, and just as importantly, <strong>what that approach will cost
+         you</strong>.</p>
+      <p>They come in three groups: <strong>what it is</strong>, <strong>where it
+         belongs</strong>, and <strong>what it has to do</strong>. The middle group is the
+         one people skip, and it is the one that causes the most rework.</p>
+      <p>Not sure what a question is asking? Every one has a <strong>What does this
+         mean?</strong> button with worked examples from two very different disciplines.
+         Everything here comes from testing against our own D2L, not vendor documentation.</p>
+    </div>
+
+    <div class="sec"><span class="tri"></span><h2>The questions</h2><div class="rule"></div>
+      <span class="note">answer what you can</span></div>
+
+    <div class="qlist" id="chQuestions"></div>
+
+    <div class="actions">
+      <button type="button" id="chReset">Start over</button>
+      <span class="progress" id="chProgress"></span>
+    </div>
+
+    <div class="result is-idle" id="chResult" role="status" aria-live="polite">
+      <div class="bar">
+        <span class="kick">Recommendation</span>
+        <h2 id="chTitle">Answer the questions above</h2>
+      </div>
+      <div class="body">
+        <p class="lead" id="chLead">The recommendation updates as you answer. You do not have
+           to answer all eleven; it will tell you as soon as it can.</p>
+        <div id="chDetail"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* Storage is shared with the entire LMS and it throws rather than returning
+     null, so: namespace every key, and wrap every access. The v2 suffix retires
+     answers saved against the old eight-question set. */
+  var NS = 'scsu:activitychooser:v2:';
+  function lsGet(key, fallback) {
+    try {
+      var v = localStorage.getItem(NS + key);
+      return v === null ? fallback : JSON.parse(v);
+    } catch (e) { return fallback; }
+  }
+  function lsSet(key, val) {
+    try { localStorage.setItem(NS + key, JSON.stringify(val)); } catch (e) { /* fine */ }
+  }
+
+  /* --------------------------------------------------------- content */
+
+  /* Ids are semantic, not positional, so the routing below reads as prose and
+     the display order can change without renumbering anything. */
+  var QUESTIONS = [
+    {
+      id: 'quiz',
+      group: 'First, what is it really',
+      t: 'Is what you are describing basically a quiz, a survey, or a discussion?',
+      help: {
+        plain: 'We are asking what the activity <em>is</em> underneath, not whether you like ' +
+               'how D2L\'s version of it looks. Strip away how you picture it on screen. If what ' +
+               'is left is questions with answers, a poll, or a threaded conversation, then it is ' +
+               'one of these.',
+        egs: [
+          ['In studio art', 'Showing twenty slides and asking students to identify period and medium, ' +
+            'then recording a score. That is a quiz, even if you picture it looking like a gallery wall.'],
+          ['In computer science', 'Ten questions on Big-O notation, marked automatically. That is a ' +
+            'quiz, even if you picture it inside a code editor.']
+        ],
+        yes: 'Underneath, it is questions and answers, a poll, or a conversation.',
+        no: 'The interaction itself is the point. Dragging labels onto a diagram, exploring a ' +
+            'simulation, stepping through a process, building something.'
+      }
+    },
+    {
+      id: 'highStakes',
+      t: 'Does this count toward a grade in a way where it would matter if a student could read the answer key?',
+      help: {
+        plain: 'Anything we build custom runs on the student\'s own computer. Everything it knows ' +
+               'travels there too, including which answers are correct. A student who knows how to ' +
+               'look can read it. There is no way around this in a custom build.',
+        egs: [
+          ['In studio art', 'A weekly reading check worth two points, where the real purpose is that ' +
+            'they did the reading. A student who cheats it mostly cheats themselves. Probably fine.'],
+          ['In computer science', 'A midterm worth twenty percent. A student reading the key is a ' +
+            'serious problem, and you would have to defend the grade if challenged.']
+        ],
+        yes: 'A student getting full marks without knowing the material would be a real problem.',
+        no: 'It is practice or formative, or worth little enough that you would rather have the ' +
+            'better activity than the tighter security.'
+      }
+    },
+
+    {
+      id: 'ambient',
+      group: 'Then, where does it belong',
+      t: 'Does a student have to decide to look at it, or should it just be there?',
+      help: {
+        plain: 'This is the difference between something a student <em>goes to</em> and something ' +
+               'that is simply present. A page has to be found, which means the student already ' +
+               'knew they needed it. A panel on the course homepage does not.',
+        egs: [
+          ['In studio art', 'A note of whose critique is up this week. Nobody would think to go ' +
+            'looking for it, but seeing it in passing changes what they prepare.'],
+          ['In computer science', 'A notice that the lab machines have a new compiler version. ' +
+            'Useful to everyone, and nobody would ever navigate to a page called Toolchain Notices.']
+        ],
+        yes: 'It should be in front of them. Its value depends on reaching people who would not ' +
+             'go looking, which is usually the people who most need it.',
+        no: 'Students will come to it, because they know they need it or because you sent them.'
+      }
+    },
+    {
+      id: 'finished',
+      t: 'Is there a point at which a student is finished with it?',
+      help: {
+        plain: 'Ask whether there is a moment where a student is done and would not come back. ' +
+               'Anything with a finish line needs a beginning, an end, and somewhere to record ' +
+               'that it happened. Ambient things have none of those.',
+        egs: [
+          ['In studio art', 'A colour-relationship worksheet has an end. You complete it and move on.'],
+          ['In computer science', 'A panel showing your current standing has no end. You glance at ' +
+            'it all term and it is never finished.']
+        ],
+        yes: 'There is a point where a student completes it and is done.',
+        no: 'It is a standing thing they look at repeatedly, or information that is simply true.'
+      }
+    },
+
+    {
+      id: 'autoGrade',
+      group: 'Finally, what must it do',
+      t: 'Does a score need to reach the gradebook on its own, without you entering it?',
+      help: {
+        plain: 'Some activities can push a number into your D2L gradebook by themselves. Others ' +
+               'produce something you look at and grade yourself. This asks which you want.',
+        egs: [
+          ['In studio art', 'A colour-relationship drill that checks the student\'s choices and ' +
+            'records 8 out of 10 without you doing anything.'],
+          ['In computer science', 'A pointer-arithmetic exercise that marks itself and records the score.']
+        ],
+        yes: 'You want the number to appear in the gradebook without you touching it.',
+        no: 'You will be looking at the work anyway, so typing a number is no extra burden. Or it ' +
+            'is not graded at all.'
+      }
+    },
+    {
+      id: 'crossDevice',
+      t: 'Does it need to remember where a student left off, even on a different computer?',
+      help: {
+        plain: 'This is about whether progress has to follow the person, or whether starting over ' +
+               'is acceptable. Following the person is harder and rules some options out.',
+        egs: [
+          ['In studio art', 'A long visual analysis worksheet started on a lab machine during class ' +
+            'and finished at home that evening.'],
+          ['In computer science', 'A multi-stage exercise students work through across a week.']
+        ],
+        yes: 'A student losing their place because they switched machines would be a real problem.',
+        no: 'It is short enough to do in one sitting, or starting fresh is genuinely fine.'
+      }
+    },
+    {
+      id: 'roleAware',
+      t: 'Does it need to show different things to students than it shows you or a TA?',
+      help: {
+        plain: 'This asks whether one thing has to behave differently depending on who opened it. ' +
+               'Note this is about <em>different content</em>. If the instructor material must be ' +
+               'genuinely impossible for a student to reach, that is the next question, and it has ' +
+               'a different answer.',
+        egs: [
+          ['In studio art', 'Students see the critique prompt; you see the same thing with your ' +
+            'marking notes attached.'],
+          ['In computer science', 'Students see the exercise; TAs additionally see the three ' +
+            'mistakes people usually make.']
+        ],
+        yes: 'One thing, different content depending on who is looking.',
+        no: 'Everyone sees the same thing, or a separate instructor page is fine.'
+      }
+    },
+    {
+      id: 'mustHide',
+      t: 'Must a student be genuinely unable to see part of it, even if they go looking?',
+      help: {
+        plain: 'This is stronger than the last question. Not "students would not bother reading ' +
+               'it", but "a student must not be able to reach this even by looking at the page ' +
+               'source". Only one option can actually guarantee that, because D2L enforces it on ' +
+               'the server rather than in code the student can read.',
+        egs: [
+          ['In studio art', 'Your grading notes and exemplar responses, kept in the course beside ' +
+            'the assignment rather than in a separate document on your laptop.'],
+          ['In computer science', 'The reference solution and the marking scheme, visible to you ' +
+            'and your TAs and to nobody else, sitting right where you teach from.']
+        ],
+        yes: 'A student finding this would be a real problem.',
+        no: 'It is merely tidier if students do not see it, or it would not matter much.'
+      }
+    },
+    {
+      id: 'learnerData',
+      t: 'Does it need the student name, or real data from this course?',
+      help: {
+        plain: 'This asks whether it needs to know <em>who</em> is using it, or needs to pull ' +
+               'anything live out of D2L, such as grades, due dates, or submissions.',
+        egs: [
+          ['In studio art', '"Welcome back, Priya. You have looked at 4 of the 12 works so far."'],
+          ['In computer science', 'Showing a student their own current grade so they can see what ' +
+            'a resubmission would do.']
+        ],
+        yes: 'It needs the person\'s identity or live course data to work.',
+        no: 'It behaves identically for anybody who opens it.'
+      }
+    },
+    {
+      id: 'revisedOften',
+      t: 'Do you expect to revise it often once it is live?',
+      help: {
+        plain: 'How often you expect to change it <em>after</em> students have started using it. ' +
+               'Some approaches make edits nearly free; others make every change a small production.',
+        egs: [
+          ['In studio art', 'Adding images and prompts as the term unfolds, reacting to what the ' +
+            'class is struggling with.'],
+          ['In computer science', 'Fixing wording, adding test cases, adjusting difficulty after ' +
+            'seeing the first submissions.']
+        ],
+        yes: 'You expect to change it repeatedly during the term.',
+        no: 'You will build it, check it, and mostly leave it alone.'
+      }
+    },
+    {
+      id: 'needsDeps',
+      t: 'Does it need a charting library, a database, or anything fetched from the internet while it runs?',
+      help: {
+        plain: 'This asks whether it can be one self-contained file, or whether it has to reach out ' +
+               'to something else while a student is using it. Campus network policy can block ' +
+               'outside requests, so anything that depends on them can fail for some students.',
+        egs: [
+          ['In studio art', 'A deep-zoom viewer for very high resolution images, using an ' +
+            'off-the-shelf library rather than writing one.'],
+          ['In computer science', 'A plotting library for rendering graphs, or a live data feed the ' +
+            'activity queries as it runs.']
+        ],
+        yes: 'It depends on something it has to fetch while running.',
+        no: 'Everything it needs can ship inside the file itself.'
+      }
+    }
+  ];
+
+  var answers = lsGet('answers', {});
+  var overrides = lsGet('overrides', {});
+
+  var OUT = {
+    idle: {
+      cls: 'is-idle', kicker: 'Recommendation', title: 'Answer the questions above',
+      lead: 'The recommendation updates as you answer. You do not have to answer all eleven; ' +
+            'it will tell you as soon as it can.'
+    },
+
+    native: {
+      cls: 'is-advice', kicker: 'Worth considering first', title: 'D2L already has a tool for this',
+      lead: 'Quizzes, Surveys and Discussions do this without anyone building anything, and they ' +
+            'handle grading, accommodations and accessibility for you. That is worth a look before ' +
+            'committing to a custom build.',
+      get: ['Grading, attempts and question banks with no code',
+            'Accessibility and accommodations handled for you',
+            'Works with release conditions and the gradebook',
+            'Nothing to maintain when D2L updates'],
+      cost: ['You are limited to the interactions those tools support',
+             'It will look like every other D2L quiz, in a course where that may matter'],
+      overrideKey: 'native',
+      overrideWhy: 'There are good reasons to build something bespoke anyway. Wanting an activity ' +
+                   'that is genuinely engaging, that matches the visual language of your course, or ' +
+                   'that behaves in a way the built-in tool simply cannot, are all legitimate. ' +
+                   'You know your students.',
+      overrideLabel: 'I have a reason to build this custom'
+    },
+
+    highstakes: {
+      cls: 'is-advice', kicker: 'Please read this one', title: 'The answer key will be readable',
+      lead: 'Anything we build custom runs in the student browser, so the answer key travels to the ' +
+            'student and can be read by anyone who knows how to look. There is no way to prevent ' +
+            'this in a custom build. Only D2L Quizzes keeps the key on the server.',
+      get: ['With Quizzes, the answer key never reaches the student',
+            'Question pools, timing and attempt limits',
+            'A defensible record if a grade is challenged'],
+      cost: ['Less freedom in how the activity looks and behaves'],
+      overrideKey: 'highstakes',
+      overrideWhy: 'This is your call as the instructor of record. If the pedagogical value of the ' +
+                   'custom activity outweighs the risk, or you can structure the work so that ' +
+                   'reading the key does not actually get a student the marks, then proceed. Just ' +
+                   'proceed knowing it, rather than finding out later.',
+      overrideLabel: 'I understand the risk, continue'
+    },
+
+    widget: {
+      cls: '', kicker: 'Your path', title: 'A homepage widget',
+      lead: 'A panel on the course homepage. Students see it without navigating anywhere, because ' +
+            'it is not somewhere they go; it is simply part of the space. It is also the only ' +
+            'option that can hide something from students in a way D2L enforces rather than your ' +
+            'code pretending to.',
+      get: ['Seen without anyone deciding to look, which reaches the people who would not go looking',
+            'Can be made genuinely invisible to students, enforced by D2L on the server',
+            'Knows who is looking and what role they hold, with no extra work',
+            'Not boxed inside a frame, so it behaves like an ordinary web page'],
+      cost: ['No grade. A widget writes nothing to the gradebook.',
+             'It takes a permanent share of everyone\'s homepage. If several people each add a ' +
+             'few, the homepage becomes noise and every widget loses, including yours.',
+             'Placing it usually means creating your own homepage and making it active, which ' +
+             'changes the homepage for everyone in the course.',
+             'It shares the page with D2L and every other widget, so its styling and code have to ' +
+             'be written carefully. The kit\'s checker enforces that for you.'],
+      next: 'Ask honestly whether it earns a permanent place on the homepage. If it only matters ' +
+            'for two weeks, it probably wants to be a page instead.'
+    },
+
+    scorm: {
+      cls: '', kicker: 'Your path', title: 'A SCORM package',
+      lead: 'A self-contained bundle you upload to the course. It is the only option that can put ' +
+            'a score in the gradebook by itself and remember a student across devices.',
+      get: ['Writes a score straight to the gradebook',
+            'Attempt limits and best-of-three are a setting, not code',
+            'Saved progress follows the student to any computer they log in from',
+            'Portable to another LMS later'],
+      cost: ['You will not be able to test it yourself. Your own view is a preview that silently ' +
+             'discards everything it writes, and reports no error while doing so. The emulator ' +
+             'reproduces this locally; a human check needs someone enrolled as a student.',
+             'It cannot tell a student from a TA. There is no workaround.',
+             'It can save roughly 4000 characters of progress, which is not much.',
+             'If it marks itself complete too early, the student can never improve their score.',
+             'Updating means republishing, which changes it everywhere it is used at once.'],
+      next: 'Build it against the emulator first, which enforces all of the above locally and is ' +
+            'the only place you can watch these failures happen. Line up a TA or colleague ' +
+            'enrolled as a student for the one live check at the end.'
+    },
+
+    topic: {
+      cls: '', kicker: 'Your path', title: 'An HTML page uploaded into the course',
+      lead: 'A file that lives in your course and displays as a topic, in among the rest of your ' +
+            'material. Students go to it. Because it runs inside D2L, it can tell who is looking ' +
+            'at it and what their role is.',
+      get: ['Sits in the content sequence, where the rest of your material lives',
+            'Knows who the student is, and whether they are a student, TA or instructor',
+            'Can read course data that person is already allowed to see',
+            'Has room to be as large as it needs to be'],
+      cost: ['No automatic grade. You enter it, or pair this with something else.',
+             'Role differences here are cosmetic. The instructor content still reaches the ' +
+             'student\'s browser, so never put anything sensitive behind them.',
+             'Anything it remembers is stored in that one browser. A student on a different ' +
+             'computer starts fresh, and two students sharing a lab machine share it.',
+             'Once it is live, never rename it and never open it in D2L\'s HTML editor. Both ' +
+             'silently break it.'],
+      next: 'Decide the file name before it goes up, because renaming later is what breaks it. ' +
+            'Name the file exactly what you want students to see.'
+    },
+
+    external: {
+      cls: '', kicker: 'Your path', title: 'A page you host yourself, linked from the course',
+      lead: 'Built and hosted wherever you like, with D2L simply linking to it. By far the easiest ' +
+            'to build and to change.',
+      get: ['Change it any time without touching D2L',
+            'Use any library, framework or backend you want',
+            'Keep it in version control',
+            'Reuse it in any course, or any other LMS'],
+      cost: ['It has no idea who the student is. None.',
+             'No grade, no progress tracking, no course data.',
+             'Students leave the course to use it, and some will not come back.',
+             'If your hosting goes away, so does the activity.'],
+      next: 'Fine for reference material, calculators, simulations and demos. Not fine for ' +
+            'anything that has to know who is using it.'
+    },
+
+    contradiction: {
+      cls: 'is-conflict', kicker: 'Those two answers disagree', title: 'It cannot be both',
+      lead: 'You said it should simply be there without anyone going to look, and also that there ' +
+            'is a point where a student is finished with it. Those pull in opposite directions. ' +
+            'Something that can be finished needs a beginning, an end, and somewhere to record ' +
+            'that it happened. A homepage panel has none of those and would sit there afterwards ' +
+            'looking permanently undone.',
+      get: ['If the finishing matters: a page, or a graded activity',
+            'If being noticed matters more: drop the completion, and use a widget',
+            'If both genuinely matter: two pieces, a widget that points at an activity'],
+      cost: ['Only you can say which of the two is the actual requirement'],
+      next: 'The useful question is what happens the day after a student finishes. If the thing ' +
+            'should disappear from their attention, it was a destination all along.'
+    },
+
+    conflictWidgetGrade: {
+      cls: 'is-conflict', kicker: 'These cannot be one thing', title: 'You need two pieces, not one',
+      lead: 'You have asked for something that is simply present on the homepage AND something ' +
+            'that puts a score in the gradebook. A widget writes nothing to the gradebook, and a ' +
+            'graded activity does not live on the homepage.',
+      get: ['A SCORM package for the graded part',
+            'A widget that points at it, so students actually notice it exists',
+            'This pairing is common and works well'],
+      cost: ['Two things to build and keep in step',
+             'The widget cannot show the score unless it fetches it separately'],
+      next: 'This is usually the right shape rather than a compromise. The activity does the work; ' +
+            'the widget solves the problem that nobody knew the activity was there.'
+    },
+
+    conflict: {
+      cls: 'is-conflict', kicker: 'These cannot be one thing', title: 'You need two pieces, not one',
+      lead: 'You have asked for a score that reaches the gradebook AND behaviour that depends on ' +
+            'who is looking. On our tenant those cannot be the same object. A SCORM package is ' +
+            'served from a different web address than D2L itself, which seals it off from ' +
+            'everything D2L knows, including roles. We tested this directly.',
+      get: ['A SCORM package for the graded part',
+            'A separate page or widget for the role-aware part',
+            'They can look identical to the student'],
+      cost: ['Two things to build and keep in step',
+             'They cannot pass information to each other directly'],
+      next: 'Worth asking whether both halves are really necessary. Often the role-aware part is ' +
+            'a convenience for you rather than a requirement, and dropping it makes this simple.'
+    }
+  };
+
+  /* -------------------------------------------------------- routing */
+
+  function decide(a, ov) {
+    ov = ov || {};
+    var yes = function (k) { return a[k] === true; };
+    var answered = function (k) { return typeof a[k] === 'boolean'; };
+
+    // Advice, not gates. Overridable, and the override is carried forward.
+    if (yes('quiz') && !ov.native) return OUT.native;
+    if (yes('highStakes') && !ov.highstakes) return OUT.highstakes;
+
+    var ambient    = yes('ambient');
+    var finished   = yes('finished');
+    var needsGrade = yes('autoGrade') || yes('crossDevice');
+    var mustHide   = yes('mustHide');
+    var needsRole  = yes('roleAware') || yes('learnerData');
+
+    // Ambient and finishable are contradictory. Say so rather than guessing.
+    if (ambient && finished) return OUT.contradiction;
+
+    // Two separate reasons to want a widget: reaching people who would not
+    // look, and hiding things from students entirely.
+    var wantsWidget = ambient || mustHide;
+
+    if (wantsWidget && needsGrade) return OUT.conflictWidgetGrade;
+    if (wantsWidget) return OUT.widget;
+
+    if (needsGrade && needsRole) return OUT.conflict;
+    if (needsGrade) return OUT.scorm;
+    if (needsRole) return OUT.topic;
+
+    var deciders = ['quiz', 'highStakes', 'ambient', 'finished',
+                    'autoGrade', 'crossDevice', 'roleAware', 'mustHide', 'learnerData'];
+    if (!deciders.every(answered)) return OUT.idle;
+
+    if (yes('revisedOften') || yes('needsDeps')) return OUT.external;
+    if (answered('revisedOften') && answered('needsDeps')) return OUT.topic;
+    return OUT.idle;
+  }
+
+  function caveatsFor(a, ov) {
+    var out = [];
+    if (a.quiz === true && ov.native) {
+      out.push('You are building custom for something D2L has a tool for. Worth a sentence in your ' +
+               'notes about why, for whoever inherits this course.');
+    }
+    if (a.highStakes === true && ov.highstakes) {
+      out.push('This counts toward a grade and the answer key will be readable by a determined ' +
+               'student. Consider whether the task can be structured so that reading the key still ' +
+               'does not get them the marks.');
+    }
+    // An ambient panel built on live course data is usually a progress or
+    // risk display. Name what the number actually measures before it ships.
+    var widgetish = (a.ambient === true || a.mustHide === true) &&
+                    !(a.autoGrade === true || a.crossDevice === true);
+    if (widgetish && a.learnerData === true) {
+      out.push('If this shows a student how they are doing, be careful what it measures. Logins ' +
+               'and submission times measure compliance, not understanding: a student who reads on ' +
+               'paper and submits on time looks disengaged, and one who logs in daily and ' +
+               'understands nothing looks fine. Label it honestly, and never show a student their ' +
+               'standing relative to classmates.');
+    }
+    return out;
+  }
+
+  /* ------------------------------------------------ explainer panel */
+
+  var openId = null;
+
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined) n.textContent = text;
+    return n;
+  }
+
+  function buildPanel(q) {
+    var panel = el('div', 'panel');
+    panel.hidden = true;
+
+    var plain = el('p');
+    plain.innerHTML = q.help.plain;   // trusted, authored in this file
+    panel.appendChild(plain);
+
+    panel.appendChild(el('h3', null, 'For example'));
+    q.help.egs.forEach(function (eg) {
+      var d = el('div', 'eg');
+      d.appendChild(el('span', 'who', eg[0]));
+      d.appendChild(el('span', 'what', eg[1]));
+      panel.appendChild(d);
+    });
+
+    panel.appendChild(el('h3', null, 'So which is it'));
+    var yn = el('div', 'yn');
+    var y = el('div', 'yes');
+    y.appendChild(el('span', 'lab', 'Answer Yes if'));
+    y.appendChild(document.createTextNode(q.help.yes));
+    var n = el('div', 'no');
+    n.appendChild(el('span', 'lab', 'Answer No if'));
+    n.appendChild(document.createTextNode(q.help.no));
+    yn.appendChild(y); yn.appendChild(n);
+    panel.appendChild(yn);
+
+    return panel;
+  }
+
+  function applyPanelState() {
+    QUESTIONS.forEach(function (q) {
+      var panel = document.getElementById('chPanel-' + q.id);
+      var trigger = document.getElementById('chHelp-' + q.id);
+      if (!panel || !trigger) return;
+      var on = (openId === q.id);
+      panel.hidden = !on;
+      trigger.setAttribute('aria-expanded', String(on));
+      trigger.textContent = on ? 'Hide explanation' : 'What does this mean?';
+    });
+  }
+
+  function togglePanel(id) {
+    openId = (openId === id) ? null : id;
+    applyPanelState();
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape' || !openId) return;
+    var trigger = document.getElementById('chHelp-' + openId);
+    openId = null;
+    applyPanelState();
+    if (trigger) trigger.focus();
+  });
+
+  /* --------------------------------------------------------- render */
+
+  function renderQuestions() {
+    var host = document.getElementById('chQuestions');
+    host.textContent = '';
+    QUESTIONS.forEach(function (q, i) {
+      if (q.group) host.appendChild(el('div', 'grouphead', q.group));
+
+      var row = el('div', 'q');
+
+      var t = el('div', 't');
+      var inner = el('span');
+      inner.appendChild(el('span', 'n', (i + 1) + '.'));
+      inner.appendChild(document.createTextNode(' ' + q.t));
+      t.appendChild(inner);
+      row.appendChild(t);
+
+      var panel = buildPanel(q);
+      panel.id = 'chPanel-' + q.id;
+
+      var help = el('button', 'help', 'What does this mean?');
+      help.type = 'button';
+      help.id = 'chHelp-' + q.id;
+      help.setAttribute('aria-expanded', 'false');
+      help.setAttribute('aria-controls', panel.id);
+      help.setAttribute('aria-label', 'What does question ' + (i + 1) + ' mean?');
+      help.addEventListener('click', function () { togglePanel(q.id); });
+      row.appendChild(help);
+
+      var group = el('div', 'toggle');
+      group.setAttribute('role', 'group');
+      group.setAttribute('aria-label', q.t);
+      [['Yes', true], ['No', false]].forEach(function (pair) {
+        var b = el('button', null, pair[0]);
+        b.type = 'button';
+        b.setAttribute('aria-pressed', String(answers[q.id] === pair[1]));
+        b.addEventListener('click', function () {
+          if (answers[q.id] === pair[1]) { delete answers[q.id]; }
+          else { answers[q.id] = pair[1]; }
+          if (q.id === 'quiz' && answers.quiz !== true) { delete overrides.native; }
+          if (q.id === 'highStakes' && answers.highStakes !== true) { delete overrides.highstakes; }
+          lsSet('answers', answers);
+          lsSet('overrides', overrides);
+          renderQuestions();
+          renderResult();
+        });
+        group.appendChild(b);
+      });
+      row.appendChild(group);
+
+      host.appendChild(row);
+      host.appendChild(panel);
+    });
+
+    applyPanelState();
+
+    var count = QUESTIONS.filter(function (q) { return typeof answers[q.id] === 'boolean'; }).length;
+    document.getElementById('chProgress').textContent =
+      count === 0 ? '' : count + ' of ' + QUESTIONS.length + ' answered';
+  }
+
+  function list(title, items, cls) {
+    var wrap = el('div');
+    wrap.appendChild(el('h3', null, title));
+    var ul = el('ul', cls);
+    items.forEach(function (i) { ul.appendChild(el('li', null, i)); });
+    wrap.appendChild(ul);
+    return wrap;
+  }
+
+  function renderResult() {
+    var o = decide(answers, overrides);
+    var box = document.getElementById('chResult');
+    box.className = 'result ' + (o.cls || '');
+    box.querySelector('.kick').textContent = o.kicker;
+    document.getElementById('chTitle').textContent = o.title;
+    document.getElementById('chLead').textContent = o.lead;
+
+    var detail = document.getElementById('chDetail');
+    detail.textContent = '';
+    if (!o.get) return;
+
+    var cols = el('div', 'cols');
+    cols.appendChild(list('What you get', o.get));
+    cols.appendChild(list('What it costs', o.cost, 'cost'));
+    detail.appendChild(cols);
+
+    if (o.next) {
+      var next = el('div', 'next');
+      next.appendChild(el('strong', null, 'Next step'));
+      next.appendChild(document.createTextNode(o.next));
+      detail.appendChild(next);
+    }
+
+    caveatsFor(answers, overrides).forEach(function (c) {
+      var cv = el('div', 'caveat');
+      cv.appendChild(el('strong', null, 'Carry this forward'));
+      cv.appendChild(document.createTextNode(c));
+      detail.appendChild(cv);
+    });
+
+    if (o.overrideKey) {
+      var ov = el('div', 'override');
+      ov.appendChild(el('p', null, o.overrideWhy));
+      var b = el('button', null, o.overrideLabel);
+      b.type = 'button';
+      b.addEventListener('click', function () {
+        overrides[o.overrideKey] = true;
+        lsSet('overrides', overrides);
+        renderResult();
+      });
+      ov.appendChild(b);
+      detail.appendChild(ov);
+    }
+  }
+
+  document.getElementById('chReset').addEventListener('click', function () {
+    answers = {};
+    overrides = {};
+    lsSet('answers', answers);
+    lsSet('overrides', overrides);
+    renderQuestions();
+    renderResult();
+  });
+
+  renderQuestions();
+  renderResult();
+
+  window.SCSU_CHOOSER_READY = true;
+})();
+</script>
+
+</body>
+</html>

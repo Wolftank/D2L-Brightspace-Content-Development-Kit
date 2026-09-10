@@ -1,0 +1,43 @@
+<!-- Deliberately broken homepage widget. Every rule in the widget set should
+     fire. Do not "fix" this file; the lint test asserts against its defects. -->
+
+<link rel="stylesheet" href="https://cdn.example.com/theme.css">   <!-- shared/external-cdn -->
+
+<div id="data">                                     <!-- widget/unnamespaced-id -->
+  <style>
+    /* widget/unscoped-css : a widget is NOT iframed, so these escape and
+       restyle D2L's chrome and every other widget on the homepage. */
+    button { background: #c00; color: #fff; }
+    .panel h2 { font-size: 40px; }
+    * { letter-spacing: .04em; }
+
+    #data { height: 900px; }                        /* widget/keep-it-short */
+  </style>
+
+  <div id="header">Standings</div>                  <!-- widget/unnamespaced-id -->
+  <img src="img/trophy.png">                        <!-- shared/missing-assets -->
+  <div id="secretPanel">Marking notes and the answer key.</div>
+</div>
+
+<script>
+// widget/global-scope-leak : all of these land in the shared homepage scope
+var widgetState = {};
+let cache = null;
+const ORG = '{OrgUnitId}';
+function refresh() { return null; }
+
+// widget/role-as-boundary : {RoleId} used to hide something rather than a
+// release condition, which is the only server-enforced boundary.
+if ('{RoleId}' !== '1015') {
+  document.getElementById('secretPanel').style.display = 'none';
+}
+
+// topic/unwrapped-storage : storage throws, it does not return null
+var seen = localStorage.getItem('visited');
+
+// topic/namespaced-storage : shared with the whole LMS
+localStorage.setItem('visited', '1');
+
+// topic/no-storage-for-grades : authoritative record in browser storage
+localStorage.setItem('finalGrade', '95');
+</script>

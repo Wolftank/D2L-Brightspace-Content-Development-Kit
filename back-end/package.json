@@ -1,0 +1,9 @@
+{
+  "name": "cdk-back-end",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Agent orchestration / build-deploy pipeline stub",
+  "scripts": {
+    "test": "node src/server.js"
+  }
+}

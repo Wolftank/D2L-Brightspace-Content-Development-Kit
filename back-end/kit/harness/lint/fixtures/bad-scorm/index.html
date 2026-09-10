@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<!-- Deliberately broken SCORM build. Every rule in the scorm set should fire.
+     Do not "fix" this file; the lint test asserts against its defects. -->
+<html>
+<head>
+<style>
+  #root { height: 1100px; }        /* scorm/root-height */
+  .panel { min-height: 80vh; }     /* shared/no-viewport-units */
+</style>
+<script src="https://cdn.example.com/chart.min.js"></script> <!-- shared/external-cdn -->
+</head>
+<body>
+<div id="root"><img src="img/missing-logo.png"></div> <!-- shared/missing-assets -->
+<script>
+var API = window.parent.API;
+API.LMSInitialize('');
+
+// scorm/no-completed-on-load : top-level completion write
+API.LMSSetValue('cmi.core.lesson_status', 'completed');
+
+// scorm/suspend-data-cap : no length guard anywhere near
+API.LMSSetValue('cmi.suspend_data', buildEverything());
+
+// scorm/storage-key-learner-id : fixed literal key
+localStorage.setItem('progress', '1');
+
+// scorm/no-api-calls : sealed off, this can never work
+fetch('/d2l/api/lp/1.5/users/whoami').then(function (r) { return r.json(); });
+
+// scorm/no-terminate-on-load : runs on load, hides the activity
+API.LMSFinish('');
+
+function buildEverything() { return 'x'; }
+</script>
+</body>
+</html>
