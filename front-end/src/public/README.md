@@ -1,3 +1,3 @@
 # front-end/src/public
 
-The actual HTML/CSS/JS the browser downloads and runs: the configurator form, and the client-side JS that calls `fetch()` against the back end and listens to its progress stream. This is genuinely what runs in the browser — the front-end server's job (`../server.js`) is just handing these files over, not executing them. Empty stub; not built yet.
+The browser downloads `index.html`, `styles.css`, and `app.js` from the local server. These implement the Sprint 1 configurator and sample preview. No backend calls or progress stream are wired yet; see the frontend README for the integration boundary and demo steps.
