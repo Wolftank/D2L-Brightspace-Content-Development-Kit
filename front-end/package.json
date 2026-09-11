@@ -2,8 +2,10 @@
   "name": "cdk-front-end",
   "version": "0.0.0",
   "private": true,
-  "description": "Local server + browser configurator/preview stub",
+  "description": "Local browser configurator and sample preview",
   "scripts": {
-    "test": "node src/server.js"
+    "start": "node src/server.js",
+    "dev": "node src/server.js",
+    "test": "node --test"
   }
 }

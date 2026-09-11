@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Configure D2L course material and review a local sample layout.">
+  <title>Course configurator · D2L Content Kit</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%237b2338'/%3E%3Cpath d='M8 8h10l6 6v10H8z' fill='white'/%3E%3Cpath d='M18 8v6h6' fill='none' stroke='%237b2338'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to configurator</a>
+  <header class="topbar"><a class="brand" href="/"><span class="mark" aria-hidden="true">C</span><span>D2L <strong>Content Kit</strong></span></a><span class="badge">Sprint 01 · Local prototype</span></header>
+  <main id="main">
+    <div class="heading"><div><p class="eyebrow">COURSE MATERIAL WORKSPACE</p><h1>Make room for better learning.</h1><p>Configure a course material, then explore its sample layout.</p></div><span class="connection"><span aria-hidden="true">●</span> Backend not connected</span></div>
+    <div class="workspace">
+      <section class="panel" aria-labelledby="config-heading">
+        <div class="panel-heading"><div><p class="eyebrow">01 / CONFIGURE</p><h2 id="config-heading">Your course material</h2></div><span class="small-label">Draft</span></div>
+        <form id="config-form">
+          <label for="content-type">Content type</label>
+          <select id="content-type" name="contentType"><option value="content-topic">Content topic</option><option value="homepage-widget">Homepage widget</option><option value="scorm-package">SCORM package</option></select>
+          <p class="hint" id="type-hint">A standalone lesson page for your course.</p>
+          <div class="fields"><div><label for="course">Target course</label><input id="course" name="targetCourse" placeholder="e.g., BIO 101" required maxlength="100"></div><div><label for="title">Material title</label><input id="title" name="title" placeholder="e.g., Introduction to cells" required maxlength="160"></div></div>
+          <label for="source">Source material <span class="label-note">Required</span></label>
+          <textarea id="source" name="sourceMaterial" rows="6" placeholder="Paste your lesson notes, learning objectives, or instructions…" required maxlength="20000" aria-describedby="source-hint"></textarea>
+          <p class="hint" id="source-hint">Use sample notes for this prototype. Nothing is sent to an AI agent or D2L.</p>
+          <fieldset><legend>Teaching & learning options</legend><label class="check"><input type="checkbox" name="tiltEnabled" checked><span><strong>TILT structure</strong><small>Request clear purpose, tasks, and success criteria.</small></span></label><label class="check"><input type="checkbox" name="udlEnabled" checked><span><strong>UDL review</strong><small>Request a review of learner choice and access.</small></span></label></fieldset>
+          <div class="actions"><button class="primary" type="submit">Preview sample <span aria-hidden="true">↗</span></button><button class="secondary" id="example" type="button">Use example</button><button class="text-button" type="reset">Reset</button></div>
+          <p id="status" class="status" role="status">Ready when you are. Start with your notes or use an example.</p>
+        </form>
+      </section>
+      <section class="preview-column" aria-labelledby="preview-heading">
+        <div class="preview-heading"><div><p class="eyebrow">02 / REVIEW</p><h2 id="preview-heading">Material preview</h2></div><span class="badge">Sample only</span></div>
+        <div class="preview-shell"><div class="preview-toolbar"><span><i></i><i></i><i></i></span><span>Course material</span><span aria-hidden="true">▱</span></div><article id="preview" class="preview-content"><p class="eyebrow">YOUR NEXT LESSON STARTS HERE</p><div class="paper-icon" aria-hidden="true">≡</div><h3>A little context.<br>A clearer starting point.</h3><p>Choose a content type and add your notes to see a sample of how your material could be organized.</p><div class="empty-outline">Your course · Your material · Your teaching goals</div></article></div>
+        <aside class="notice"><span class="notice-icon" aria-hidden="true">i</span><div><strong>A preview of the experience</strong><p>This is a local sample, not AI-generated content or a D2L emulator. Accessibility and TILT/UDL checks will appear here once the backend is connected.</p></div></aside>
+      </section>
+    </div>
+    <footer><span>D2L Brightspace Content Development Kit</span><span>Configure → Preview → <span class="muted">Build & deploy in a future sprint</span></span></footer>
+  </main>
+</body>
+</html>
