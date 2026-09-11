@@ -1,3 +1,3 @@
 # back-end/src/routes
 
-One file per endpoint's handler logic (`POST /api/builds`, the progress stream, the preview endpoint) — the three routes defined in [`../../../docs/architecture.md`](../../../docs/architecture.md). Empty stub; not built yet.
+One file per route defined in [`../../../docs/architecture.md`](../../../docs/architecture.md). A route parses and validates input, calls one service, and shapes the response. Empty stub; not built yet.
