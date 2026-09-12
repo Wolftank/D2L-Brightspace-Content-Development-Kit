@@ -111,7 +111,19 @@ Static analysis cannot catch everything. In order of likelihood:
    differed between two courses on this tenant.
 3. **The topic was renamed or opened in D2L's HTML editor.** Both re-serialize
    the page and silently corrupt inline JS and SVG. Not recoverable; redeploy.
-4. **A behaviour we have not measured.** Add a probe rather than guessing, then
+4. **A data-contract naming mismatch between an authoring script and the
+   consuming page.** A known blind spot: the lint only checks *how* a script
+   is loaded (`topic/no-static-script-src` and friends), never *what global it
+   sets* versus what the page reads. A generator that writes
+   `window.MY_PROJECT_DATA` while `init()` reads `window.MY_PROJ_DATA` passes
+   the gate clean — the script tag itself loaded fine and fired `onload`, the
+   lint has no way to see the name drift. This only surfaces by actually
+   running the build: serve it locally, then read the verification global back
+   in the console and confirm the data it references (e.g. `.items.length`)
+   is real, not `undefined`. **Always do this once after the lint passes and
+   before deploying** — a clean lint result proves the loading mechanism is
+   sound, not that the data arrived under the name the page expects.
+5. **A behaviour we have not measured.** Add a probe rather than guessing, then
    add the rule so nobody hits it twice.
 
 ---

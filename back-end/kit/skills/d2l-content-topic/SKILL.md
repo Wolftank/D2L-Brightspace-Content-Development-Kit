@@ -220,6 +220,14 @@ node harness/lint/lint.js <your-build-folder> --avenue topic
 
 Zero errors to deploy. The rules encode exactly the failures above.
 
+**Then actually run the build once, locally, before deploying.** The lint only
+checks *how* a sibling script is loaded, never *what global it sets* versus
+what your own code reads — a generator and a consumer that drifted to two
+different variable names both pass the gate clean, and only fail once the
+build actually executes. Serve the folder locally and read the verification
+global back in the console (`window.MY_ACTIVITY_READY`, and whatever data it
+references) to confirm the values are real, not `undefined`.
+
 ---
 
 ## Multi-page coordination
