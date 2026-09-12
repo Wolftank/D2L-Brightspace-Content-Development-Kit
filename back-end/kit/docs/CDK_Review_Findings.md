@@ -17,35 +17,36 @@ log what the experience was like and what it needs to do differently — same
 "bring findings back" philosophy the kit itself asks for (`Resources.html`,
 "Getting help"). This was originally a pure holding pen with nothing applied
 yet; as of 2026-09-10, findings #1, #4, and half of #13 have real fixes
-applied — see the status table immediately below, or "Suggested next steps"
+applied; as of this pass, #2, #6, #7, #8, #9, #10, #11, #13a, #14, and #15 do
+too — see the status table immediately below, or "Suggested next steps"
 at the bottom for the same information in prose, finding by finding.
 
-## Status at a glance (as of 2026-09-10)
+## Status at a glance (updated after the `3-4-5-findings-fixes` pass)
 
-5 of 17 findings are fully closed or need no action. Of the 10 still open,
-**#3 and #11 are worth prioritizing first** — #3 because it's cheap to check
-and the back end's whole agent-dispatch design assumes it works; #11 because
-this log itself already calls it highest priority, and it touches real
-credit-guard behavior, not just documentation polish.
+14 of 17 findings are fully closed or need no action. Of the 3 still open,
+**#3 is worth prioritizing** — it's cheap to check and the back end's whole
+agent-dispatch design assumes it works. **#16 stays deliberately deferred**
+until the real front end/back end exists to rewrite the faculty module
+against. **#17 needs a decision from Ben**, not code.
 
 | # | Finding | Status | Remaining work |
 |---|---|---|---|
 | 1 | References folder packaging gap | **Closed** | None |
-| 2 | Multi-file upload creates one topic per file | Open | Medium — Deploy.html card + a SKILL.md Traps entry for the already-known workaround |
-| 3 | Primary skill-discovery path never actually tested | Open | **Small effort, real stakes** — run `cd D2L_Code && claude` fresh, confirm skills auto-load |
+| 2 | Multi-file upload creates one topic per file | **Closed** | None |
+| 3 | Primary skill-discovery path never actually tested | Open | **Small effort, real stakes** — run `cd D2L_Code && claude` fresh, confirm skills auto-load. Requires a genuinely fresh cold start; could not be verified from inside a running session |
 | 4 | Two doc inconsistencies | **Closed** | None |
 | 5 | Confirm-File-Replace trap confirmed real | No fix needed | Informational; its one correction is already applied via #13 |
-| 6 | Router doesn't detect pre-built server apps (Streamlit case) | Open | Medium — add a 9th upfront question to `d2l-experience-router`. **Distinct from the avenue-count/widget-placement gap, which is closed** — this is a separate, still-real router issue |
-| 7 | Invisible click-target overlap (pattern warning) | Open | Small — general reminder in `d2l-content-topic`'s SKILL.md |
-| 8 | Bidirectional interaction needs both directions tested | Open | Small — same bucket/target file as #7 |
-| 9 | `javascript_tool` needs top-level `await` | Open | Small — one-line callout in the deployer skill |
-| 10 | Zero-sibling builds + content-vs-chrome colors | Open | Small — two doc additions |
-| 11 | SCORM emulator can't model preview/review | Open | **Large** — highest priority in this log; real code fix to `D2LEmulator.install()`, plus a reusable test-harness template, plus a doc trap-list addition |
+| 6 | Router doesn't detect pre-built server apps (Streamlit case) | **Closed** | None |
+| 7 | Invisible click-target overlap (pattern warning) | **Closed** | None |
+| 8 | Bidirectional interaction needs both directions tested | **Closed** | None |
+| 9 | `javascript_tool` needs top-level `await` | **Closed** | None |
+| 10 | Zero-sibling builds + content-vs-chrome colors | **Closed** | None |
+| 11 | SCORM emulator can't model preview/review | **Closed** | None — `D2LEmulator.install()` now takes `opts.credit`/`opts.mode`, defaulting from `learner.role`; `harness/emulator-harness.html` added |
 | 12 | Confirming data point | No fix needed | Explicitly nothing to fold in |
-| 13a | New animation-loop race-condition bug | Open | Small — same bucket as #7/#8 |
+| 13a | New animation-loop race-condition bug | **Closed** | None |
 | 13b | Correction to #5's DOM-read guidance | **Closed** | None |
-| 14 | Lint gate can't catch data-contract naming mismatches | Open | Medium — document as a known blind spot + a "run the build once" step |
-| 15 | Filename collision across builds sharing a content root | Open | **Medium-large** — highest priority from that finding; a SKILL.md rule plus ideally an actual new lint rule |
+| 14 | Lint gate can't catch data-contract naming mismatches | **Closed** | None |
+| 15 | Filename collision across builds sharing a content root | **Closed** | None — new lint rule `topic/generic-sibling-filename` added |
 | 16 | Faculty module teaches pre-front-end workflow | Open, deliberately deferred | Not sprint-ready — blocked on the real front end/back end existing |
 | 17 | Two zips can't be rebuilt | Open | Not code work — needs a decision on whether the sources exist elsewhere |
 
@@ -772,43 +773,46 @@ these are optional downloads, not the core faculty workflow.
   the Lessons-drop-zone create-topic code sample, the `javascript_tool`
   Chrome-extension quirks, and the verification Quick Triage table — directly
   into `SKILL.md` rather than restoring a references/ split nothing points to.
-- Fold finding #2 into `builds/cdk/05 Deploy.html` (a new "worth knowing" card
-  or a caveat under stage 2, "Upload") and into
-  `skills/d2l-activity-deployer/SKILL.md`'s "Traps" section.
+- ~~Fold finding #2 into `builds/cdk/05 Deploy.html` (a new "worth knowing"
+  card or a caveat under stage 2, "Upload") and into
+  `skills/d2l-activity-deployer/SKILL.md`'s "Traps" section.~~ **Done.** Added
+  the caveat to stage 2 of Deploy.html and a full trap entry (avoidance +
+  safe cleanup) to the deployer skill.
 - Actually run the test described in finding #3 before trusting Step 3's
   primary instructions for the next new user.
 - ~~Fix #4 is two small text edits~~ **Done (2026-09-10).** `Resources.html`'s
   skill count corrected; `05 Deploy.html`'s button label was found already
   correct, no edit needed there.
-- Promote finding #2's "upload html first, push assets via Manage Files"
-  workaround from an alternative to the default instruction — it's now
-  validated on two independent builds with zero extra-topic churn either time.
-- Fold finding #6 into `d2l-experience-router`'s SKILL.md as a ninth,
-  upfront question — this is the kind of gap that sends someone down the
-  wrong avenue entirely rather than just costing a cleanup step.
-- Add findings #7 and #8 as general build-quality reminders somewhere in
-  `d2l-content-topic`'s SKILL.md — not tenant-specific behavior, but real
-  bugs that cost real debugging time and would recur on the next
-  compressed-layout or bidirectional-interaction build.
-- Add finding #9's callout to `d2l-activity-deployer`'s "Driving uploads from
-  automation" section, right next to the existing `await win.fetch(...)`
-  example — one sentence on why the `await` has to be at the top level.
-- Promote finding #10's "prefer zero-sibling builds when the content allows
-  it" into `d2l-content-topic`'s architecture guidance, and fold the
-  content-colors-vs-chrome-colors note into `_design-tokens.md` directly, so
-  the next rebrand pass has it in writing instead of re-deriving it.
-- Highest priority from finding #11: fix `D2LEmulator.install()` so
-  `learner.role` (or a new explicit `opts.credit`/`opts.mode` param) can drive
-  `cmi.core.credit` / `cmi.core.lesson_mode` to `'no-credit'`/`'browse'`, so
-  the emulator can actually gate on the two behaviors the skill calls
-  design-critical, instead of only the static lint being able to check for
-  them.
-- Ship a reusable `emulator-harness.html` template (parent page installs
-  `D2LEmulator` on `window`, iframes the real build, exposes
-  `window.__emu.report()`) next to `harness/d2l-emulator.js` or
-  `assets/starter/`, and point `d2l-scorm-package`'s "Run it" section at it —
-  closes the "no documented way to run the emulator against a real build"
-  gap from finding #11.
+- ~~Promote finding #2's "upload html first, push assets via Manage Files"
+  workaround from an alternative to the default instruction~~ **Done**,
+  folded into the same commit as the trap entry above, alongside the
+  zero-sibling-builds recommendation from #10.
+- ~~Fold finding #6 into `d2l-experience-router`'s SKILL.md as a ninth,
+  upfront question~~ **Done.** Added ahead of the eight questions, plus
+  updated the skill's own frontmatter description.
+- ~~Add findings #7 and #8 as general build-quality reminders somewhere in
+  `d2l-content-topic`'s SKILL.md~~ **Done**, as a "Pattern warnings from real
+  builds" section (bundled with #13a below, same target file).
+- ~~Add finding #9's callout to `d2l-activity-deployer`~~ **Done**, added to
+  the Chrome MCP tool quirks list rather than the automation section, since
+  that's where the file's other `javascript_tool`-specific notes already live.
+- ~~Promote finding #10's "prefer zero-sibling builds"... and fold the
+  content-colors-vs-chrome-colors note into `_design-tokens.md`~~ **Done**,
+  both landed; the content-topic skill also got its own short version of the
+  color-judgment note.
+- ~~Highest priority from finding #11: fix `D2LEmulator.install()`~~ **Done.**
+  `install()` now takes `opts.credit`/`opts.mode`, defaulting from
+  `learner.role` when omitted (`'Instructor'` → `no-credit`/`browse`).
+  `doSetValue` now actually discards writes under `no-credit` (reports error 0,
+  does not persist) and logs a new `discarded-no-credit` violation — this is
+  the actual behavior that was missing, not just the settable field. 12 new
+  `emulator.test.js` assertions cover it.
+- ~~Ship a reusable `emulator-harness.html` template~~ **Done**, added next to
+  `harness/d2l-emulator.js`, and pointed at from `d2l-tenant-qa`'s "Run it" and
+  `d2l-scorm-package`'s verification section (the finding's text named
+  `d2l-scorm-package`'s "Run it" section specifically, but the actual
+  `node harness/emulator.test.js` reference lives in `d2l-tenant-qa`; both
+  skills now reference the harness from where it's actually relevant).
 - Add a one-line note to `build-scorm.ps1`'s header comment: `-Source`/`-Out`
   must be relative to the script's own folder (`Join-Path` does not resolve
   an absolute `-ChildPath`), even for a build that lives outside the repo.
@@ -820,19 +824,16 @@ these are optional downloads, not the core faculty workflow.
   a gap. Worth keeping as evidence the last two fixes (prefer zero-sibling
   builds; top-level `await` on uploads) actually hold up on a fresh build,
   not just the ones that originally surfaced them.
-- Add finding #13's shared-mutable-state pattern warning alongside findings
-  #7/#8 in `d2l-content-topic`'s SKILL.md — same "general build-quality
-  reminder" bucket, this time specifically about multiple animation loops
-  reacting to one event.
+- ~~Add finding #13's shared-mutable-state pattern warning alongside findings
+  #7/#8~~ **Done**, same "Pattern warnings from real builds" section as #7/#8.
 - ~~Correct Finding #5 and `d2l-activity-deployer`'s "Traps" section~~
   **Done (2026-09-08).** Replaced the DOM-read verification instruction in
   `SKILL.md`'s Confirm File Replace section with finding #13's practical fix —
   confirm via the resulting file list (size/timestamp changed, no `(1)`
   sibling), not via any read of the dialog's own DOM.
-- **Still open, not fixed in this pass:** finding #11's SCORM Bulk Upload
-  dialog shadow-DOM path (`d2l-content-selector` → `d2l-drop-uploader` →
-  `input[type=file]`, distinct from the Manage-Versions chain `SKILL.md`
-  already documents) still needs adding to the "wrong file input" trap list.
+- ~~Finding #11's SCORM Bulk Upload dialog shadow-DOM path... needs adding to
+  the "wrong file input" trap list~~ **Done**, added as a third distinct chain
+  alongside the two already documented there.
 - Finding #16 (faculty module teaches the pre-front-end workflow): don't
   touch `builds/cdk/02–05` until the front-end/back-end API boundary is real.
   File as its own backlog item under E2 (Front-End) once there's a UI to
@@ -841,23 +842,15 @@ these are optional downloads, not the core faculty workflow.
   fix — check with Ben whether the missing scripts/source exist on another
   machine before assuming they're gone; if they are, drop or replace
   `Resources.html`'s design-system and synthetic-students download links.
-- Add finding #14's data-contract-name-mismatch bug as a documented lint
-  blind spot in `d2l-tenant-qa`'s SKILL.md ("What the lint gate cannot see"),
-  and add a step to `d2l-content-topic`'s own guidance: **after the lint
-  passes, always actually run the build once** (e.g. via a local static
-  server, not the file:// static-snapshot preview mode) and read the
-  verification global back from the console — a clean lint result only
-  proves the loading mechanism is sound, not that the data the JS expects
-  actually arrived under the name it expects.
-- **Highest priority from finding #15**: add a rule to `d2l-content-topic`'s
-  SKILL.md (and ideally a lint check) that a sibling asset file must be
-  named build-specifically — never a generic name like `data.js`, `styles.js`,
-  `assets.js` — precisely because every build in this course shares one flat
-  content root. And fold a stronger warning into `d2l-activity-deployer`'s
-  Confirm-File-Replace section: **before ticking any box in that dialog,
-  check whether the existing file's size/date actually matches what this
-  build expects to find there** — if it doesn't, stop and find out whose
-  file it actually is before overwriting anything, the same discipline
-  finding #13's file-list verification already requires after the fact,
-  just applied before the destructive click instead of only after it.
+- ~~Add finding #14's data-contract-name-mismatch bug as a documented lint
+  blind spot in `d2l-tenant-qa`'s SKILL.md, and add a "run the build once"
+  step to `d2l-content-topic`'s guidance~~ **Done**, both landed.
+- ~~**Highest priority from finding #15**: add a rule... that a sibling asset
+  file must be named build-specifically... and fold a stronger warning into
+  `d2l-activity-deployer`'s Confirm-File-Replace section~~ **Done.** New lint
+  rule `topic/generic-sibling-filename` (warn), plus the SKILL.md guidance and
+  the pre-overwrite size/date check in the deployer's Traps section. The
+  `good-topic` fixture's own `data.js` was renamed to `wk1-data.js` so it stays
+  clean under the new rule — a small piece of dogfooding, since it was
+  exactly the kind of generic name the rule now exists to catch.
 
