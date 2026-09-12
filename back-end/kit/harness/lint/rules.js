@@ -390,6 +390,35 @@ const RULES = [
   },
 
   {
+    id: 'topic/generic-sibling-filename',
+    avenues: ['topic'],
+    severity: 'warn',
+    because: 'Measured: every content-topic build in a course shares one flat Manage Files ' +
+             'folder, not a per-build directory. A sibling asset uploaded under a generic name ' +
+             'came within one confirm-click of silently overwriting an unrelated, live build\'s ' +
+             'file of the same name; only a size/date mismatch in the Confirm File Replace ' +
+             'dialog caught it.',
+    test(ctx) {
+      const GENERIC = new Set([
+        'data.js', 'style.js', 'styles.js', 'assets.js', 'script.js', 'scripts.js',
+        'config.js', 'app.js', 'main.js', 'common.js', 'util.js', 'utils.js', 'helpers.js',
+        'style.css', 'styles.css', 'main.css', 'common.css'
+      ]);
+      const out = [];
+      for (const f of ctx.files) {
+        const base = f.rel.replace(/\\/g, '/').split('/').pop().toLowerCase();
+        if (GENERIC.has(base)) {
+          out.push(finding(this, f.rel, 0,
+            `"${base}" is a generic filename. Every build in this course shares one flat ` +
+            `content folder, so it can collide with another build's file of the same name. ` +
+            `Prefix it with something build-specific, e.g. "yourbuild-${base}".`));
+        }
+      }
+      return out;
+    }
+  },
+
+  {
     id: 'topic/no-grade-writes',
     avenues: ['topic'],
     severity: 'warn',

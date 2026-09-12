@@ -31,7 +31,7 @@
   // static tag executes in some courses and is silently inert in others.
   function loadData(done) {
     var s = document.createElement('script');
-    s.src = 'data.js';
+    s.src = 'wk1-data.js';
     s.onload = function () { done(window.WK1_DATA || null); };
     s.onerror = function () { done(null); };
     document.head.appendChild(s);

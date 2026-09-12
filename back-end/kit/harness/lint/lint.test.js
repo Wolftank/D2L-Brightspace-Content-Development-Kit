@@ -33,7 +33,7 @@ const bt = lint(fx('bad-topic'), 'topic', profile);
 const btRules = rulesIn(bt);
 [
   'topic/no-static-script-src', 'topic/unwrapped-storage', 'topic/namespaced-storage',
-  'topic/no-storage-for-grades', 'topic/no-grade-writes',
+  'topic/no-storage-for-grades', 'topic/no-grade-writes', 'topic/generic-sibling-filename',
   'shared/no-viewport-units', 'shared/external-cdn', 'shared/missing-assets'
 ].forEach(id => check(id, btRules.has(id)));
 check('bad-topic fails the gate', errs(bt) > 0);
@@ -60,6 +60,10 @@ const gt = lint(fx('good-topic'), 'topic', profile);
 check('no findings at all', gt.findings.length === 0,
       JSON.stringify(gt.findings.map(f => f.rule + '@' + f.file + ':' + f.line)));
 check('passes the gate', errs(gt) === 0);
+
+console.log('\n== generic sibling filenames are flagged, build-specific ones are not ==');
+check('bad-topic\'s data.js is flagged', btRules.has('topic/generic-sibling-filename'));
+check('good-topic\'s wk1-data.js is not', !rulesIn(gt).has('topic/generic-sibling-filename'));
 
 console.log('\n== the real probe build passes the gate ==');
 const probe = lint(path.join(__dirname, '..', '..', 'probes', 'scorm12-probe'), 'scorm', profile);

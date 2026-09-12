@@ -146,6 +146,14 @@ author-edited dataset), not as a default habit.
 A ready-to-edit starter is in `assets/starter/`. It demonstrates the bootstrap,
 wrapped storage, and optional role detection, and passes the lint clean.
 
+**Name sibling asset files build-specifically, never generically.** Every
+content-topic build in a course shares one flat Manage Files folder, not a
+per-build directory, so a plain `data.js` or `styles.js` can — and has —
+collided with an unrelated build's file of the same name. Prefix it with
+something that identifies this build, e.g. `campus-map-data.js`, not `data.js`.
+`node harness/lint/lint.js` warns on this (`topic/generic-sibling-filename`),
+but the warning only exists because a collision already happened once.
+
 ---
 
 ## Rebranding: content colors are not chrome colors

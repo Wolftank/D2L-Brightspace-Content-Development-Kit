@@ -159,6 +159,17 @@ fails and D2L then saves the upload as `name(1).html` copies instead of
 overwriting. Click the select-all checkbox and the Overwrite button by
 coordinates from a screenshot.
 
+**Before ticking anything, check whether the existing file's size/date
+actually matches what this build expects to find there.** Every build in a
+course shares one flat Manage Files folder, so a generic sibling filename
+(`data.js`, `styles.js`) can already belong to a completely different,
+unrelated build. Overwriting on autopilot came within one confirm-click of
+silently destroying a live build's data file with unrelated content — no
+error, no warning, just a working activity quietly losing its data on the
+next load. If the existing file's size doesn't match what you expect to
+already be there, stop and find out whose file it actually is before
+overwriting anything.
+
 **Do not trust a DOM read of the checkbox state either — confirmed unreliable
 on a real run.** A real coordinate click correctly ticked the box and the file
 was genuinely overwritten in place (confirmed by size/timestamp changing on the
