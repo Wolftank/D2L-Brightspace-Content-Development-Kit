@@ -235,6 +235,15 @@ Other automation notes:
   whole file dumps.
 - `navigate` may prepend `https://` — to open a local file, serve it over
   `http://127.0.0.1` rather than using a `file://` URL.
+- **`javascript_tool` needs a top-level `await` on the expression whose result you
+  want, not a bare async call.** `async function run() { ... } run();` reliably
+  reports back `{}` — the tool serializes the pending `Promise` `run()` returns as
+  the "last expression," before it resolves. The side effects inside still
+  happen (a click really lands, a `fetch` really completes); only the reported
+  result is lost, which reads exactly like "nothing happened" and is easy to
+  misattribute to the upload itself failing. Write `await run()` as the final
+  line, or skip the wrapper and write the `await` directly:
+  `await win.fetch(...)`, not `win.fetch(...).then(...)` fired and forgotten.
 
 ---
 
