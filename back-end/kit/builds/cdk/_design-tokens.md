@@ -56,6 +56,16 @@ The Husky peak: a CSS triangle, `border-left/right: transparent` with a solid
 `border-bottom`. Appears as a section marker, a list bullet, and a decorative
 accent. It is the thing that makes unrelated blocks read as one system.
 
+## What not to rebrand
+
+Applying this palette to an already-built activity is a rebrand pass, not a
+from-scratch build, and one judgment call comes up every time: **a color that
+encodes a fact about the content is not the same as a color that is chrome.**
+A computed wavelength really is cyan, a terrain color really means "wetland,"
+a status badge's red really means "at risk" — repainting those to match the
+brand would make the activity teach something false. Only the surrounding
+chrome — headers, cards, nav, buttons, generic badges — takes this palette.
+
 ## D2L constraints that shaped these pages
 
 - **No fixed root height on prose topics.** The content iframe auto-resizes, so

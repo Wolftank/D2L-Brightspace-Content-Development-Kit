@@ -136,8 +136,30 @@ Two consequences:
 6. **Set a verification global** at the end of init (`window.MY_ACTIVITY_READY =
    true`) so a deploy check can confirm it truly initialised.
 
+**Prefer zero sibling files when the content genuinely allows it.** A fully
+self-contained `index.html` — everything computed or inlined, no `data.js`, no
+CSV — sidesteps the Lessons drop zone's multi-topic-per-upload behaviour
+entirely: one file in, one topic out, no cleanup step. Reach for a `data.js`
+split only when the content genuinely calls for it (a large or non-technical-
+author-edited dataset), not as a default habit.
+
 A ready-to-edit starter is in `assets/starter/`. It demonstrates the bootstrap,
 wrapped storage, and optional role detection, and passes the lint clean.
+
+---
+
+## Rebranding: content colors are not chrome colors
+
+When applying the campus palette (`_design-tokens.md`) to an already-built
+activity, one judgment call is not written down anywhere else: **does this
+color encode a fact about the content, or is it telling the student which UI
+system they are in?**
+
+A computed wavelength really is cyan; a terrain color really means "wetland";
+a status color really means "at risk." Recoloring those to match the brand
+would make the activity teach something false. Rebrand the chrome — headers,
+cards, nav, buttons, generic badges — and leave any color that is itself part
+of the data alone.
 
 ---
 
