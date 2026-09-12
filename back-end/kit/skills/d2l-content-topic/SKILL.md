@@ -141,6 +141,45 @@ wrapped storage, and optional role detection, and passes the lint clean.
 
 ---
 
+## Pattern warnings from real builds
+
+None of these are tenant-specific, unlike everything else in this file. They are
+self-authored bugs that recurred across builds, worth checking for because they
+render fine and only fail on the interaction that finds them.
+
+- **An invisible click-target sized for a crowded layout will overlap its
+  neighbor**, even after the visible labels are correctly destaggered. A hit
+  `<rect>` anchored to a true position that sits only a few pixels from its
+  neighbor's true position overlaps that neighbor's hit rect by construction,
+  independent of what happened to the labels. This does not throw and looks
+  correct at every zoom level; it only surfaces when every interactive element
+  is actually clicked and its resulting state asserted, not eyeballed. Anchor
+  each hit target to the same destaggered position its label uses, sized so
+  adjacent targets cannot overlap, and confirm with `getBoundingClientRect()`
+  that no two ranges intersect.
+
+- **A bidirectional interaction needs both directions tested, not one.** Code
+  shaped like `isForward ? a : b` for two distinct directions (absorption vs.
+  emission, expand vs. collapse, forward vs. back) is easy to get backwards for
+  the direction you did not happen to test first. It renders, looks plausible,
+  and only shows up when the untested direction is exercised deliberately,
+  ideally back-to-back on the same element so the difference is a direct
+  comparison. Prefer removing the direction-dependent branch entirely when the
+  correct behavior is already fully determined by the endpoints.
+
+- **Two independently-timed animation loops must never read each other's
+  shared mutable state.** If one interaction drives two separate
+  `requestAnimationFrame` loops (e.g. a one-shot transition plus a continuous
+  loop), each starts its own timer from its own first callback, which can
+  differ from the other's by a frame or more. A loop that reads a variable the
+  *other* loop owns can fire before that variable has been updated, producing
+  a state that is wrong for good but does not throw and only shows up under
+  rapid repeated interaction. Give each loop its own copy of "what it has
+  caught up to," updated only from its own transition's endpoint, never from a
+  sibling loop's shared state.
+
+---
+
 ## Two things that are permanent, so settle them before deploying
 
 - **The file name becomes the topic title.** Renaming a live topic re-serializes
