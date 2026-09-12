@@ -179,6 +179,27 @@ Assert `dupeCount === 0` against `/\(\d+\)\./` on the reloaded listing — a
 silent `name(1).html` is the failure this dialog produces when a tick didn't
 actually register.
 
+### Dropping sibling files together creates one topic PER FILE
+
+The Lessons drop zone accepts multiple files at once (`multiple=true`), and it
+does upload all of them to the same Manage Files folder correctly — relative
+`fetch()`/`<script src>` sibling references resolve fine. But it also creates
+**one visible topic entry per file**, not one topic with hidden asset files.
+Three files dropped together produces three topic entries in the unit.
+
+Avoid it entirely: upload only the `.html` through the drop zone first (one
+topic), then push `data.js`/images/etc. separately through **Manage Files**
+directly into that topic's content-root folder. A build with **no sibling
+files at all** — everything inline — sidesteps this completely: one file in,
+one topic out.
+
+If you already dropped everything at once, the cleanup is quick and safe:
+select each unwanted extra topic → **"···" (More Actions) → Delete** → choose
+**"Remove the topic from Content but keep the associated file or activity in
+the course"** (the default/first option, not "Permanently delete both"). This
+removes only the content-list entry; the underlying file stays in Manage
+Files, which the real topic's sibling-file fetches still depend on.
+
 ### Saving mid-upload
 
 Clicking Save before the progress bar finishes fails with "Select at least one
