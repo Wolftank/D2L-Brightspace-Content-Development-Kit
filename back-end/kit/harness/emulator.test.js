@@ -69,7 +69,41 @@ check('gradeCalculation from profile', emu.gradeCalculation === 'highest');
 check('maxAttempts from profile', emu.maxAttempts === 3);
 emu.uninstall();
 
-console.log('\n== 5. API boundary ==');
+console.log('\n== 5. instructor preview / no-credit write discard ==');
+emu = D2LEmulator.install({ profile, learner: { id: 'zzqa-08', name: 'Gill, Mark', role: 'Instructor' } });
+A = window.API;
+A.LMSInitialize('');
+check('credit defaults to no-credit for an Instructor role', A.LMSGetValue('cmi.core.credit') === 'no-credit');
+check('lesson_mode defaults to browse for an Instructor role', A.LMSGetValue('cmi.core.lesson_mode') === 'browse');
+check('SetValue on no-credit reports success (error 0)...', A.LMSSetValue('cmi.core.score.raw', '85') === 'true');
+check('...but the write did not actually persist', A.LMSGetValue('cmi.core.score.raw') === '');
+let r5 = emu.report();
+check('discarded-no-credit violation logged', r5.violations.some(v => v.kind === 'discarded-no-credit'));
+emu.uninstall();
+
+emu = D2LEmulator.install({
+  profile,
+  learner: { id: 'zzqa-09', name: 'Doe, Jane', role: 'Student' },
+  credit: 'no-credit', mode: 'review'
+});
+A = window.API;
+A.LMSInitialize('');
+check('opts.credit overrides the role-based default', A.LMSGetValue('cmi.core.credit') === 'no-credit');
+check('opts.mode overrides the role-based default', A.LMSGetValue('cmi.core.lesson_mode') === 'review');
+A.LMSSetValue('cmi.core.lesson_status', 'completed');
+check('explicit no-credit also discards, regardless of role', A.LMSGetValue('cmi.core.lesson_status') === 'not attempted');
+emu.uninstall();
+
+emu = D2LEmulator.install({ profile, learner: { id: 'zzqa-10', name: 'Poe, Pat', role: 'Student' } });
+A = window.API;
+A.LMSInitialize('');
+check('a real student attempt still defaults to credit', A.LMSGetValue('cmi.core.credit') === 'credit');
+check('...and normal mode', A.LMSGetValue('cmi.core.lesson_mode') === 'normal');
+check('so a normal write actually persists', A.LMSSetValue('cmi.core.score.raw', '85') === 'true');
+check('...and reads back', A.LMSGetValue('cmi.core.score.raw') === '85');
+emu.uninstall();
+
+console.log('\n== 6. API boundary ==');
 (async () => {
   emu = D2LEmulator.install({ profile, learner: { id: 'zzqa-05', name: 'Lee, Lou', role: 'Student' } });
   window.API.LMSInitialize('');

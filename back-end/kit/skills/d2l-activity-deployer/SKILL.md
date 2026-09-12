@@ -142,6 +142,11 @@ is usually wrong.
   Two copies exist; use the first.
 - **SCORM version upload:** specifically
   `d2l-content-manage-versions` → `content-file-uploader` → `input`.
+- **SCORM Bulk Upload (new package):** a distinct third chain, not either of
+  the other two — `iframe[name starting d2l_c_...]` → `d2l-content-selector`
+  (shadow) → `d2l-drop-uploader` (shadow) → `input[type=file]`. Same
+  suppress-native-picker + `DataTransfer` + target-realm-`File` pattern works
+  once you're inside it; only the traversal path differs.
 
 > The page behind the Manage Versions dialog **also** has a generic drop zone.
 > Targeting the first `input[type=file]` you find will upload your SCORM zip as

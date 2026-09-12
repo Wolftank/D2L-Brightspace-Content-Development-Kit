@@ -212,7 +212,15 @@ is specifically `content-file-uploader` inside `d2l-content-manage-versions`.
 
 ## Verifying it actually works
 
-You cannot do this from your own account. With a student enrollment:
+**Before you need a real student enrollment, run it against the emulator.**
+`harness/emulator-harness.html` (see `d2l-tenant-qa`) loads your actual build
+in an iframe with `D2LEmulator` installed at the same parent depth the real
+player uses. Pick "Instructor (preview)" to confirm your credit-guard actually
+holds — that writes attempted under `credit === 'no-credit'` are the ones the
+emulator flags as `discarded-no-credit`, not silently accepted. This catches a
+missing or broken guard before it costs someone else's enrollment to find.
+
+With a real student enrollment, which the emulator cannot substitute for:
 
 1. Open the activity as the student. Confirm `credit` reads `credit`, not
    `no-credit`, and the learner id is real.

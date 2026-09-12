@@ -17,6 +17,19 @@
      });
      ... run the package ...
      emu.report();     // { violations, dataModel, score, ... }
+
+   Preview and post-completion review: tenant-profile.json's
+   noCreditMeansNotRecorded / completedStatusLocksFurtherAttempts record that
+   BOTH are signaled by credit === 'no-credit', and every SetValue is then
+   discarded while still reporting error 0. This defaults from learner.role
+   ('Instructor' => credit 'no-credit', mode 'browse', matching a real
+   instructor's own launch on this tenant) but either is settable directly:
+     var emu = D2LEmulator.install({
+       profile: profile,
+       learner: { id: 'preview', name: 'Without Tracking, Preview', role: 'Instructor' },
+       credit: 'no-credit',   // optional; inferred from role if omitted
+       mode: 'browse'         // optional; inferred from role if omitted
+     });
    ===================================================================== */
 
 (function (global) {
@@ -132,6 +145,18 @@
 
     var learner = opts.learner || { id: 'local-01', name: 'Test, Local', role: 'Student' };
     var attemptNo = opts.attempt || 1;
+    var role = learner.role || 'Student';
+
+    /* Preview and post-completion review are BOTH signaled by credit ===
+       'no-credit' (tenant-profile.json: noCreditMeansNotRecorded,
+       completedStatusLocksFurtherAttempts). Settable directly via opts, or
+       inferred from role since an Instructor's own launch is always a preview
+       on this tenant. Previously hardcoded to 'credit'/'normal' regardless of
+       role, so the emulator could not reproduce either behavior at all. */
+    var credit = (opts.credit !== undefined) ? opts.credit
+               : (role === 'Instructor' ? 'no-credit' : 'credit');
+    var mode = (opts.mode !== undefined) ? opts.mode
+             : (role === 'Instructor' ? 'browse' : 'normal');
 
     var violations = [];
     var calls = [];
@@ -175,6 +200,8 @@
 
     model[is2004 ? 'cmi.learner_id' : 'cmi.core.student_id'].value = learner.id;
     model[is2004 ? 'cmi.learner_name' : 'cmi.core.student_name'].value = learner.name;
+    model[is2004 ? 'cmi.credit' : 'cmi.core.credit'].value = credit;
+    model[is2004 ? 'cmi.mode' : 'cmi.core.lesson_mode'].value = mode;
     model['cmi.suspend_data'].maxLen = suspendMax;
 
     if (attemptNo > 1) {
@@ -261,6 +288,22 @@
         return setErr(is2004 ? 407 : 405);
       }
 
+      /* MEASURED AND DESIGN-CRITICAL (tenant-profile.json: noCreditMeansNotRecorded):
+         credit === 'no-credit' covers both instructor preview and post-completion
+         review. On this tenant every SetValue is then accepted with error 0 while
+         being silently discarded. Reproduce exactly that: report success, write
+         nothing. A package that guards on credit before writing never reaches this
+         branch at all; one that does not gets flagged, which is the entire point
+         -- this closes the gap where the emulator could not previously catch the
+         single most important SCORM failure mode on this tenant. */
+      if (credit === 'no-credit') {
+        violate('discarded-no-credit',
+          'SetValue("' + key + '", "' + val + '") returned error 0 but was DISCARDED: ' +
+          'credit is "no-credit" (instructor preview or post-completion review). ' +
+          'Guard every write on GetValue(credit) !== "no-credit" before relying on it.');
+        return okErr();
+      }
+
       e.value = val;
       return okErr();
     }
@@ -328,7 +371,7 @@
     var realFetch = global.fetch ? global.fetch.bind(global) : null;
     var reachableFromScorm = unwrap(api.reachableFromScorm, false).value;
     var studentBlocked = unwrap(api.studentBlockedFromClassData, true).value;
-    var role = learner.role || 'Student';
+    /* role is already in scope, computed above alongside credit/mode. */
 
     function jsonResponse(status, body) {
       return Promise.resolve(new Response(JSON.stringify(body), {

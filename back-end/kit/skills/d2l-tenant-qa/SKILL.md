@@ -29,12 +29,20 @@ Exit code 0 with no errors, 1 otherwise, so it can gate a pipeline. Add `--json`
 for machine-readable output.
 
 ```bash
-node harness/emulator.test.js      # run-time emulator, 38 assertions
-node harness/lint/lint.test.js     # lint rules, 33 assertions
+node harness/emulator.test.js      # run-time emulator, 50 assertions
+node harness/lint/lint.test.js     # lint rules, 51 assertions
 ```
 
 **Zero errors to deploy.** Warnings are advisory but each one is a real
 behaviour, not style.
+
+`emulator.test.js` only exercises hand-authored scenarios against `D2LEmulator`
+directly. To get build-specific runtime coverage against a real SCORM build's
+`index.html` — not just the library — serve `harness/` over http(s) and open
+`harness/emulator-harness.html`: it installs the emulator as the page's own
+API, loads your build in an iframe at the same parent depth the real player
+uses, and gives you `report()` on demand. Pick "Instructor (preview)" to
+confirm your build's credit-guard actually holds when writes are discarded.
 
 ---
 
