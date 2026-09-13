@@ -6,11 +6,13 @@ description: >-
   Reach for it on any opening request like "I want an interactive thing in my
   course", "can we build X in D2L", "how should I make this activity", or when a
   faculty member describes an experience without naming a technology. It asks
-  the eight questions that determine which of three avenues fits, names what
-  that avenue costs, and detects the one combination that CANNOT be a single
-  object. It also knows when the honest answer is "use the built-in D2L tool and
-  build nothing". Routes to d2l-scorm-package, d2l-content-topic, or an
-  externally hosted page, and hands off to d2l-tenant-qa before deployment.
+  one upfront question to catch an existing, already-built app before it can be
+  misrouted, then the eight questions that determine which of three avenues
+  fits, names what that avenue costs, and detects the one combination that
+  CANNOT be a single object. It also knows when the honest answer is "use the
+  built-in D2L tool and build nothing". Routes to d2l-scorm-package,
+  d2l-content-topic, or an externally hosted page, and hands off to
+  d2l-tenant-qa before deployment.
 ---
 
 # D2L Experience Router
@@ -47,9 +49,30 @@ assumption; catch it early.
 
 ---
 
+## Ask this first, before the eight questions
+
+**Is this being built from scratch, or is it an existing app or page someone
+already built?** If existing: **does it run its own server** (Flask,
+Streamlit, Django, Node, anything with a backend), or is it just static
+HTML/JS/CSS?
+
+A server-backed existing app is never a content-topic candidate as-is, no
+matter how the eight questions below would answer. A content topic requires a
+self-contained client-side bundle; a Streamlit app (or anything else rendering
+server-side) is structurally incompatible with that. This can be invisible
+otherwise: someone describing what such an app *does* ("reads a CSV, three
+switchable views, no grade, no role-awareness") can answer every one of the
+eight questions in a way that routes cleanly to B, right up until someone
+tries to actually build it. The real options for an existing server-backed
+app are (a) an external page pointing at wherever it is already hosted, with
+the role/grade limitations that implies, or (b) a from-scratch rebuild as a
+static client-side app — scoped and estimated as its own decision, not
+discovered midway through following the B/C guidance below.
+
 ## The eight questions
 
-Ask in plain language. Do not name a technology until the end.
+For anything being built from scratch, or already static. Ask in plain
+language. Do not name a technology until the end.
 
 1. Is what they are describing basically a **quiz, survey, or discussion**?
 2. Does it count toward a grade in a way where it would matter if a student

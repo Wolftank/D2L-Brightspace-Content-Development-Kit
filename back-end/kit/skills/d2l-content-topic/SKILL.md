@@ -136,8 +136,77 @@ Two consequences:
 6. **Set a verification global** at the end of init (`window.MY_ACTIVITY_READY =
    true`) so a deploy check can confirm it truly initialised.
 
+**Prefer zero sibling files when the content genuinely allows it.** A fully
+self-contained `index.html` — everything computed or inlined, no `data.js`, no
+CSV — sidesteps the Lessons drop zone's multi-topic-per-upload behaviour
+entirely: one file in, one topic out, no cleanup step. Reach for a `data.js`
+split only when the content genuinely calls for it (a large or non-technical-
+author-edited dataset), not as a default habit.
+
 A ready-to-edit starter is in `assets/starter/`. It demonstrates the bootstrap,
 wrapped storage, and optional role detection, and passes the lint clean.
+
+**Name sibling asset files build-specifically, never generically.** Every
+content-topic build in a course shares one flat Manage Files folder, not a
+per-build directory, so a plain `data.js` or `styles.js` can — and has —
+collided with an unrelated build's file of the same name. Prefix it with
+something that identifies this build, e.g. `campus-map-data.js`, not `data.js`.
+`node harness/lint/lint.js` warns on this (`topic/generic-sibling-filename`),
+but the warning only exists because a collision already happened once.
+
+---
+
+## Rebranding: content colors are not chrome colors
+
+When applying the campus palette (`_design-tokens.md`) to an already-built
+activity, one judgment call is not written down anywhere else: **does this
+color encode a fact about the content, or is it telling the student which UI
+system they are in?**
+
+A computed wavelength really is cyan; a terrain color really means "wetland";
+a status color really means "at risk." Recoloring those to match the brand
+would make the activity teach something false. Rebrand the chrome — headers,
+cards, nav, buttons, generic badges — and leave any color that is itself part
+of the data alone.
+
+---
+
+## Pattern warnings from real builds
+
+None of these are tenant-specific, unlike everything else in this file. They are
+self-authored bugs that recurred across builds, worth checking for because they
+render fine and only fail on the interaction that finds them.
+
+- **An invisible click-target sized for a crowded layout will overlap its
+  neighbor**, even after the visible labels are correctly destaggered. A hit
+  `<rect>` anchored to a true position that sits only a few pixels from its
+  neighbor's true position overlaps that neighbor's hit rect by construction,
+  independent of what happened to the labels. This does not throw and looks
+  correct at every zoom level; it only surfaces when every interactive element
+  is actually clicked and its resulting state asserted, not eyeballed. Anchor
+  each hit target to the same destaggered position its label uses, sized so
+  adjacent targets cannot overlap, and confirm with `getBoundingClientRect()`
+  that no two ranges intersect.
+
+- **A bidirectional interaction needs both directions tested, not one.** Code
+  shaped like `isForward ? a : b` for two distinct directions (absorption vs.
+  emission, expand vs. collapse, forward vs. back) is easy to get backwards for
+  the direction you did not happen to test first. It renders, looks plausible,
+  and only shows up when the untested direction is exercised deliberately,
+  ideally back-to-back on the same element so the difference is a direct
+  comparison. Prefer removing the direction-dependent branch entirely when the
+  correct behavior is already fully determined by the endpoints.
+
+- **Two independently-timed animation loops must never read each other's
+  shared mutable state.** If one interaction drives two separate
+  `requestAnimationFrame` loops (e.g. a one-shot transition plus a continuous
+  loop), each starts its own timer from its own first callback, which can
+  differ from the other's by a frame or more. A loop that reads a variable the
+  *other* loop owns can fire before that variable has been updated, producing
+  a state that is wrong for good but does not throw and only shows up under
+  rapid repeated interaction. Give each loop its own copy of "what it has
+  caught up to," updated only from its own transition's endpoint, never from a
+  sibling loop's shared state.
 
 ---
 
@@ -158,6 +227,14 @@ node harness/lint/lint.js <your-build-folder> --avenue topic
 ```
 
 Zero errors to deploy. The rules encode exactly the failures above.
+
+**Then actually run the build once, locally, before deploying.** The lint only
+checks *how* a sibling script is loaded, never *what global it sets* versus
+what your own code reads — a generator and a consumer that drifted to two
+different variable names both pass the gate clean, and only fail once the
+build actually executes. Serve the folder locally and read the verification
+global back in the console (`window.MY_ACTIVITY_READY`, and whatever data it
+references) to confirm the values are real, not `undefined`.
 
 ---
 

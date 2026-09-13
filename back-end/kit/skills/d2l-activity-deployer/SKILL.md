@@ -142,6 +142,11 @@ is usually wrong.
   Two copies exist; use the first.
 - **SCORM version upload:** specifically
   `d2l-content-manage-versions` → `content-file-uploader` → `input`.
+- **SCORM Bulk Upload (new package):** a distinct third chain, not either of
+  the other two — `iframe[name starting d2l_c_...]` → `d2l-content-selector`
+  (shadow) → `d2l-drop-uploader` (shadow) → `input[type=file]`. Same
+  suppress-native-picker + `DataTransfer` + target-realm-`File` pattern works
+  once you're inside it; only the traversal path differs.
 
 > The page behind the Manage Versions dialog **also** has a generic drop zone.
 > Targeting the first `input[type=file]` you find will upload your SCORM zip as
@@ -158,6 +163,17 @@ Its checkboxes are shadow-DOM components. Ticking them from page JS silently
 fails and D2L then saves the upload as `name(1).html` copies instead of
 overwriting. Click the select-all checkbox and the Overwrite button by
 coordinates from a screenshot.
+
+**Before ticking anything, check whether the existing file's size/date
+actually matches what this build expects to find there.** Every build in a
+course shares one flat Manage Files folder, so a generic sibling filename
+(`data.js`, `styles.js`) can already belong to a completely different,
+unrelated build. Overwriting on autopilot came within one confirm-click of
+silently destroying a live build's data file with unrelated content — no
+error, no warning, just a working activity quietly losing its data on the
+next load. If the existing file's size doesn't match what you expect to
+already be there, stop and find out whose file it actually is before
+overwriting anything.
 
 **Do not trust a DOM read of the checkbox state either — confirmed unreliable
 on a real run.** A real coordinate click correctly ticked the box and the file
@@ -178,6 +194,27 @@ magnification), and not a DOM query either.
 Assert `dupeCount === 0` against `/\(\d+\)\./` on the reloaded listing — a
 silent `name(1).html` is the failure this dialog produces when a tick didn't
 actually register.
+
+### Dropping sibling files together creates one topic PER FILE
+
+The Lessons drop zone accepts multiple files at once (`multiple=true`), and it
+does upload all of them to the same Manage Files folder correctly — relative
+`fetch()`/`<script src>` sibling references resolve fine. But it also creates
+**one visible topic entry per file**, not one topic with hidden asset files.
+Three files dropped together produces three topic entries in the unit.
+
+Avoid it entirely: upload only the `.html` through the drop zone first (one
+topic), then push `data.js`/images/etc. separately through **Manage Files**
+directly into that topic's content-root folder. A build with **no sibling
+files at all** — everything inline — sidesteps this completely: one file in,
+one topic out.
+
+If you already dropped everything at once, the cleanup is quick and safe:
+select each unwanted extra topic → **"···" (More Actions) → Delete** → choose
+**"Remove the topic from Content but keep the associated file or activity in
+the course"** (the default/first option, not "Permanently delete both"). This
+removes only the content-list entry; the underlying file stays in Manage
+Files, which the real topic's sibling-file fetches still depend on.
 
 ### Saving mid-upload
 
@@ -235,6 +272,15 @@ Other automation notes:
   whole file dumps.
 - `navigate` may prepend `https://` — to open a local file, serve it over
   `http://127.0.0.1` rather than using a `file://` URL.
+- **`javascript_tool` needs a top-level `await` on the expression whose result you
+  want, not a bare async call.** `async function run() { ... } run();` reliably
+  reports back `{}` — the tool serializes the pending `Promise` `run()` returns as
+  the "last expression," before it resolves. The side effects inside still
+  happen (a click really lands, a `fetch` really completes); only the reported
+  result is lost, which reads exactly like "nothing happened" and is easy to
+  misattribute to the upload itself failing. Write `await run()` as the final
+  line, or skip the wrapper and write the `await` directly:
+  `await win.fetch(...)`, not `win.fetch(...).then(...)` fired and forgotten.
 
 ---
 

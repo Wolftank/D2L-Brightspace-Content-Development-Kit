@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SCORM emulator harness</title>
+<style>
+  body { font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+         margin: 0; display: flex; height: 100vh; }
+  #controls { width: 300px; flex: none; border-right: 1px solid #ccc; padding: 14px;
+              overflow-y: auto; box-sizing: border-box; background: #fafafa; }
+  #controls h1 { font-size: 14px; margin: 0 0 6px; }
+  #controls p { color: #555; margin: 0 0 14px; }
+  #controls label { display: block; margin: 12px 0 4px; font-weight: 600; }
+  #controls select, #controls input, #controls button { width: 100%; box-sizing: border-box;
+              font: inherit; padding: 5px; margin-bottom: 2px; }
+  #controls button { cursor: pointer; margin-top: 10px; }
+  #stage { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #stage iframe { flex: 1; border: none; }
+  #report { height: 240px; overflow: auto; border-top: 1px solid #ccc; padding: 10px;
+            font: 11px/1.4 Consolas, monospace; white-space: pre-wrap; background: #fff; }
+</style>
+</head>
+<body>
+
+<div id="controls">
+  <h1>SCORM emulator harness</h1>
+  <p>Installs <code>D2LEmulator</code> as this page's own API before loading a real
+     build in the iframe -- the same "API at parent depth 1" placement measured on
+     the tenant, so a build's normal parent-chain walk finds it exactly the way it
+     would find the real D2L player.</p>
+
+  <label for="buildPath">Build's index.html (relative to this file)</label>
+  <input id="buildPath" placeholder="e.g. index.html, or ../my-build/index.html">
+
+  <label for="role">Learner role</label>
+  <select id="role">
+    <option value="Student">Student (a real attempt)</option>
+    <option value="Instructor">Instructor (preview -- credit defaults to no-credit)</option>
+  </select>
+
+  <label for="attempt">Attempt number</label>
+  <input id="attempt" type="number" value="1" min="1">
+
+  <button id="loadBtn">Install emulator + load build</button>
+  <button id="reportBtn">Show report()</button>
+  <button id="uninstallBtn">Uninstall</button>
+
+  <p style="margin-top:14px;">Serve this folder over http(s), not <code>file://</code> --
+     both the <code>fetch('tenant-profile.json')</code> below and the build's own fetches
+     need a real origin. Any static server works
+     (<code>python -m http.server</code>, <code>cors_server.py</code>, etc.).</p>
+</div>
+
+<div id="stage">
+  <iframe id="frame" src="about:blank"></iframe>
+  <pre id="report">Pick a role and a build path, then click "Install emulator + load build".</pre>
+</div>
+
+<script src="d2l-emulator.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var emu = null;
+
+  function log(x) {
+    document.getElementById('report').textContent =
+      typeof x === 'string' ? x : JSON.stringify(x, null, 2);
+  }
+
+  function loadProfile() {
+    return fetch('tenant-profile.json').then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  }
+
+  document.getElementById('loadBtn').addEventListener('click', function () {
+    var role = document.getElementById('role').value;
+    var attempt = parseInt(document.getElementById('attempt').value, 10) || 1;
+    var buildPath = document.getElementById('buildPath').value;
+
+    if (!buildPath) { log('Enter the build\'s index.html path first.'); return; }
+    if (emu) { emu.uninstall(); emu = null; }
+
+    loadProfile().then(function (profile) {
+      emu = D2LEmulator.install({
+        profile: profile,
+        learner: role === 'Instructor'
+          ? { id: 'preview', name: 'Without Tracking, Preview', role: 'Instructor' }
+          : { id: 'zzqa-01', name: 'Doe, Jane', role: 'Student' },
+        attempt: attempt
+        // credit / mode default from role above; pass them explicitly here
+        // to simulate post-completion review instead, e.g.:
+        //   credit: 'no-credit', mode: 'review'
+      });
+      window.__emu = emu;   // for console use: window.__emu.report(), .currentScore(), ...
+      log('Emulator installed as ' + role + '. window.__emu is the handle.\n' +
+          'Loading ' + buildPath + ' -- it will find window.API at parent depth 1.');
+      document.getElementById('frame').src = buildPath;
+    }).catch(function (e) {
+      log('Could not load tenant-profile.json (' + e.message + '). ' +
+          'Serve this folder over http(s), not file://.');
+    });
+  });
+
+  document.getElementById('reportBtn').addEventListener('click', function () {
+    if (!emu) { log('Nothing installed yet.'); return; }
+    log(emu.report());
+  });
+
+  document.getElementById('uninstallBtn').addEventListener('click', function () {
+    if (emu) { emu.uninstall(); emu = null; window.__emu = null; }
+    document.getElementById('frame').src = 'about:blank';
+    log('Uninstalled.');
+  });
+})();
+</script>
+</body>
+</html>

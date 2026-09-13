@@ -29,12 +29,20 @@ Exit code 0 with no errors, 1 otherwise, so it can gate a pipeline. Add `--json`
 for machine-readable output.
 
 ```bash
-node harness/emulator.test.js      # run-time emulator, 38 assertions
-node harness/lint/lint.test.js     # lint rules, 33 assertions
+node harness/emulator.test.js      # run-time emulator, 50 assertions
+node harness/lint/lint.test.js     # lint rules, 51 assertions
 ```
 
 **Zero errors to deploy.** Warnings are advisory but each one is a real
 behaviour, not style.
+
+`emulator.test.js` only exercises hand-authored scenarios against `D2LEmulator`
+directly. To get build-specific runtime coverage against a real SCORM build's
+`index.html` — not just the library — serve `harness/` over http(s) and open
+`harness/emulator-harness.html`: it installs the emulator as the page's own
+API, loads your build in an iframe at the same parent depth the real player
+uses, and gives you `report()` on demand. Pick "Instructor (preview)" to
+confirm your build's credit-guard actually holds when writes are discarded.
 
 ---
 
@@ -111,7 +119,19 @@ Static analysis cannot catch everything. In order of likelihood:
    differed between two courses on this tenant.
 3. **The topic was renamed or opened in D2L's HTML editor.** Both re-serialize
    the page and silently corrupt inline JS and SVG. Not recoverable; redeploy.
-4. **A behaviour we have not measured.** Add a probe rather than guessing, then
+4. **A data-contract naming mismatch between an authoring script and the
+   consuming page.** A known blind spot: the lint only checks *how* a script
+   is loaded (`topic/no-static-script-src` and friends), never *what global it
+   sets* versus what the page reads. A generator that writes
+   `window.MY_PROJECT_DATA` while `init()` reads `window.MY_PROJ_DATA` passes
+   the gate clean — the script tag itself loaded fine and fired `onload`, the
+   lint has no way to see the name drift. This only surfaces by actually
+   running the build: serve it locally, then read the verification global back
+   in the console and confirm the data it references (e.g. `.items.length`)
+   is real, not `undefined`. **Always do this once after the lint passes and
+   before deploying** — a clean lint result proves the loading mechanism is
+   sound, not that the data arrived under the name the page expects.
+5. **A behaviour we have not measured.** Add a probe rather than guessing, then
    add the rule so nobody hits it twice.
 
 ---
