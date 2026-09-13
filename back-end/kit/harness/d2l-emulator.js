@@ -151,8 +151,7 @@
        'no-credit' (tenant-profile.json: noCreditMeansNotRecorded,
        completedStatusLocksFurtherAttempts). Settable directly via opts, or
        inferred from role since an Instructor's own launch is always a preview
-       on this tenant. Previously hardcoded to 'credit'/'normal' regardless of
-       role, so the emulator could not reproduce either behavior at all. */
+       on this tenant. */
     var credit = (opts.credit !== undefined) ? opts.credit
                : (role === 'Instructor' ? 'no-credit' : 'credit');
     var mode = (opts.mode !== undefined) ? opts.mode
@@ -293,9 +292,7 @@
          review. On this tenant every SetValue is then accepted with error 0 while
          being silently discarded. Reproduce exactly that: report success, write
          nothing. A package that guards on credit before writing never reaches this
-         branch at all; one that does not gets flagged, which is the entire point
-         -- this closes the gap where the emulator could not previously catch the
-         single most important SCORM failure mode on this tenant. */
+         branch; one that does not gets flagged, which is the entire point. */
       if (credit === 'no-credit') {
         violate('discarded-no-credit',
           'SetValue("' + key + '", "' + val + '") returned error 0 but was DISCARDED: ' +
@@ -371,7 +368,6 @@
     var realFetch = global.fetch ? global.fetch.bind(global) : null;
     var reachableFromScorm = unwrap(api.reachableFromScorm, false).value;
     var studentBlocked = unwrap(api.studentBlockedFromClassData, true).value;
-    /* role is already in scope, computed above alongside credit/mode. */
 
     function jsonResponse(status, body) {
       return Promise.resolve(new Response(JSON.stringify(body), {
