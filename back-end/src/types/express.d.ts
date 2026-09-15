@@ -1,14 +1,9 @@
-export interface AuthenticatedUser {
-  id: string;
-  displayName: string;
-  email: string | null;
-  role: string;
-}
+import type { User } from '../db/schema.js';
 
 declare global {
   namespace Express {
     interface Request {
-      user: AuthenticatedUser;
+      user: User;
     }
   }
 }
