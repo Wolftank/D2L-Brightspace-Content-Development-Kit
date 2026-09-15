@@ -85,6 +85,9 @@ export interface TurnLimits {
 /** A named group of tools. The agent sees each one as `mcp__<name>__<tool>`. */
 export interface ToolServerSpec {
   name: string;
+  // A tool server holds tools with different input types; `any` erases that
+  // difference the way an existential type would.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   tools: ToolDef<any>[];
 }
 
