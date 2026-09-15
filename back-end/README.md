@@ -23,15 +23,21 @@ npm run dev
 - `npm test` — run the Vitest suite in `src/`
 - `npm run lint` — ESLint over `src/` (`kit/` is excluded; it's plain JS with its own conventions)
 - `npm run typecheck` — `tsc --noEmit`
+- `npm run db:generate` — generate a Drizzle migration from `src/db/schema.ts` into `src/db/migrations/`, after changing the schema
 
 ## Inside `src/`
 
-- `server.ts` — starts the HTTP server, wires up the routes from `../docs/architecture.md`
+- `server.ts` — wires the real dependencies (`buildDeps`) and starts `createApp(deps)` listening on `127.0.0.1`
+- `app.ts` — `createApp(deps)`: the Express app, without listening
+- `deps.ts` — the `Deps` type: one field per service, repository, and driver the app needs
+- `identity.ts` — the auth middleware; sets `req.user` to the local-mode stub user
+- `errors.ts` — the error classes and the error-handling middleware, mapping to the `{ error: { code, message, details? } }` envelope
 - `config.ts` — the zod-validated config read from the environment
+- `db/` — the Drizzle schema, migrations, `openDb`, and the repositories
 - `routes/` — one file per endpoint's handler logic
 - `agent/` — the `AgentDriver` interface, `ClaudeAgentDriver`, and (later) `CopilotAgentDriver`
 - `pipeline/` — the runner and the session service, emitting events to the event stream
 - `tilt-udl/` — the pedagogy check
 - `deploy/` — the D2L API client; see its own README for why this is the piece most likely to need real design work
 
-Everything under `src/` beyond `config.ts` and `server.ts` is a stub right now — real implementation TBD by the back-end track, starting with V1 ([`../docs/v1.md`](../docs/v1.md)).
+Wiring lives in one `createApp(deps)` function; `server.ts` calls it with real dependencies, tests call it with fakes. Full design in [`../docs/architecture.md`](../docs/architecture.md); the first slice being built is scoped in [`../docs/v1.md`](../docs/v1.md).
