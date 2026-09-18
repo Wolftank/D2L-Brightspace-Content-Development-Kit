@@ -28,4 +28,17 @@ describe('App', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/projects', expect.objectContaining({ method: 'POST' }));
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/projects/project-1/messages', expect.objectContaining({ method: 'POST' }));
   });
+
+  it('renders an API error message when the build request fails', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      error: { code: 'turn_active', message: 'A turn is already active for this project' },
+    }), { status: 409 })));
+    render(<App />);
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Project title' }), { target: { value: 'Cell division' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'What should students learn or do?' }), { target: { value: 'Create a practice quiz.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Build activity' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('A turn is already active for this project');
+  });
 });
