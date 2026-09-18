@@ -37,3 +37,7 @@ npm run dev:stub
 - `stub/server.ts` — the stub back end, until the real routes land
 - `vite.config.ts` — the dev server proxy and the Vitest configuration
 - `.env.stub` — the proxy target used by `dev:stub`
+
+## V1 configurator
+
+The V1 screen follows [`docs/v1.md`](../docs/v1.md): it collects a project title and one instructor request, creates a SCORM project, submits the request, displays Server-Sent Event progress, and renders the returned build and QA findings. The build card provides the download endpoint when the QA gate passes.
