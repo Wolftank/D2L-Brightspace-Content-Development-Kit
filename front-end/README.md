@@ -20,8 +20,6 @@ npm run dev:stub
 
 `dev:stub` starts Vite in the `stub` mode, whose `.env.stub` points the proxy at the stub on port 3001.
 
-The `allowScripts` field in `package.json` is npm 11's allowlist for packages that run install scripts; esbuild is approved there so `npm install` builds it without prompting. npm 10, which Node 20 ships with, ignores the field.
-
 ## Scripts
 
 - `npm run dev` — serve the app, proxying `/api` to the back end
@@ -39,14 +37,3 @@ The `allowScripts` field in `package.json` is npm 11's allowlist for packages th
 - `stub/server.ts` — the stub back end, until the real routes land
 - `vite.config.ts` — the dev server proxy and the Vitest configuration
 - `.env.stub` — the proxy target used by `dev:stub`
-
-## The stub back end
-
-The stub serves the six V1 endpoints plus `/api/health` and `/api/me` with the shapes from the architecture doc, keeps everything in memory, and plays a scripted turn on the event stream over about seven seconds. The stream honors `Last-Event-ID` and `?after=`, so reconnecting replays what was missed. The Download link returns a valid, empty zip.
-
-To see the failure states, include a keyword in the message text:
-
-- `[qa-fail]` — the build finishes with status `failed` and two QA gate findings
-- `[turn-fail]` — the turn ends with `turn.failed` and no build
-
-The stub is deleted in the PR that lands the message route (B12), when `dev:stub` goes away and `dev` is the only mode.
