@@ -17,6 +17,25 @@ function fakeDeps(): Deps {
       ensureLocalUser: () => fakeUser,
       get: (id) => (id === fakeUser.id ? fakeUser : undefined),
     },
+    projects: {
+      create: () => {
+        throw new Error('not used by these tests');
+      },
+      get: () => undefined,
+      setSessionId: () => {},
+    },
+    events: {
+      append: (input) => ({
+        seq: 1,
+        projectId: input.projectId,
+        turnId: input.turnId ?? null,
+        kind: input.kind,
+        payload: input.payload,
+        ts: Date.now(),
+      }),
+      after: () => [],
+      subscribe: () => () => {},
+    },
     driver: {
       probe: async () => ({ ok: true, version: '0.0.0' }),
     },
