@@ -26,12 +26,12 @@ export interface AppendEventInput {
 export type EventListener = (event: Event) => void;
 
 /**
- * The in-process event bus: stores every event and fans it out to a
- * project's live subscribers. Per docs/architecture.md's "Event stream", the
- * server always persists before pushing, so replay and the live feed can
- * never disagree about what happened.
+ * The event service: stores every event and notifies a project's live
+ * subscribers. Per docs/architecture.md's "Event stream", the server always
+ * persists before pushing, so replay and the live feed can never disagree
+ * about what happened.
  */
-export interface EventBus {
+export interface EventService {
   /** Persists the event, then notifies `projectId`'s live subscribers with the stored, seq-assigned row. */
   append(input: AppendEventInput): Event;
   /** Stored events for `projectId` after `seq`, ascending — for replay. */
@@ -40,7 +40,7 @@ export interface EventBus {
   subscribe(projectId: string, listener: EventListener): () => void;
 }
 
-export function createEventBus(eventsRepo: EventsRepo): EventBus {
+export function createEventService(eventsRepo: EventsRepo): EventService {
   const subscribers = new Map<string, Set<EventListener>>();
 
   return {

@@ -11,7 +11,7 @@ import { users as usersTable, type Project, type User } from '../db/schema.js';
 import { testDb } from '../db/test-db.js';
 import { createUsersRepo } from '../db/users.js';
 import type { Deps } from '../deps.js';
-import { createEventBus, type EventBus } from '../pipeline/events.js';
+import { createEventService, type EventService } from '../pipeline/events.js';
 
 interface Frame {
   seq: number;
@@ -101,7 +101,7 @@ function openSse(
 describe('GET /api/projects/:projectId/events', () => {
   let db: Db;
   let projects: ProjectsRepo;
-  let bus: EventBus;
+  let service: EventService;
   let owner: User;
   let project: Project;
   let server: http.Server;
@@ -111,7 +111,7 @@ describe('GET /api/projects/:projectId/events', () => {
     return {
       users: { ensureLocalUser: () => owner, get: (id) => (id === owner.id ? owner : undefined) },
       projects,
-      events: bus,
+      events: service,
       driver: { probe: async () => ({ ok: true }) },
       ...overrides,
     };
@@ -122,7 +122,7 @@ describe('GET /api/projects/:projectId/events', () => {
     owner = createUsersRepo(db).ensureLocalUser();
     projects = createProjectsRepo(db);
     project = projects.create({ ownerId: owner.id, title: 'Cell division practice' });
-    bus = createEventBus(createEventsRepo(db));
+    service = createEventService(createEventsRepo(db));
   });
 
   afterEach(async () => {
@@ -177,14 +177,43 @@ describe('GET /api/projects/:projectId/events', () => {
     expect(res.body.error.code).toBe('invalid_request');
   });
 
-  it('replays full history from the beginning when no cursor is given', async () => {
-    const first = bus.append({ projectId: project.id, kind: 'turn.started', payload: { turnId: 't1' } });
-    const second = bus.append({ projectId: project.id, kind: 'turn.completed', payload: { turnId: 't1' } });
+  it('rejects an empty Last-Event-ID rather than silently falling back to a valid ?after=', async () => {
+    const app = createApp(fakeDeps());
+    const res = await request(app)
+      .get(`/api/projects/${project.id}/events?after=0`)
+      .set('Last-Event-ID', '');
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('invalid_request');
+  });
+
+  it.each([
+    ['5.0', 'a decimal'],
+    ['1e3', 'exponential notation'],
+    ['0x10', 'hex notation'],
+    [' 5 ', 'surrounded by whitespace'],
+    ['', 'empty'],
+  ])('rejects a ?after= cursor that is %s (%s) rather than coercing it', async (value) => {
+    // Delivered via the query string, not the Last-Event-ID header: HTTP
+    // header values get OWS-trimmed in transit, which would silently turn
+    // ' 5 ' into a valid '5' before it ever reached our validation.
+    const app = createApp(fakeDeps());
+    const res = await request(app).get(`/api/projects/${project.id}/events`).query({ after: value });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('invalid_request');
+  });
+
+  it('replays full history from the beginning when no cursor is given, over a proper SSE response', async () => {
+    const first = service.append({ projectId: project.id, kind: 'turn.started', payload: { turnId: 't1' } });
+    const second = service.append({ projectId: project.id, kind: 'turn.completed', payload: { turnId: 't1' } });
 
     await startServer(fakeDeps());
-    const { reader, req } = await openSse(port, `/api/projects/${project.id}/events`);
+    const { reader, req, res } = await openSse(port, `/api/projects/${project.id}/events`);
     const frames = await reader.waitFor(2);
 
+    expect(res.headers['content-type']).toMatch(/^text\/event-stream/);
+    expect(res.headers['cache-control']).toBe('no-cache');
     expect(frames).toEqual([
       { seq: first.seq, kind: 'turn.started', payload: { turnId: 't1' } },
       { seq: second.seq, kind: 'turn.completed', payload: { turnId: 't1' } },
@@ -193,8 +222,8 @@ describe('GET /api/projects/:projectId/events', () => {
   });
 
   it('resumes via Last-Event-ID, replaying only what comes after it', async () => {
-    const first = bus.append({ projectId: project.id, kind: 'turn.started', payload: {} });
-    const second = bus.append({ projectId: project.id, kind: 'turn.status', payload: { text: 'go' } });
+    const first = service.append({ projectId: project.id, kind: 'turn.started', payload: {} });
+    const second = service.append({ projectId: project.id, kind: 'turn.status', payload: { text: 'go' } });
 
     await startServer(fakeDeps());
     const { reader, req } = await openSse(port, `/api/projects/${project.id}/events`, {
@@ -207,8 +236,8 @@ describe('GET /api/projects/:projectId/events', () => {
   });
 
   it('resumes via ?after=, replaying only what comes after it', async () => {
-    const first = bus.append({ projectId: project.id, kind: 'turn.started', payload: {} });
-    const second = bus.append({ projectId: project.id, kind: 'turn.status', payload: { text: 'go' } });
+    const first = service.append({ projectId: project.id, kind: 'turn.started', payload: {} });
+    const second = service.append({ projectId: project.id, kind: 'turn.status', payload: { text: 'go' } });
 
     await startServer(fakeDeps());
     const { reader, req } = await openSse(port, `/api/projects/${project.id}/events?after=${first.seq}`);
@@ -219,8 +248,8 @@ describe('GET /api/projects/:projectId/events', () => {
   });
 
   it('prefers Last-Event-ID over ?after= when both are given', async () => {
-    const first = bus.append({ projectId: project.id, kind: 'turn.started', payload: {} });
-    const second = bus.append({ projectId: project.id, kind: 'turn.status', payload: { text: 'go' } });
+    const first = service.append({ projectId: project.id, kind: 'turn.started', payload: {} });
+    const second = service.append({ projectId: project.id, kind: 'turn.status', payload: { text: 'go' } });
 
     await startServer(fakeDeps());
     const { reader, req } = await openSse(port, `/api/projects/${project.id}/events?after=0`, {
@@ -233,13 +262,13 @@ describe('GET /api/projects/:projectId/events', () => {
   });
 
   it('continues seamlessly from replay into live events', async () => {
-    const first = bus.append({ projectId: project.id, kind: 'turn.started', payload: {} });
+    const first = service.append({ projectId: project.id, kind: 'turn.started', payload: {} });
 
     await startServer(fakeDeps());
     const { reader, req } = await openSse(port, `/api/projects/${project.id}/events`);
     await reader.waitFor(1);
 
-    const second = bus.append({ projectId: project.id, kind: 'turn.completed', payload: {} });
+    const second = service.append({ projectId: project.id, kind: 'turn.completed', payload: {} });
     const frames = await reader.waitFor(2);
 
     expect(frames).toEqual([
@@ -249,26 +278,28 @@ describe('GET /api/projects/:projectId/events', () => {
     req.destroy();
   });
 
-  it('delivers an event appended right as replay finishes exactly once, in order', async () => {
-    const preRace = bus.append({ projectId: project.id, kind: 'turn.started', payload: {} });
+  it('delivers an event appended right as replay finishes exactly once, in order (event only in the live buffer)', async () => {
+    const preRace = service.append({ projectId: project.id, kind: 'turn.started', payload: {} });
 
     let injected = false;
-    let raceEvent: ReturnType<typeof bus.append> | undefined;
-    const racyBus: EventBus = {
-      ...bus,
+    let raceEvent: ReturnType<typeof service.append> | undefined;
+    const racyService: EventService = {
+      ...service,
       after(projectId, seq) {
-        const list = bus.after(projectId, seq);
+        const list = service.after(projectId, seq);
         if (!injected) {
           injected = true;
           // Simulate a concurrent append landing after history was read for
           // replay, but before the route has switched from replaying to live.
-          raceEvent = bus.append({ projectId, kind: 'turn.completed', payload: {} });
+          // At this point the event exists ONLY in the live buffer, not in
+          // the `list` already captured above.
+          raceEvent = service.append({ projectId, kind: 'turn.completed', payload: {} });
         }
         return list;
       },
     };
 
-    await startServer(fakeDeps({ events: racyBus }));
+    await startServer(fakeDeps({ events: racyService }));
     const { reader, req } = await openSse(port, `/api/projects/${project.id}/events`);
     const frames = await reader.waitFor(2);
 
@@ -285,29 +316,80 @@ describe('GET /api/projects/:projectId/events', () => {
     req.destroy();
   });
 
+  it('delivers an event appended right as replay finishes exactly once, in order (event in both history and the live buffer)', async () => {
+    const preRace = service.append({ projectId: project.id, kind: 'turn.started', payload: {} });
+
+    let injected = false;
+    let raceEvent: ReturnType<typeof service.append> | undefined;
+    const racyService: EventService = {
+      ...service,
+      after(projectId, seq) {
+        if (!injected) {
+          injected = true;
+          // Append BEFORE the underlying history read runs, so this event
+          // lands in both `listAfter`'s result AND the live buffer (the
+          // listener is already subscribed). Only the route's `lastSeq`
+          // guard stands between this and a duplicate.
+          raceEvent = service.append({ projectId, kind: 'turn.completed', payload: {} });
+        }
+        return service.after(projectId, seq);
+      },
+    };
+
+    await startServer(fakeDeps({ events: racyService }));
+    const { reader, req } = await openSse(port, `/api/projects/${project.id}/events`);
+    const frames = await reader.waitFor(2);
+
+    expect(raceEvent).toBeDefined();
+    expect(frames).toEqual([
+      { seq: preRace.seq, kind: 'turn.started', payload: {} },
+      { seq: raceEvent!.seq, kind: 'turn.completed', payload: {} },
+    ]);
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(reader.all()).toHaveLength(2);
+
+    req.destroy();
+  });
+
   it('unsubscribes and clears the keepalive timer on client disconnect', async () => {
     let capturedUnsubscribe: (() => void) | undefined;
-    const trackingBus: EventBus = {
-      ...bus,
+    const trackingService: EventService = {
+      ...service,
       subscribe(projectId, listener) {
-        const unsub = bus.subscribe(projectId, listener);
+        const unsub = service.subscribe(projectId, listener);
         capturedUnsubscribe = vi.fn(unsub);
         return capturedUnsubscribe;
       },
     };
+    const setIntervalSpy = vi.spyOn(global, 'setInterval');
     const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
 
-    await startServer(fakeDeps({ events: trackingBus }));
+    await startServer(fakeDeps({ events: trackingService }));
     // The response callback (headers received) only fires once the route's
     // fully synchronous handler — subscribe, replay, and keepalive setup all
-    // included — has already run, so it's safe to disconnect immediately.
-    const { req } = await openSse(port, `/api/projects/${project.id}/events`);
+    // included — has already run, so the keepalive timer is already set up.
+    const { req, res } = await openSse(port, `/api/projects/${project.id}/events`);
+
+    expect(setIntervalSpy).toHaveBeenCalledTimes(1);
+    expect(setIntervalSpy.mock.calls[0]?.[1]).toBe(15_000);
+    const keepaliveFn = setIntervalSpy.mock.calls[0]?.[0] as () => void;
+    const keepaliveHandle = setIntervalSpy.mock.results[0]?.value;
+
+    // Fire the keepalive callback directly rather than waiting 15s for real.
+    const nextChunk = new Promise<string>((resolve) => {
+      res.once('data', (chunk: Buffer) => resolve(chunk.toString('utf8')));
+    });
+    keepaliveFn();
+    expect(await nextChunk).toBe(': keepalive\n\n');
 
     req.destroy();
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     expect(capturedUnsubscribe).toHaveBeenCalledTimes(1);
-    expect(clearIntervalSpy).toHaveBeenCalled();
+    expect(clearIntervalSpy).toHaveBeenCalledWith(keepaliveHandle);
+
+    setIntervalSpy.mockRestore();
     clearIntervalSpy.mockRestore();
   });
 });

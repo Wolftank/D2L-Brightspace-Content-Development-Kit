@@ -6,7 +6,7 @@ import { openDb } from './db/index.js';
 import { createEventsRepo } from './db/events.js';
 import { createProjectsRepo } from './db/projects.js';
 import { createUsersRepo } from './db/users.js';
-import { createEventBus } from './pipeline/events.js';
+import { createEventService } from './pipeline/events.js';
 
 function buildDeps(cfg: Config): Deps {
   const db = openDb(join(cfg.DATA_DIR, 'cdk.db'));
@@ -14,7 +14,7 @@ function buildDeps(cfg: Config): Deps {
   return {
     users: createUsersRepo(db),
     projects: createProjectsRepo(db),
-    events: createEventBus(createEventsRepo(db)),
+    events: createEventService(createEventsRepo(db)),
     driver: {
       async probe() {
         return { ok: false, detail: 'no agent driver configured yet' };

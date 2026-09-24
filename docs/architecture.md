@@ -311,7 +311,7 @@ How `back-end/src` is laid out, so that each concern above has exactly one home.
 |---|---|
 | `src/routes/` | HTTP only: parse, validate (zod), call one service, shape the response |
 | `src/services/` | Projects, messages, builds, deployments, and the workspace service. Receives plain arguments, never `req`/`res` |
-| `src/pipeline/` | The runner, the session service, and event fan-out |
+| `src/pipeline/` | The runner, the session service, and the event service |
 | `src/agent/` | `AgentDriver` and the drivers |
 | `src/tools/` | The `cdk` tool handlers, plus the in-process and stdio adapters |
 | `src/tilt-udl/` | The pedagogy check |
@@ -355,6 +355,7 @@ Every document in `docs/` and every comment in `back-end/src/` uses these words,
 | **emulator** | The kit's local reproduction of the tenant's D2L behavior. |
 | **preview** | A build rendered through the emulator. |
 | **tool** | A function the back end exposes to the agent. |
+| **event service** | The back-end component that persists events and notifies a project's live subscribers, backing the event stream. |
 | **event stream** | The per-project Server-Sent Events feed. |
 | **local mode** | The app running on the instructor's own machine, for one instructor. |
 | **hosted mode** | The app running on a campus server, for many instructors. |

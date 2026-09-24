@@ -4,7 +4,10 @@ import type { Event } from '../db/schema.js';
 import type { Deps } from '../deps.js';
 import { NotFound } from '../errors.js';
 
-const cursorSchema = z.coerce.number().int().min(0);
+const cursorSchema = z
+  .string()
+  .regex(/^\d+$/, 'must be a non-negative integer')
+  .transform(Number);
 
 const KEEPALIVE_MS = 15_000;
 
@@ -25,7 +28,7 @@ export function eventsRouter(deps: Deps): Router {
     }
 
     const lastEventId = req.header('Last-Event-ID');
-    const cursorSource = lastEventId !== undefined ? lastEventId : (req.query.after ?? 0);
+    const cursorSource = lastEventId !== undefined ? lastEventId : (req.query.after ?? '0');
     const parsedCursor = cursorSchema.safeParse(cursorSource);
     if (!parsedCursor.success) {
       next(parsedCursor.error);
@@ -38,9 +41,7 @@ export function eventsRouter(deps: Deps): Router {
     res.flushHeaders();
 
     const write = (event: Event) => {
-      res.write(`id: ${event.seq}\n`);
-      res.write(`event: ${event.kind}\n`);
-      res.write(`data: ${JSON.stringify(event.payload)}\n\n`);
+      res.write(`id: ${event.seq}\nevent: ${event.kind}\ndata: ${JSON.stringify(event.payload)}\n\n`);
     };
 
     // Subscribe before reading history, so any event appended during replay
@@ -62,6 +63,16 @@ export function eventsRouter(deps: Deps): Router {
       }
     });
 
+    // Registered immediately after subscribing, and on `res` rather than
+    // `req` (whose 'close' fires once the request body is read, not only on
+    // client disconnect), so a throw from the replay below still leaves the
+    // subscriber and any keepalive timer cleaned up once the connection ends.
+    const timer: { keepalive?: NodeJS.Timeout } = {};
+    res.on('close', () => {
+      if (timer.keepalive) clearInterval(timer.keepalive);
+      unsubscribe();
+    });
+
     for (const event of deps.events.after(project.id, cursor)) {
       lastSeq = event.seq;
       write(event);
@@ -74,14 +85,9 @@ export function eventsRouter(deps: Deps): Router {
       }
     }
 
-    const keepalive = setInterval(() => {
+    timer.keepalive = setInterval(() => {
       res.write(': keepalive\n\n');
     }, KEEPALIVE_MS);
-
-    req.on('close', () => {
-      clearInterval(keepalive);
-      unsubscribe();
-    });
   });
 
   return router;
