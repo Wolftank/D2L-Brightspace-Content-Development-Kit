@@ -206,6 +206,7 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
             status: 'checking',
             avenue: project.avenue ?? 'scorm',
             qa: null,
+            error: null,
             pedagogy: null,
             turnId: turn.id,
             createdAt: Date.now(),
@@ -221,6 +222,7 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
           if (!build) return;
           build.status = passed ? 'ready' : 'failed';
           build.qa = { passed, findings: passed ? [] : FAILED_FINDINGS };
+          build.error = passed ? null : { code: 'qa_failed', message: 'The QA gate reported 1 error(s)' };
           append(state, 'build.updated', { build: { ...build } });
         },
       ],

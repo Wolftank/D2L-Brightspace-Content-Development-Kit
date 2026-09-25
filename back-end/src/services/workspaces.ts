@@ -1,13 +1,8 @@
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { WorkspaceMissing } from '../errors.js';
-
-const here = dirname(fileURLToPath(import.meta.url));
-
-/** `back-end/kit`, resolved from this file's own location. */
-const DEFAULT_KIT_DIR = join(here, '..', '..', 'kit');
+import { KIT_DIR } from '../kit.js';
 
 // Windows can hold a file open for a moment (the preview server, antivirus)
 // right after it was written. Three attempts, 100ms apart, clears that
@@ -25,6 +20,9 @@ export interface WorkspaceServiceDeps {
 export interface WorkspaceService {
   /** The project's workspace directory: `<dataDir>/projects/<projectId>/workspace`. */
   pathFor(projectId: string): string;
+
+  /** A build version's directory: `<dataDir>/projects/<projectId>/builds/<version>`. */
+  buildPathFor(projectId: string, version: string): string;
 
   /**
    * Provisions a fresh workspace: an empty `files/` for instructor uploads,
@@ -56,7 +54,7 @@ export class BuildVersionExists extends Error {
 }
 
 export function createWorkspaceService(deps: WorkspaceServiceDeps): WorkspaceService {
-  const kitDir = deps.kitDir ?? DEFAULT_KIT_DIR;
+  const kitDir = deps.kitDir ?? KIT_DIR;
   const starterDir = join(kitDir, 'skills', 'd2l-scorm-package', 'assets', 'starter');
 
   function projectDir(projectId: string): string {
@@ -69,6 +67,10 @@ export function createWorkspaceService(deps: WorkspaceServiceDeps): WorkspaceSer
 
   function buildsDir(projectId: string): string {
     return join(projectDir(projectId), 'builds');
+  }
+
+  function buildPathFor(projectId: string, version: string): string {
+    return join(buildsDir(projectId), version);
   }
 
   /** Throws `WorkspaceMissing` rather than silently provisioning one, per `create`'s contract. */
@@ -117,7 +119,7 @@ export function createWorkspaceService(deps: WorkspaceServiceDeps): WorkspaceSer
 
   async function copyOutput(projectId: string, version: string): Promise<string> {
     const workspaceDir = await assertProvisioned(projectId);
-    const dest = join(buildsDir(projectId), version);
+    const dest = buildPathFor(projectId, version);
     if (await pathExists(dest)) {
       throw new BuildVersionExists(version);
     }
@@ -125,7 +127,7 @@ export function createWorkspaceService(deps: WorkspaceServiceDeps): WorkspaceSer
     return dest;
   }
 
-  return { pathFor, create, hashOutput, copyOutput };
+  return { pathFor, buildPathFor, create, hashOutput, copyOutput };
 }
 
 async function pathExists(path: string): Promise<boolean> {
