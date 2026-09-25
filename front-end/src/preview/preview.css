@@ -1,0 +1,11 @@
+.build-actions, .preview-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.build-actions button, .preview-controls button { margin: 0; }
+.preview-panel { max-width: 1124px; margin: 0 auto 56px; padding: 28px; background: #fff; border: 1px solid #dfdfd9; border-radius: 10px; }
+.preview-header { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+.preview-header h2 { margin-bottom: 12px; }
+.preview-header p { line-height: 1.5; }
+.preview-stage { margin-top: 20px; }
+.preview-stage iframe { width: 100%; height: 620px; border: 1px solid #c8cfca; background: white; }
+.preview-panel :focus-visible { outline: 3px solid #a65169; outline-offset: 3px; }
+@media (max-width: 1180px) { .preview-panel { margin-left: 28px; margin-right: 28px; } }
+@media (max-width: 760px) { .preview-panel { padding: 18px; } }

@@ -6,6 +6,7 @@
  * Deleted in the PR that lands B12.
  */
 import { randomUUID } from 'node:crypto';
+import { previewZip, startPreviewServer } from './preview';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type {
   ApiErrorBody,
@@ -31,8 +32,6 @@ const HOST = '127.0.0.1';
 const PORT = Number(process.env.STUB_PORT ?? 3001);
 const KEEPALIVE_MS = 15_000;
 
-/** Bytes of a valid zip archive with no entries, so the Download link produces a file. */
-const EMPTY_ZIP = Buffer.from([0x50, 0x4b, 0x05, 0x06, ...new Array<number>(18).fill(0)]);
 
 const user: User = { id: 'stub-user', displayName: 'Stub Instructor', email: null, role: 'instructor' };
 
@@ -357,13 +356,14 @@ function streamEvents(req: IncomingMessage, res: ServerResponse, state: ProjectS
 function download(res: ServerResponse, buildId: string): void {
   const entry = builds.get(buildId);
   if (!entry) throw new HttpError(404, 'not_found', 'Build not found');
+  if (entry.build.status !== 'ready') throw new HttpError(409, 'build_not_ready', 'Build is not ready');
   const name = `${entry.state.project.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-v${entry.build.version}.zip`;
   res.writeHead(200, {
     'Content-Type': 'application/zip',
     'Content-Disposition': `attachment; filename="${name}"`,
-    'Content-Length': EMPTY_ZIP.length,
+    'Content-Length': previewZip.length,
   });
-  res.end(EMPTY_ZIP);
+  res.end(previewZip);
 }
 
 async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -422,3 +422,6 @@ server.listen(PORT, HOST, () => {
   console.log(`stub back end listening on http://${HOST}:${PORT}`);
   console.log('Scenarios: include [qa-fail] or [turn-fail] in the message text to play a failure.');
 });
+
+const previewServer = startPreviewServer((id) => builds.get(id)?.build);
+server.on('close', () => previewServer.close());

@@ -9,6 +9,7 @@ export default tseslint.config(
   {
     ignores: ['dist/**', 'node_modules/**', 'test-results/**', 'playwright-report/**', 'blob-report/**'],
   },
+  { files: ['preview/*.js'], languageOptions: { globals: globals.browser } },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
