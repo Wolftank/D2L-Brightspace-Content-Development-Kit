@@ -56,10 +56,10 @@ export interface BuildDownload {
 
 export interface BuildService {
   /**
-   * Copies the project's output into the next build version, runs the QA gate
-   * on the copy, and returns the finished build. Emits `build.created` when
-   * the build is stored as `checking`, and `build.updated` once its final
-   * status is stored.
+   * Stores the next build version as `checking`, copies the project's output
+   * into it, runs the QA gate on the copy, and returns the finished build.
+   * Emits `build.created` once the build is stored, and `build.updated` once
+   * its final status is stored. A failed copy finishes the build as `failed`.
    */
   create(projectId: string, turnId?: string): Promise<Build>;
 
@@ -150,19 +150,28 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
     return build;
   }
 
+  async function copyAndCheck(projectId: string, version: number): Promise<FinishBuildInput> {
+    let buildDir: string;
+    try {
+      buildDir = await deps.workspaces.copyOutput(projectId, String(version));
+    } catch (err) {
+      return failure('copy_failed', `The output could not be copied into the build: ${(err as Error).message}`);
+    }
+    try {
+      return await check(buildDir);
+    } catch (err) {
+      return failure('gate_crashed', `The QA gate could not run: ${(err as Error).message}`);
+    }
+  }
+
   async function create(projectId: string, turnId?: string): Promise<Build> {
+    // No await between choosing the version and storing the row, so concurrent
+    // calls never pick the same version and a failed copy uses its version up.
     const version = deps.builds.nextVersion(projectId);
-    const buildDir = await deps.workspaces.copyOutput(projectId, String(version));
     const build = deps.builds.create({ projectId, version, avenue: AVENUE, turnId });
     deps.events.append({ projectId, turnId, kind: 'build.created', payload: { build } });
 
-    let result: FinishBuildInput;
-    try {
-      result = await check(buildDir);
-    } catch (err) {
-      result = failure('gate_crashed', `The QA gate could not run: ${(err as Error).message}`);
-    }
-
+    const result = await copyAndCheck(projectId, version);
     const finished = deps.builds.finish(build.id, result);
     deps.events.append({ projectId, turnId, kind: 'build.updated', payload: { build: finished } });
     return finished;

@@ -106,6 +106,26 @@ describe('build service', () => {
       );
     });
 
+    it('fails a build whose copy fails, using up its version without blocking the next build', async () => {
+      await fs.mkdir(workspaces.buildPathFor(projectId, '1'), { recursive: true });
+      const kinds: string[] = [];
+      events.subscribe(projectId, (event) => kinds.push(event.kind));
+
+      const failed = await builds.create(projectId);
+      const next = await builds.create(projectId);
+
+      expect(failed).toMatchObject({ version: 1, status: 'failed', qa: null, error: { code: 'copy_failed' } });
+      expect(kinds.slice(0, 2)).toEqual(['build.created', 'build.updated']);
+      expect(next).toMatchObject({ version: 2, status: 'ready' });
+    });
+
+    it('gives concurrent builds of one project distinct versions', async () => {
+      const [first, second] = await Promise.all([builds.create(projectId), builds.create(projectId)]);
+
+      expect([first.version, second.version].sort()).toEqual([1, 2]);
+      expect([first.status, second.status]).toEqual(['ready', 'ready']);
+    });
+
     it('saves the report as qa.json in the build directory and on the build', async () => {
       const build = await builds.create(projectId);
 
