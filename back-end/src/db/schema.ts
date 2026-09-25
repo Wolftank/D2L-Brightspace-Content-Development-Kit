@@ -1,5 +1,6 @@
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import type { ContentBlock } from '../types/content.js';
+import type { QaReport } from '../types/qa.js';
 
 export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
@@ -65,18 +66,23 @@ export const turns = sqliteTable('turns', {
 export type Turn = typeof turns.$inferSelect;
 export type NewTurn = typeof turns.$inferInsert;
 
-export const builds = sqliteTable('builds', {
-  id: text('id').primaryKey(),
-  projectId: text('project_id')
-    .notNull()
-    .references(() => projects.id),
-  version: integer('version').notNull(),
-  status: text('status', { enum: ['checking', 'ready', 'failed'] }).notNull(),
-  avenue: text('avenue', { enum: ['topic', 'scorm', 'widget', 'external'] }).notNull(),
-  qa: text('qa', { mode: 'json' }).$type<{ passed: boolean; findings: unknown[] }>(),
-  turnId: text('turn_id'),
-  createdAt: integer('created_at').notNull(),
-});
+export const builds = sqliteTable(
+  'builds',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id),
+    version: integer('version').notNull(),
+    status: text('status', { enum: ['checking', 'ready', 'failed'] }).notNull(),
+    avenue: text('avenue', { enum: ['topic', 'scorm', 'widget', 'external'] }).notNull(),
+    qa: text('qa', { mode: 'json' }).$type<QaReport>(),
+    error: text('error', { mode: 'json' }).$type<{ code: string; message: string }>(),
+    turnId: text('turn_id'),
+    createdAt: integer('created_at').notNull(),
+  },
+  (table) => [uniqueIndex('builds_project_version').on(table.projectId, table.version)],
+);
 
 export type Build = typeof builds.$inferSelect;
 export type NewBuild = typeof builds.$inferInsert;

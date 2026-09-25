@@ -73,11 +73,17 @@ export interface QaFinding {
   file: string;
   line: number | null;
   message: string;
+  because?: string;
 }
 
 export interface QaReport {
   passed: boolean;
   findings: QaFinding[];
+}
+
+export interface BuildError {
+  code: string;
+  message: string;
 }
 
 export interface PedagogyReport {
@@ -92,6 +98,7 @@ export interface Build {
   status: BuildStatus;
   avenue: Avenue;
   qa: QaReport | null;
+  error: BuildError | null;
   pedagogy: PedagogyReport | null;
   turnId: string | null;
   createdAt: number;

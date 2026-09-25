@@ -30,7 +30,7 @@ User ─< Project ─┬─< Message
 | **Message** | `id, projectId, seq, role, content[], turnId?, createdAt` | `role` is `instructor \| agent`. `content` is a list of blocks (below) |
 | **Turn** | `id, projectId, messageId, replyId?, status, startedAt?, finishedAt?, error?, usage?` | `messageId` is the instructor's message, `replyId` the agent's. `status` is `queued \| running \| completed \| failed \| cancelled` |
 | **File** | `id, projectId, name, mime, size, createdAt` | Instructor uploads: syllabus, assignment text, images |
-| **Build** | `id, projectId, version, status, avenue, qa, pedagogy?, turnId?, createdAt` | `status` is `checking \| ready \| failed`. `qa` is `{ passed, findings[] }`. `pedagogy` is `{ tilt[], udl[] }` once the pedagogy check has run on this build, otherwise null |
+| **Build** | `id, projectId, version, status, avenue, qa, error?, pedagogy?, turnId?, createdAt` | `status` is `checking \| ready \| failed`. `qa` is `{ passed, findings[] }`, each finding `{ rule, severity, file, line, message, because? }`, or null until the QA gate reports and when it produced no usable report. `error` is `{ code, message }` explaining why a build is `failed`, otherwise null. `pedagogy` is `{ tilt[], udl[] }` once the pedagogy check has run on this build, otherwise null |
 | **Deployment** | `id, buildId, status, targetCourse, location?, verification?, turnId?, confirmedAt?, createdAt` | `status` is `requested \| confirmed \| deploying \| verified \| failed`. Only the instructor moves it past `requested` |
 | **Event** | `seq, projectId, turnId?, kind, payload, ts` | What the event stream carries. Replayable by `seq` |
 

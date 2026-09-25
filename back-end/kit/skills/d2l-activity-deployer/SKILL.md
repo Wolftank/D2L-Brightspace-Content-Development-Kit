@@ -104,9 +104,9 @@ Not in Course Admin, which is why it looks missing:
 Content -> a unit -> Add Existing -> SCORM/xAPI Object -> Bulk Upload
 ```
 
-The zip must have `imsmanifest.xml` at its **root**. Use `build-scorm.ps1`,
-which passes `folder\*` to `Compress-Archive` for exactly this reason and
-validates that every declared file exists.
+The zip must have `imsmanifest.xml` at its **root**. Use the build's download
+(`GET /api/builds/:buildId/download`), which zips it that way and checks that
+every declared file exists first.
 
 At add time D2L asks for: a grade item (defaults to Yes), **Grade Calculation
 Method** (Highest Attempt by default; this is where best-of-N comes from),

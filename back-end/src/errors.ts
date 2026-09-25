@@ -25,6 +25,22 @@ export class WorkspaceMissing extends Error {
   }
 }
 
+/** A download was requested for a build whose status is not `ready`. */
+export class BuildNotReady extends Error {
+  constructor(public readonly status: string) {
+    super(`Only a ready build can be downloaded; this build is ${status}`);
+    this.name = 'BuildNotReady';
+  }
+}
+
+/** A build's `imsmanifest.xml`, or a file it declares, is missing from the build. */
+export class BuildIncomplete extends Error {
+  constructor(public readonly missing: string[]) {
+    super(`The build is missing files its manifest needs: ${missing.join(', ')}`);
+    this.name = 'BuildIncomplete';
+  }
+}
+
 /**
  * Maps thrown errors to the envelope `{ error: { code, message, details? } }`
  * from docs/architecture.md. Registered last in `createApp`.
@@ -50,6 +66,20 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   if (err instanceof TurnActive) {
     res.status(409).json({
       error: { code: 'turn_active', message: err.message, details: { turnId: err.turnId } },
+    });
+    return;
+  }
+
+  if (err instanceof BuildNotReady) {
+    res.status(409).json({
+      error: { code: 'build_not_ready', message: err.message, details: { status: err.status } },
+    });
+    return;
+  }
+
+  if (err instanceof BuildIncomplete) {
+    res.status(409).json({
+      error: { code: 'build_incomplete', message: err.message, details: { missing: err.missing } },
     });
     return;
   }
