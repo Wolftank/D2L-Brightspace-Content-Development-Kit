@@ -7,8 +7,8 @@ import { KIT_DIR } from '../kit.js';
 // Windows can hold a file open for a moment (the preview server, antivirus)
 // right after it was written. Three attempts, 100ms apart, clears that
 // without masking a real failure.
-export const COPY_RETRY_ATTEMPTS = 3;
-const COPY_RETRY_DELAY_MS = 100;
+export const LOCK_RETRY_ATTEMPTS = 3;
+const LOCK_RETRY_DELAY_MS = 100;
 
 export interface WorkspaceServiceDeps {
   /** Where projects live on disk; `config.DATA_DIR`. */
@@ -33,6 +33,9 @@ export interface WorkspaceService {
    * and the sibling `builds/` directory. Writes nothing agent-specific.
    */
   create(projectId: string): Promise<void>;
+
+  /** Removes the project's directory, its workspace and builds included. */
+  remove(projectId: string): Promise<void>;
 
   /**
    * A content hash over the sorted relative paths and contents of `out/`.
@@ -92,6 +95,15 @@ export function createWorkspaceService(deps: WorkspaceServiceDeps): WorkspaceSer
     await fs.mkdir(buildsDir(projectId), { recursive: true });
   }
 
+  async function remove(projectId: string): Promise<void> {
+    await fs.rm(projectDir(projectId), {
+      recursive: true,
+      force: true,
+      maxRetries: LOCK_RETRY_ATTEMPTS - 1,
+      retryDelay: LOCK_RETRY_DELAY_MS,
+    });
+  }
+
   async function copyKit(workspaceDir: string): Promise<void> {
     const kitTargetDir = join(workspaceDir, 'kit');
     await fs.mkdir(kitTargetDir, { recursive: true });
@@ -129,7 +141,7 @@ export function createWorkspaceService(deps: WorkspaceServiceDeps): WorkspaceSer
     return dest;
   }
 
-  return { pathFor, locate, buildPathFor, create, hashOutput, copyOutput };
+  return { pathFor, locate, buildPathFor, create, remove, hashOutput, copyOutput };
 }
 
 async function pathExists(path: string): Promise<boolean> {
@@ -164,8 +176,8 @@ async function copyWithRetry(src: string, dest: string): Promise<void> {
       return;
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
-      if (attempt >= COPY_RETRY_ATTEMPTS || (code !== 'EBUSY' && code !== 'EPERM')) throw err;
-      await delay(COPY_RETRY_DELAY_MS);
+      if (attempt >= LOCK_RETRY_ATTEMPTS || (code !== 'EBUSY' && code !== 'EPERM')) throw err;
+      await delay(LOCK_RETRY_DELAY_MS);
     }
   }
 }

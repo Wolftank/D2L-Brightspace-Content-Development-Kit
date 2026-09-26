@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { desc, eq, max } from 'drizzle-orm';
+import { asc, desc, eq, max } from 'drizzle-orm';
 import type { Db } from './index.js';
 import { builds, type Build } from './schema.js';
 
@@ -25,6 +25,8 @@ export interface BuildsRepo {
   get(id: string): Build | undefined;
   /** The project's build with the highest version, if it has any. */
   latest(projectId: string): Build | undefined;
+  /** The project's builds, oldest version first. */
+  listByProject(projectId: string): Build[];
   /** Stores a build's final status, QA gate report, error, and output hash, returning the updated row. */
   finish(id: string, input: FinishBuildInput): Build;
   /** Fails every `checking` build with `error`, returning the failed builds. */
@@ -62,6 +64,9 @@ export function createBuildsRepo(db: Db): BuildsRepo {
     },
     latest(projectId) {
       return db.select().from(builds).where(eq(builds.projectId, projectId)).orderBy(desc(builds.version)).get();
+    },
+    listByProject(projectId) {
+      return db.select().from(builds).where(eq(builds.projectId, projectId)).orderBy(asc(builds.version)).all();
     },
     finish(id, { status, qa, error, outputHash }) {
       return db

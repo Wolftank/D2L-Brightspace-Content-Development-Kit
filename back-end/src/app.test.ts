@@ -18,12 +18,20 @@ function fakeDeps(): Deps {
       get: (id) => (id === fakeUser.id ? fakeUser : undefined),
     },
     projects: {
-      create: () => {
+      create: async () => {
         throw new Error('not used by these tests');
       },
-      get: () => undefined,
-      getById: () => undefined,
-      setSessionId: () => {},
+      get: () => {
+        throw new Error('not used by these tests');
+      },
+    },
+    builds: {
+      get: () => {
+        throw new Error('not used by these tests');
+      },
+      download: async () => {
+        throw new Error('not used by these tests');
+      },
     },
     events: {
       append: (input) => ({
