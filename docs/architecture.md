@@ -213,7 +213,9 @@ Tools are the functions the back end exposes to the agent, so that the agent act
 
 Tool handlers are created per session with the project and instructor already bound, so a tool can never touch another project. Skills reach the agent through the driver, which delivers the kit's skills the way its agent takes them (see [Workspaces](#workspaces)).
 
-**The agent runs on a fixed allowlist and is never prompted.** Pre-approved: file tools inside the workspace, the shell commands the skills need (such as the QA gate), and the `cdk` tools. Everything else is denied automatically and the agent is told so in the tool result, so it adapts or explains in its message. Each driver maps this onto its agent's own permission model (see [drivers.md](drivers.md)). No driver is ever run with an "approve everything" setting.
+**The agent runs on a fixed allowlist and is never prompted.** Pre-approved: file tools inside the workspace, the agent's shell, and the `cdk` tools. Everything else is denied automatically and the agent is told so in the tool result, so it adapts or explains in its message. Each driver maps this onto its agent's own permission model (see [drivers.md](drivers.md)). No driver is ever run with an "approve everything" setting.
+
+**The shell is open until the `cdk` tools cover a turn.** The agent runs the QA gate, and anything else a turn needs, through its shell, with every command allowed, so a turn never stalls on how a command is worded. PowerShell on Windows, bash elsewhere. Shell commands run as the instructor and are not bound by the file rules: a command can read or write anything the instructor can, including other projects and the agent's sign-in. That is acceptable only in local mode, on the instructor's own machine. Hosted mode ships without a shell.
 
 ## Sessions
 
@@ -262,7 +264,7 @@ The runner and the session service talk only to this interface. Whether a driver
 
 ## Workspaces
 
-A workspace is the directory where the agent works on one project. It holds the instructor's uploads, the output the agent writes, and whatever the driver puts there for its agent. Everything the agent reads or writes for a project lives inside it, and the confinement layers below keep the agent from reaching anything outside it.
+A workspace is the directory where the agent works on one project. It holds the instructor's uploads, the output the agent writes, and whatever the driver puts there for its agent. Everything the agent reads or writes for a project lives inside it, and the confinement layers below keep the agent's file tools from reaching anything outside it. The shell is not confined in local mode (see [Tools](#tools)).
 
 **Provisioning.** The workspace service, called by `POST /projects`, creates the tree shown under [Resource model](#resource-model): `files/` empty, and `out/` holding the kit's starter for the avenue once the avenue is known. The same service copies `out/` into a build, hashes `out/` so the runner can tell whether a turn changed it, and removes the tree when the project is deleted. Nothing it writes is specific to an agent.
 
@@ -270,11 +272,11 @@ A workspace is the directory where the agent works on one project. It holds the 
 
 **Builds.** `create_build` copies `out/` into `builds/<version>/` and runs the QA gate over the copy. Preview and download serve from the build, so the instructor sees something stable while the agent keeps editing the output. Retention: every deployed build is kept, plus the newest ten others. Deleting a project removes the whole tree.
 
-**Confinement, in layers.** The agent runs with the instructor's own permissions in local mode and as the service account in hosted mode, so it is kept inside its workspace by construction rather than by trust. The layers are cumulative; each stays in place when the next is added.
+**Confinement, in layers.** The agent runs with the instructor's own permissions in local mode and as the service account in hosted mode, so its file tools are kept inside its workspace by construction rather than by trust. The layers are cumulative; each stays in place when the next is added.
 
 1. **Run inside the workspace, with a deny-by-default permission mode.** The driver starts the agent in the workspace with a mode that approves the allowlist and denies everything else without prompting.
-2. **Permission rules**, delivered by the driver the way its agent takes them. Allow reads, edits, and searches under the workspace. Deny reads of the home directory's credentials and agent configuration and of the app's data directory outside this project. Allow only the shell commands the skills need.
-3. **A pre-tool hook** in the driver, running in-process, that resolves every path in a tool input and denies anything outside the workspace's real path. This backstops the rules against `..` and symlinks.
+2. **Permission rules**, delivered by the driver the way its agent takes them. Allow reads, edits, and searches under the workspace. Deny reads of the home directory's credentials and agent configuration and of the app's data directory outside this project. These rules bind the file tools, not the shell.
+3. **A pre-tool hook** in the driver, running in-process, that resolves every path in a file tool's input and denies anything outside the workspace's real path. This backstops the rules against `..` and symlinks.
 4. **The agent's own OS sandbox**, which confines shell commands to the workspace and blocks network access except an allowlist. Which agent supports which operating system is in [drivers.md](drivers.md). Enable it wherever the agent supports the host, configured to refuse to run rather than run unconfined.
 5. **Containers.** If hosted mode must isolate instructors from each other more strongly than the sandbox does, the driver runs each session in a container with the workspace mounted, a network allowlist (the model API and the D2L tenant), and CPU, memory, and disk limits. The driver then spawns the agent inside the container; nothing above the driver changes.
 
@@ -297,6 +299,7 @@ A mode is where the app runs and for whom. Local mode runs the whole app on one 
 | Database | SQLite in app data | Same SQLite; Postgres only if it outgrows it |
 | Workspaces | Under the instructor's data folder | Per-instructor directory tree |
 | Agent sandbox | Layers 1 to 3, plus layer 4 where the agent supports Windows | Layers 1 to 4 |
+| Agent shell | Every command, until the `cdk` tools cover a turn | None |
 | Agent sign-in | The instructor's own | A shared service account, or per instructor |
 | D2L credentials | One token | One token per instructor, stored server-side |
 | Concurrency | One turn at a time | Per-instructor cap, plus a cap on live sessions |

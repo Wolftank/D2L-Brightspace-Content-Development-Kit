@@ -1,10 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { AgentEvent, TurnResult } from './AgentDriver.js';
 
-const BARE_BUILTIN_TOOL_NAMES = ['Read', 'Edit', 'Write', 'Bash', 'Grep', 'Glob', 'WebFetch', 'WebSearch'];
+const BARE_FILE_AND_WEB_TOOL_NAMES = ['Read', 'Edit', 'Write', 'Grep', 'Glob', 'WebFetch', 'WebSearch'];
 
 const FIXTURE_PATH = fileURLToPath(new URL('./__fixtures__/claude-write-file-turn.jsonl', import.meta.url));
 
@@ -21,11 +21,11 @@ async function* toAsyncIterable<T>(items: T[]): AsyncGenerator<T> {
 }
 
 describe('buildAllowedTools', () => {
-  it('never contains a bare/unscoped built-in tool name', async () => {
+  it('never contains a bare file or web tool name', async () => {
     const { buildAllowedTools } = await import('./claude.js');
     const result = buildAllowedTools(['mcp__cdk__create_build', 'mcp__cdk__get_project']);
 
-    for (const bareName of BARE_BUILTIN_TOOL_NAMES) {
+    for (const bareName of BARE_FILE_AND_WEB_TOOL_NAMES) {
       expect(result).not.toContain(bareName);
     }
   });
@@ -48,91 +48,36 @@ describe('buildAllowedTools', () => {
   });
 });
 
-function fakePreToolUseInput(toolName: string, toolInput: unknown) {
-  return {
-    hook_event_name: 'PreToolUse' as const,
-    session_id: 'session-1',
-    transcript_path: '/tmp/transcript.jsonl',
-    cwd: '/workspace',
-    tool_name: toolName,
-    tool_input: toolInput,
-    tool_use_id: 'toolu_1',
-  };
-}
+describe('the shell', () => {
+  async function importOnPlatform(platform: NodeJS.Platform) {
+    vi.resetModules();
+    vi.doMock('node:os', async (importOriginal) => ({
+      ...(await importOriginal<typeof import('node:os')>()),
+      platform: () => platform,
+    }));
+    return import('./claude.js');
+  }
 
-const HOOK_CALL_OPTIONS = { signal: new AbortController().signal };
+  afterEach(() => {
+    vi.doUnmock('node:os');
+    vi.resetModules();
+  });
 
-describe('createShellDenyHook: PreToolUse backstop for Bash/PowerShell', () => {
-  it("denies a Bash call when no rule grants it — the regression test for the SDK's own non-denial", async () => {
-    const { createShellDenyHook } = await import('./claude.js');
-    const hook = createShellDenyHook([]);
+  it('allows every PowerShell command on Windows and withholds Bash, keeping the inherited environment', async () => {
+    const { buildAllowedTools, shellOptions } = await importOnPlatform('win32');
 
-    const result = await hook(fakePreToolUseInput('Bash', { command: 'git status' }), 'toolu_1', HOOK_CALL_OPTIONS);
-
-    expect(result).toEqual({
-      hookSpecificOutput: {
-        hookEventName: 'PreToolUse',
-        permissionDecision: 'deny',
-        permissionDecisionReason: expect.stringContaining('PreToolUse hook'),
-      },
+    expect(buildAllowedTools([])).toContain('PowerShell');
+    expect(shellOptions()).toEqual({
+      env: { ...process.env, CLAUDE_CODE_USE_POWERSHELL_TOOL: '1' },
+      disallowedTools: ['Bash'],
     });
   });
 
-  it('denies a PowerShell call the same way', async () => {
-    const { createShellDenyHook } = await import('./claude.js');
-    const hook = createShellDenyHook([]);
+  it('allows every Bash command elsewhere and leaves the environment to the SDK', async () => {
+    const { buildAllowedTools, shellOptions } = await importOnPlatform('linux');
 
-    const result = await hook(
-      fakePreToolUseInput('PowerShell', { command: 'Get-ChildItem' }),
-      'toolu_1',
-      HOOK_CALL_OPTIONS,
-    );
-
-    expect((result as { hookSpecificOutput?: { permissionDecision?: string } }).hookSpecificOutput?.permissionDecision).toBe(
-      'deny',
-    );
-  });
-
-  it('does not deny a Bash call that matches a granted exact-command rule', async () => {
-    const { createShellDenyHook } = await import('./claude.js');
-    const hook = createShellDenyHook(['Bash(git status)']);
-
-    const result = await hook(fakePreToolUseInput('Bash', { command: 'git status' }), 'toolu_1', HOOK_CALL_OPTIONS);
-
-    expect(result).toEqual({});
-  });
-
-  it('does not deny a Bash call that matches a granted prefix rule', async () => {
-    const { createShellDenyHook } = await import('./claude.js');
-    const hook = createShellDenyHook(['Bash(npm *)']);
-
-    const result = await hook(fakePreToolUseInput('Bash', { command: 'npm test' }), 'toolu_1', HOOK_CALL_OPTIONS);
-
-    expect(result).toEqual({});
-  });
-
-  it('still denies a Bash call whose command does not match the granted prefix', async () => {
-    const { createShellDenyHook } = await import('./claude.js');
-    const hook = createShellDenyHook(['Bash(npm *)']);
-
-    const result = await hook(fakePreToolUseInput('Bash', { command: 'git status' }), 'toolu_1', HOOK_CALL_OPTIONS);
-
-    expect((result as { hookSpecificOutput?: { permissionDecision?: string } }).hookSpecificOutput?.permissionDecision).toBe(
-      'deny',
-    );
-  });
-
-  it('leaves every non-shell tool alone (defers to the normal permission engine)', async () => {
-    const { createShellDenyHook } = await import('./claude.js');
-    const hook = createShellDenyHook([]);
-
-    const result = await hook(
-      fakePreToolUseInput('Write', { file_path: '/workspace/out/index.html', content: 'hi' }),
-      'toolu_1',
-      HOOK_CALL_OPTIONS,
-    );
-
-    expect(result).toEqual({});
+    expect(buildAllowedTools([])).toContain('Bash');
+    expect(shellOptions()).toEqual({});
   });
 });
 
