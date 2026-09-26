@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { eq, max } from 'drizzle-orm';
+import { desc, eq, max } from 'drizzle-orm';
 import type { Db } from './index.js';
 import { builds, type Build } from './schema.js';
 
@@ -14,6 +14,7 @@ export interface FinishBuildInput {
   status: 'ready' | 'failed';
   qa: Build['qa'];
   error: Build['error'];
+  outputHash: Build['outputHash'];
 }
 
 export interface BuildsRepo {
@@ -22,8 +23,12 @@ export interface BuildsRepo {
   /** Inserts a build with status `checking`. */
   create(input: CreateBuildInput): Build;
   get(id: string): Build | undefined;
-  /** Stores a build's final status, QA gate report, and error, returning the updated row. */
+  /** The project's build with the highest version, if it has any. */
+  latest(projectId: string): Build | undefined;
+  /** Stores a build's final status, QA gate report, error, and output hash, returning the updated row. */
   finish(id: string, input: FinishBuildInput): Build;
+  /** Fails every `checking` build with `error`, returning the failed builds. */
+  failChecking(error: NonNullable<Build['error']>): Build[];
 }
 
 export function createBuildsRepo(db: Db): BuildsRepo {
@@ -45,6 +50,7 @@ export function createBuildsRepo(db: Db): BuildsRepo {
         avenue,
         qa: null,
         error: null,
+        outputHash: null,
         turnId: turnId ?? null,
         createdAt: Date.now(),
       };
@@ -54,8 +60,19 @@ export function createBuildsRepo(db: Db): BuildsRepo {
     get(id) {
       return db.select().from(builds).where(eq(builds.id, id)).get();
     },
-    finish(id, { status, qa, error }) {
-      return db.update(builds).set({ status, qa, error }).where(eq(builds.id, id)).returning().get()!;
+    latest(projectId) {
+      return db.select().from(builds).where(eq(builds.projectId, projectId)).orderBy(desc(builds.version)).get();
+    },
+    finish(id, { status, qa, error, outputHash }) {
+      return db
+        .update(builds)
+        .set({ status, qa, error, outputHash })
+        .where(eq(builds.id, id))
+        .returning()
+        .get()!;
+    },
+    failChecking(error) {
+      return db.update(builds).set({ status: 'failed', error }).where(eq(builds.status, 'checking')).returning().all();
     },
   };
 }

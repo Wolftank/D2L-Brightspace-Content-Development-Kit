@@ -1,0 +1,1 @@
+ALTER TABLE `builds` ADD `output_hash` text;
