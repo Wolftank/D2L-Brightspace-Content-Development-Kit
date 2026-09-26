@@ -192,7 +192,7 @@ Runner rules:
 
 1. One active turn per project. Per-instructor concurrency cap: 1 in local mode, configurable in hosted mode. Extra turns wait in `queued`.
 2. Every driver event becomes an Event row **and** a live push, in that order.
-3. When the driver's result arrives: store the agent's message, save the session id on the Project, mark the turn.
+3. When the driver's result arrives: store the agent's message, release the session to the session service, mark the turn.
 4. `POST /turns/:id/cancel` and the per-turn wall-clock limit both fire the turn's abort signal. The driver stops the agent; the runner records `cancelled` or `failed`.
 5. On boot, any turn still `running` becomes `failed` with `error.code = 'interrupted'`. The UI offers to resend.
 6. The runner compares the workspace service's hash of `out/` before and after each turn. A turn that changed it and created no build gets one at turn end, with the QA gate and without the pedagogy check. This is what makes the single-text-box UI work without relying on the agent to remember.
@@ -226,7 +226,7 @@ A project's session has two durable parts: the workspace and the `sessionId` on 
 The flow across a project's life:
 
 1. `POST /projects` inserts the Project row, and the workspace service provisions the workspace.
-2. The first message makes the runner call `acquire(projectId)`. The session service gets the workspace path from the workspace service and opens a session through the driver with `sessionId: null`. The driver delivers the instructions, the skills, and the permission rules the way its agent takes them, then starts the agent. It reports the agent's session id with the turn's result, and the runner stores it on the Project.
+2. The first message makes the runner call `acquire(projectId)`. The session service gets the workspace path from the workspace service and opens a session through the driver with `sessionId: null`. The driver delivers the instructions, the skills, and the permission rules the way its agent takes them, then starts the agent. It reports the agent's session id, and the session service saves it on the Project when the runner releases the session.
 3. A later message, after the idle timer has closed the session, goes through `acquire` again: same workspace, stored session id, and the driver reopens the agent's transcript in it.
 4. `DELETE /projects/:id` closes any live session, removes the workspace, and deletes the rows.
 
@@ -238,7 +238,7 @@ A project whose workspace is missing cannot run a turn; the turn fails with `err
 2. A session is busy while a turn runs. A second message during that time gets `409 turn_active`.
 3. After a turn the service saves the session id on the Project and starts a fixed idle timer, 15 minutes to begin with. On expiry it closes the session and releases whatever process it held.
 4. A process that dies mid-turn fails the turn and drops the session. The next message reopens it by session id.
-5. Live sessions are capped for memory. At the cap, the least recently used idle session is closed early.
+5. In hosted mode, live sessions are capped for memory. At the cap, the least recently used idle session is closed early.
 6. On boot the table is empty. Every project reopens from its stored session id on first use.
 
 **What a turn costs when no process is alive.** Starting the agent means launching its binary, loading the workspace settings and skills, and connecting the tools. Expect on the order of a second or two before the first token; measure it rather than assume. Reading the transcript back from disk on reopen is local file I/O and costs nothing worth noticing. The prompt cache is a different thing from both: it lives on the model provider's servers, is keyed by the exact request prefix, and expires minutes after its last use. A process kept alive between turns does not keep it warm; only the gap between two messages decides whether the next request hits it. So the case for a live process is startup latency on quick follow-ups, and the cost is memory per idle process. The service above makes that a contained trade-off.
