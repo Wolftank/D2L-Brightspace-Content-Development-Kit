@@ -14,7 +14,7 @@ import { createUsersRepo } from '../db/users.js';
 import { BuildIncomplete, BuildNotReady, NotFound } from '../errors.js';
 import { KIT_DIR } from '../kit.js';
 import { createEventService, type EventService } from '../pipeline/events.js';
-import { createBuildService, type BuildService } from './builds.js';
+import { createBuildService, downloadFilename, type BuildService } from './builds.js';
 import { createWorkspaceService, type WorkspaceService } from './workspaces.js';
 
 const BAD_SCORM = join(KIT_DIR, 'harness', 'lint', 'fixtures', 'bad-scorm');
@@ -60,7 +60,7 @@ describe('build service', () => {
     events = createEventService(createEventsRepo(db));
     workspaces = createWorkspaceService({ dataDir });
     ownerId = createUsersRepo(db).ensureLocalUser().id;
-    projectId = createProjectsRepo(db).create({ ownerId, title: 'Cell division practice' }).id;
+    projectId = createProjectsRepo(db).create({ id: 'project-1', ownerId, title: 'Cell division practice' }).id;
     await workspaces.create(projectId);
     builds = createService();
   });
@@ -125,7 +125,7 @@ describe('build service', () => {
       const build = await builds.create(projectId);
 
       expect(build.outputHash).toBe(outputHash);
-      expect(builds.latest(projectId)).toEqual(build);
+      expect({ ...builds.latest(projectId), pedagogy: null }).toEqual(build);
     });
 
     it('gives concurrent builds of one project distinct versions', async () => {
@@ -241,7 +241,8 @@ describe('build service', () => {
 
       const failed = { ...left, status: 'failed', error: { code: 'interrupted', message: 'The app closed before this build was checked' } };
       expect(buildsRepo.get(left.id)).toEqual(failed);
-      expect(updates).toMatchObject([{ kind: 'build.updated', turnId: 'turn-1', payload: { build: failed } }]);
+      expect(updates).toMatchObject([{ kind: 'build.updated', turnId: 'turn-1' }]);
+      expect(updates[0]!.payload).toEqual({ build: { ...failed, pedagogy: null } });
     });
   });
 
@@ -267,7 +268,7 @@ describe('build service', () => {
       const { filename, stream } = await builds.download(ownerId, build.id);
       const names = await zipEntryNames(stream);
 
-      expect(filename).toBe('build-1.zip');
+      expect(filename).toBe('cell-division-practice-v1.zip');
       expect(names).toContain('imsmanifest.xml');
       expect(names).toContain('index.html');
       expect(names).not.toContain('qa.json');
@@ -326,3 +327,14 @@ async function zipEntryNames(stream: Readable): Promise<string[]> {
   for await (const entry of zip.eachEntry()) names.push(entry.fileName);
   return names;
 }
+
+describe('downloadFilename', () => {
+  it.each([
+    ['Cell division practice', 3, 'cell-division-practice-v3.zip'],
+    ['Révision: Unit 1/2', 1, 'revision-unit-1-2-v1.zip'],
+    ['  --Mitosis & Meiosis--  ', 2, 'mitosis-meiosis-v2.zip'],
+    ['細胞分裂', 1, 'build-v1.zip'],
+  ])('names %j version %i as %j', (title, version, expected) => {
+    expect(downloadFilename(title, version)).toBe(expected);
+  });
+});

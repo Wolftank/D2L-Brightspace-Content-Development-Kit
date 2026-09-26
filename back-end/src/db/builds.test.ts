@@ -16,8 +16,8 @@ describe('builds repo', () => {
     builds = createBuildsRepo(db);
     const ownerId = createUsersRepo(db).ensureLocalUser().id;
     const projects = createProjectsRepo(db);
-    projectId = projects.create({ ownerId, title: 'Cell division practice' }).id;
-    otherProjectId = projects.create({ ownerId, title: 'Photosynthesis practice' }).id;
+    projectId = projects.create({ id: 'project-1', ownerId, title: 'Cell division practice' }).id;
+    otherProjectId = projects.create({ id: 'project-2', ownerId, title: 'Photosynthesis practice' }).id;
   });
 
   it('starts a project at version 1 and counts up per project', () => {
@@ -73,6 +73,14 @@ describe('builds repo', () => {
 
     expect(failed).toEqual([{ ...checking, status: 'failed', error }]);
     expect(builds.get(ready.id)?.status).toBe('ready');
+  });
+
+  it("lists a project's builds, oldest version first", () => {
+    const second = builds.create({ projectId, version: 2, avenue: 'scorm' });
+    const first = builds.create({ projectId, version: 1, avenue: 'scorm' });
+    builds.create({ projectId: otherProjectId, version: 1, avenue: 'scorm' });
+
+    expect(builds.listByProject(projectId)).toEqual([first, second]);
   });
 
   it("finds a project's highest version as its latest build", () => {

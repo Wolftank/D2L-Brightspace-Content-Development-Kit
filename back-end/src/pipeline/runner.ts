@@ -27,7 +27,7 @@ const ERROR_MESSAGES: Record<RunnerErrorCode, string> = {
 };
 
 export interface RunnerDeps {
-  turns: TurnsRepo;
+  turns: Pick<TurnsRepo, 'start' | 'finish' | 'failActive'>;
   messages: Pick<MessagesRepo, 'get' | 'create'>;
   events: Pick<EventService, 'append'>;
   sessions: SessionService;

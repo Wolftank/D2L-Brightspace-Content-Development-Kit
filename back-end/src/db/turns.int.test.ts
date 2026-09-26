@@ -19,7 +19,16 @@ describe('turns repo', () => {
     db = testDb();
     turns = createTurnsRepo(db);
     const ownerId = createUsersRepo(db).ensureLocalUser().id;
-    projectId = createProjectsRepo(db).create({ ownerId, title: 'Cell division practice' }).id;
+    projectId = createProjectsRepo(db).create({ id: 'project-1', ownerId, title: 'Cell division practice' }).id;
+  });
+
+  it("finds the project's queued or running turn", () => {
+    insertTurn('finished', 'completed');
+    expect(turns.findActive(projectId)).toBeUndefined();
+
+    insertTurn('active', 'running');
+    expect(turns.findActive(projectId)?.id).toBe('active');
+    expect(turns.findActive('other-project')).toBeUndefined();
   });
 
   it('starts a queued turn once, stamping its start time', () => {

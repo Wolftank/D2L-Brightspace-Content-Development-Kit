@@ -99,6 +99,8 @@ export interface Build {
   avenue: Avenue;
   qa: QaReport | null;
   error: BuildError | null;
+  /** Hash of the output the build copied; null while checking and when the copy failed. */
+  outputHash: string | null;
   pedagogy: PedagogyReport | null;
   turnId: string | null;
   createdAt: number;
@@ -156,10 +158,10 @@ export interface MeResponse {
   agent: { name: string; ok: boolean; version?: string; detail?: string };
 }
 
+/** V1 creates SCORM projects only; the back end ignores any other field. */
 export interface CreateProjectRequest {
   title: string;
-  targetCourse?: string;
-  avenue?: Avenue;
+  avenue?: 'scorm';
 }
 
 export interface CreateProjectResponse {

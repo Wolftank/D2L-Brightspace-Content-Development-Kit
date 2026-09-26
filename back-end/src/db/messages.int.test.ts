@@ -16,8 +16,8 @@ describe('messages repo', () => {
     messages = createMessagesRepo(db);
     const ownerId = createUsersRepo(db).ensureLocalUser().id;
     const projects = createProjectsRepo(db);
-    projectId = projects.create({ ownerId, title: 'Cell division practice' }).id;
-    otherProjectId = projects.create({ ownerId, title: 'Photosynthesis practice' }).id;
+    projectId = projects.create({ id: 'project-1', ownerId, title: 'Cell division practice' }).id;
+    otherProjectId = projects.create({ id: 'project-2', ownerId, title: 'Photosynthesis practice' }).id;
   });
 
   it('stores a message under the given id and reads it back', () => {

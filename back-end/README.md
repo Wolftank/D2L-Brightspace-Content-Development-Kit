@@ -34,7 +34,8 @@ npm run dev
 - `errors.ts` — the error classes and the error-handling middleware, mapping to the `{ error: { code, message, details? } }` envelope
 - `config.ts` — the zod-validated config read from the environment
 - `db/` — the Drizzle schema, migrations, `openDb`, and the repositories
-- `routes/` — one file per endpoint's handler logic
+- `routes/` — one file per resource's routes, each calling one service
+- `services/` — the projects, workspace, and build services the routes and the pipeline call
 - `agent/` — the `AgentDriver` interface, `ClaudeAgentDriver`, and (later) `CopilotAgentDriver`
 - `pipeline/` — the runner and the session service, emitting events to the event stream
 - `tilt-udl/` — the pedagogy check

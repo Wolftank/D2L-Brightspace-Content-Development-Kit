@@ -4,14 +4,17 @@ import type { AddressInfo } from 'node:net';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app.js';
+import { createBuildsRepo } from '../db/builds.js';
 import { createEventsRepo } from '../db/events.js';
 import type { Db } from '../db/index.js';
 import { createProjectsRepo, type ProjectsRepo } from '../db/projects.js';
 import { users as usersTable, type Project, type User } from '../db/schema.js';
 import { testDb } from '../db/test-db.js';
+import { createTurnsRepo } from '../db/turns.js';
 import { createUsersRepo } from '../db/users.js';
 import type { Deps } from '../deps.js';
 import { createEventService, type EventService } from '../pipeline/events.js';
+import { createProjectService } from '../services/projects.js';
 
 interface Frame {
   seq: number;
@@ -110,7 +113,20 @@ describe('GET /api/projects/:projectId/events', () => {
   function fakeDeps(overrides: Partial<Deps> = {}): Deps {
     return {
       users: { ensureLocalUser: () => owner, get: (id) => (id === owner.id ? owner : undefined) },
-      projects,
+      projects: createProjectService({
+        projects,
+        workspaces: { create: async () => {}, remove: async () => {} },
+        builds: createBuildsRepo(db),
+        turns: createTurnsRepo(db),
+      }),
+      builds: {
+        get: () => {
+          throw new Error('not used by these tests');
+        },
+        download: async () => {
+          throw new Error('not used by these tests');
+        },
+      },
       events: service,
       driver: { probe: async () => ({ ok: true }) },
       ...overrides,
@@ -121,7 +137,7 @@ describe('GET /api/projects/:projectId/events', () => {
     db = testDb();
     owner = createUsersRepo(db).ensureLocalUser();
     projects = createProjectsRepo(db);
-    project = projects.create({ ownerId: owner.id, title: 'Cell division practice' });
+    project = projects.create({ id: 'project-1', ownerId: owner.id, title: 'Cell division practice' });
     service = createEventService(createEventsRepo(db));
   });
 
@@ -150,7 +166,7 @@ describe('GET /api/projects/:projectId/events', () => {
     db.insert(usersTable)
       .values({ id: otherUserId, displayName: 'Someone Else', email: null, role: 'instructor' })
       .run();
-    const othersProject = projects.create({ ownerId: otherUserId, title: 'Not yours' });
+    const othersProject = projects.create({ id: 'project-3', ownerId: otherUserId, title: 'Not yours' });
 
     const app = createApp(fakeDeps());
     const res = await request(app).get(`/api/projects/${othersProject.id}/events`);
