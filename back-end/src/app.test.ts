@@ -22,6 +22,7 @@ function fakeDeps(): Deps {
         throw new Error('not used by these tests');
       },
       get: () => undefined,
+      getById: () => undefined,
       setSessionId: () => {},
     },
     events: {

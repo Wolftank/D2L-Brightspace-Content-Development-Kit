@@ -1,9 +1,8 @@
 import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { platform } from 'node:os';
 import { join } from 'node:path';
 import {
   query,
-  type HookCallback,
-  type HookJSONOutput,
   type Options,
   type SDKMessage,
   type SDKPermissionDeniedMessage,
@@ -27,13 +26,13 @@ import type {
  * confirmed"): `dontAsk` does not honor these from settings alone — the
  * identical scoped pattern must also be listed in `options.allowedTools`,
  * so `MUTATING_TOOL_RULES` is mirrored into both places. `Read` is not
- * included here: it auto-approves from settings.json alone. No `Bash` rule
- * is written anywhere in V1 — `SessionRequest` carries no shell allowlist.
- * Bash/PowerShell denial is NOT left to the SDK's own permission engine
- * (see the 2026-09-17 addendum in docs/drivers.md): `createShellDenyHook`
- * below is an independent, in-process backstop for those two tools.
+ * included here: it auto-approves from settings.json alone.
  */
 export const MUTATING_TOOL_RULES = ['Edit(/**)', 'Write(/**)'];
+
+/** The agent's shell: PowerShell on Windows, so instructors need no Git for
+ *  Windows, and Bash elsewhere. */
+const SHELL_TOOL = platform() === 'win32' ? 'PowerShell' : 'Bash';
 
 export const WORKSPACE_SETTINGS = {
   permissions: {
@@ -46,73 +45,25 @@ const RESULT_ERROR_CODES: Record<string, string> = {
   error_max_budget_usd: 'max_budget_exceeded',
 };
 
-/** Builds `options.allowedTools`: the mirrored built-in patterns, then the
- *  MCP tool names as-is. Never a bare/unscoped built-in tool name (see
- *  MUTATING_TOOL_RULES) — a bare name would override settings.json's
+/** Builds `options.allowedTools`: the mirrored file-tool patterns, every
+ *  command in `SHELL_TOOL`, then the MCP tool names as-is. File tools are
+ *  never listed by bare name: a bare name would override settings.json's
  *  path-scoped rules, including denies. */
 export function buildAllowedTools(mcpToolNames: string[]): string[] {
-  return [...MUTATING_TOOL_RULES, ...mcpToolNames];
+  return [...MUTATING_TOOL_RULES, SHELL_TOOL, ...mcpToolNames];
 }
 
 /**
- * Shell tools whose denial this driver enforces itself rather than trusting
- * the SDK's native permission engine. Found 2026-09-17: on
- * @anthropic-ai/claude-agent-sdk@0.3.274, a bare `Bash` call with zero
- * `Bash` rules anywhere (settings.json or `options.allowedTools`) was NOT
- * denied — `git status` executed and only failed because the workspace
- * wasn't a git repo. That contradicts docs/drivers.md's "Permissions,
- * confirmed 2026-09-15" section, so this driver no longer relies on
- * rule-omission for these two tools.
+ * Query options that leave `SHELL_TOOL` as the agent's only shell. On
+ * Windows the CLI offers Bash whenever Git for Windows is installed, and
+ * PowerShell only when `CLAUDE_CODE_USE_POWERSHELL_TOOL`, a missing Git, or
+ * an account flag enables it (docs/drivers.md, "Shell").
  */
-const SHELL_TOOL_NAMES = new Set(['Bash', 'PowerShell']);
-
-function shellCommandFrom(toolInput: unknown): string | undefined {
-  if (toolInput && typeof toolInput === 'object' && 'command' in toolInput) {
-    const command = (toolInput as { command?: unknown }).command;
-    return typeof command === 'string' ? command : undefined;
-  }
-  return undefined;
-}
-
-/** Whether `rule` (a settings/allowedTools entry) covers this shell call.
- *  Implements the documented rule syntax (docs/drivers.md, "Permissions"):
- *  `Tool(exact)` matches that exact command, `Tool(prefix *)` matches any
- *  command starting with `prefix `, and `Tool(*)` matches every command. */
-function matchesShellRule(rule: string, toolName: string, command: string | undefined): boolean {
-  const prefix = `${toolName}(`;
-  if (!rule.startsWith(prefix) || !rule.endsWith(')')) return false;
-  const pattern = rule.slice(prefix.length, -1);
-  if (pattern === '*') return true;
-  if (command === undefined) return false;
-  if (pattern.endsWith(' *')) return command.startsWith(pattern.slice(0, -1));
-  return command === pattern;
-}
-
-/**
- * Builds the `PreToolUse` hook that backstops Bash/PowerShell denial. Every
- * other tool is left to the existing settings.json + `options.allowedTools`
- * mechanism (`{}` = no opinion, i.e. defer to the normal permission engine).
- * `shellRules` should be the union of what settings.json and
- * `options.allowedTools` actually grant, so a project that legitimately
- * needs shell access in a later phase isn't blocked by this hook.
- */
-export function createShellDenyHook(shellRules: string[]): HookCallback {
-  return async (input): Promise<HookJSONOutput> => {
-    if (input.hook_event_name !== 'PreToolUse' || !SHELL_TOOL_NAMES.has(input.tool_name)) {
-      return {};
-    }
-
-    const command = shellCommandFrom(input.tool_input);
-    const granted = shellRules.some((rule) => matchesShellRule(rule, input.tool_name, command));
-    if (granted) return {};
-
-    return {
-      hookSpecificOutput: {
-        hookEventName: 'PreToolUse',
-        permissionDecision: 'deny',
-        permissionDecisionReason: `${input.tool_name} has no matching allow rule for this project; denied by the driver's own PreToolUse hook rather than the SDK's permission engine.`,
-      },
-    };
+export function shellOptions(): Pick<Options, 'env' | 'disallowedTools'> {
+  if (SHELL_TOOL === 'Bash') return {};
+  return {
+    env: { ...process.env, CLAUDE_CODE_USE_POWERSHELL_TOOL: '1' },
+    disallowedTools: ['Bash'],
   };
 }
 
@@ -254,9 +205,6 @@ function createClaudeSession(req: SessionRequest): AgentSession {
       if (signal.aborted) controller.abort();
       signal.addEventListener('abort', () => controller.abort(), { once: true });
 
-      const allowedTools = buildAllowedTools(req.allowedTools);
-      const shellRules = [...WORKSPACE_SETTINGS.permissions.allow, ...allowedTools];
-
       const options: Options = {
         cwd: req.workspaceDir,
         ...(sessionId ? { resume: sessionId } : {}),
@@ -265,11 +213,9 @@ function createClaudeSession(req: SessionRequest): AgentSession {
         maxTurns: limits.maxSteps,
         maxBudgetUsd: limits.maxBudgetUsd,
         includePartialMessages: true,
-        allowedTools,
+        allowedTools: buildAllowedTools(req.allowedTools),
+        ...shellOptions(),
         abortController: controller,
-        hooks: {
-          PreToolUse: [{ hooks: [createShellDenyHook(shellRules)] }],
-        },
       };
 
       let resolveResult!: (result: TurnResult) => void;
