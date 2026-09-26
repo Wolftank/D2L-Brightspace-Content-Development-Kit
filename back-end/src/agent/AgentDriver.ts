@@ -46,11 +46,11 @@ export interface SessionRequest {
   tools: ToolServerSpec;
 
   /** Tool names pre-approved for the session, in the agent's qualified
-   *  form, e.g. `mcp__cdk__create_build`. Edits inside `workspaceDir` are
-   *  always allowed to callers of this interface; making that true for a
-   *  given agent's SDK is the driver's job, and may take agent-specific
-   *  work — see that agent's section in docs/drivers.md. Every other tool
-   *  call is denied. */
+   *  form, e.g. `mcp__cdk__create_build`. Edits inside `workspaceDir` and
+   *  shell commands are always allowed to callers of this interface; making
+   *  that true for a given agent's SDK is the driver's job, and may take
+   *  agent-specific work — see that agent's section in docs/drivers.md.
+   *  Every other tool call is denied. */
   allowedTools: string[];
 }
 

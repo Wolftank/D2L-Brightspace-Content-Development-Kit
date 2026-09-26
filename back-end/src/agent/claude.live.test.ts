@@ -103,12 +103,7 @@ describe('ClaudeAgentDriver, live SDK', () => {
 
     // `Write(/**)`/`Edit(/**)` are workspace-relative (docs/drivers.md:
     // "`/` is workspace-relative"), so a path outside workspaceDir matches
-    // no allow rule under `dontAsk` and must be denied. This is the
-    // reliable out-of-allowlist case: an unscripted attempt to run `git
-    // status` via Bash was NOT denied on the installed SDK version despite
-    // no Bash rule existing anywhere (see the PR description) — a real
-    // discrepancy from drivers.md worth its own investigation, not papered
-    // over by this test.
+    // no allow rule under `dontAsk` and must be denied.
     const outsideDir = await mkdtemp(join(tmpdir(), 'cdk-claude-live-outside-'));
     const outsidePath = join(outsideDir, 'escaped.txt');
 
