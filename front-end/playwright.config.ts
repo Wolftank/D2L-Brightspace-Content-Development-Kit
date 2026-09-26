@@ -17,12 +17,12 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: 'npm run stub',
+      command: 'node node_modules/tsx/dist/cli.mjs stub/server.ts',
       url: 'http://127.0.0.1:3001/api/health',
       reuseExistingServer: !isCI,
     },
     {
-      command: 'npm run dev:stub',
+      command: 'node node_modules/vite/bin/vite.js --mode stub',
       url: 'http://127.0.0.1:5173',
       reuseExistingServer: !isCI,
     },

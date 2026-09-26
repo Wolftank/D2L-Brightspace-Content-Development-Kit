@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ApiError, buildDownloadUrl, createProject, projectEventsUrl, sendMessage } from './api/client';
 import type { Build, EventKind, EventPayloads, Project } from './api/types';
 import './App.css';
+import { PreviewPanel } from './preview/PreviewPanel';
 
 type FeedItem = { id: number; text: string };
 
@@ -35,6 +36,14 @@ export function App() {
   const [error, setError] = useState<ApiError | null>(null);
   const [isBuilding, setIsBuilding] = useState(false);
   const streamRef = useRef<EventSource | null>(null);
+  const [preview, setPreview] = useState<Pick<Build, 'id' | 'version'> | null>(null);
+  const previewOpener = useRef<HTMLButtonElement | null>(null);
+
+  function closePreview() {
+    setPreview(null);
+    if (previewOpener.current?.isConnected) previewOpener.current.focus();
+    else document.getElementById('build-title')?.focus();
+  }
 
   useEffect(() => () => streamRef.current?.close(), []);
 
@@ -99,12 +108,13 @@ export function App() {
           <label htmlFor="request-text">What should students learn or do?</label><textarea id="request-text" value={requestText} onChange={(event) => setRequestText(event.target.value)} placeholder="For example: Create a ten-question multiple-choice practice set on cell division. Students can retake it, with the best score sent to the gradebook." rows={8} maxLength={20_000} disabled={isBuilding} />
           <p className="hint">The initial version creates a SCORM activity. More content types will be added in a later layer.</p><button type="submit" disabled={isBuilding}>{isBuilding ? 'Building…' : 'Build activity'}</button><InlineError error={error} />
         </form></section>
-        <section className="card build-panel" aria-labelledby="build-title"><p className="eyebrow">02 / BUILD STATUS</p><h2 id="build-title">Build panel</h2>
+        <section className="card build-panel" aria-labelledby="build-title"><p className="eyebrow">02 / BUILD STATUS</p><h2 id="build-title" tabIndex={-1}>Build panel</h2>
           {feed.length === 0 && !error && <p className="empty">Build progress will appear here after you submit a request.</p>}
           {feed.length > 0 && <ol className="status-feed" aria-live="polite">{feed.map((item) => <li key={item.id}>{item.text}</li>)}</ol>}
-          {build && <article className={`build-result build-${build.status}`} aria-labelledby="build-result-title"><p className="result-label">BUILD {build.version}</p><h3 id="build-result-title">{build.status === 'ready' ? 'Ready to download' : 'QA needs attention'}</h3>{build.qa && <p>{build.qa.passed ? 'The QA gate passed.' : `${findings.length} QA finding${findings.length === 1 ? '' : 's'} need review.`}</p>}{findings.length > 0 && <ul className="findings">{findings.map((finding) => <li key={`${finding.rule}-${finding.line ?? 'none'}`}><strong>{finding.severity.toUpperCase()}</strong> {finding.message}</li>)}</ul>}{build.status === 'ready' && <a className="download" href={buildDownloadUrl(build.id)}>Download SCORM package</a>}</article>}
+          {build && <article className={`build-result build-${build.status}`} aria-labelledby="build-result-title"><p className="result-label">BUILD {build.version}</p><h3 id="build-result-title">{build.status === 'ready' ? 'Ready to download' : 'QA needs attention'}</h3>{build.qa && <p>{build.qa.passed ? 'The QA gate passed.' : `${findings.length} QA finding${findings.length === 1 ? '' : 's'} need review.`}</p>}{findings.length > 0 && <ul className="findings">{findings.map((finding) => <li key={`${finding.rule}-${finding.line ?? 'none'}`}><strong>{finding.severity.toUpperCase()}</strong> {finding.message}</li>)}</ul>}{build.status === 'ready' && <div className="build-actions"><a className="download" href={buildDownloadUrl(build.id)}>Download SCORM package</a><button type="button" onClick={(event) => { previewOpener.current = event.currentTarget; setPreview({ id: build.id, version: build.version }); }}>Preview</button></div>}</article>}
         </section>
       </div>
+      {preview && <PreviewPanel key={`${preview.id}:${preview.version}`} build={preview} onClose={closePreview} />}
     </main>
   );
 }
