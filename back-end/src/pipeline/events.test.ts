@@ -20,8 +20,8 @@ describe('event service', () => {
     service = createEventService(eventsRepo);
     const ownerId = createUsersRepo(db).ensureLocalUser().id;
     const projects = createProjectsRepo(db);
-    projectId = projects.create({ ownerId, title: 'Cell division practice' }).id;
-    otherProjectId = projects.create({ ownerId, title: 'Photosynthesis practice' }).id;
+    projectId = projects.create({ id: 'project-1', ownerId, title: 'Cell division practice' }).id;
+    otherProjectId = projects.create({ id: 'project-2', ownerId, title: 'Photosynthesis practice' }).id;
   });
 
   it('persists the event before notifying subscribers', () => {

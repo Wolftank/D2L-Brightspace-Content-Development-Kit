@@ -1,9 +1,9 @@
-import { randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
 import type { Db } from './index.js';
 import { projects, type Project } from './schema.js';
 
 export interface CreateProjectInput {
+  id: string;
   ownerId: string;
   title: string;
   avenue?: Project['avenue'];
@@ -20,10 +20,10 @@ export interface ProjectsRepo {
 
 export function createProjectsRepo(db: Db): ProjectsRepo {
   return {
-    create({ ownerId, title, avenue }) {
+    create({ id, ownerId, title, avenue }) {
       const now = Date.now();
       const project: Project = {
-        id: randomUUID(),
+        id,
         ownerId,
         title,
         avenue: avenue ?? null,

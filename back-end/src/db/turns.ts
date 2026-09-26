@@ -10,6 +10,8 @@ export interface FinishTurnInput {
 }
 
 export interface TurnsRepo {
+  /** The project's `queued` or `running` turn, if it has one. */
+  findActive(projectId: string): Turn | undefined;
   /** Marks a `queued` turn `running` with its start time. Undefined when the turn is missing or not `queued`. */
   start(id: string): Turn | undefined;
   /** Stores a turn's final status, finish time, error, usage, and reply, returning the updated row. */
@@ -20,6 +22,13 @@ export interface TurnsRepo {
 
 export function createTurnsRepo(db: Db): TurnsRepo {
   return {
+    findActive(projectId) {
+      return db
+        .select()
+        .from(turns)
+        .where(and(eq(turns.projectId, projectId), inArray(turns.status, ['queued', 'running'])))
+        .get();
+    },
     start(id) {
       return db
         .update(turns)
