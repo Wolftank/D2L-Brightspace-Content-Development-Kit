@@ -21,6 +21,9 @@ export interface WorkspaceService {
   /** The project's workspace directory: `<dataDir>/projects/<projectId>/workspace`. */
   pathFor(projectId: string): string;
 
+  /** The project's workspace directory, after checking it is provisioned. Throws `WorkspaceMissing` otherwise. */
+  locate(projectId: string): Promise<string>;
+
   /** A build version's directory: `<dataDir>/projects/<projectId>/builds/<version>`. */
   buildPathFor(projectId: string, version: string): string;
 
@@ -73,8 +76,7 @@ export function createWorkspaceService(deps: WorkspaceServiceDeps): WorkspaceSer
     return join(buildsDir(projectId), version);
   }
 
-  /** Throws `WorkspaceMissing` rather than silently provisioning one, per `create`'s contract. */
-  async function assertProvisioned(projectId: string): Promise<string> {
+  async function locate(projectId: string): Promise<string> {
     const workspaceDir = pathFor(projectId);
     if (!(await pathExists(join(workspaceDir, 'out')))) {
       throw new WorkspaceMissing(`No workspace provisioned for project "${projectId}"`);
@@ -103,7 +105,7 @@ export function createWorkspaceService(deps: WorkspaceServiceDeps): WorkspaceSer
   }
 
   async function hashOutput(projectId: string): Promise<string> {
-    const workspaceDir = await assertProvisioned(projectId);
+    const workspaceDir = await locate(projectId);
     const outDir = join(workspaceDir, 'out');
     const relPaths = (await collectRelativePaths(outDir)).sort();
 
@@ -118,7 +120,7 @@ export function createWorkspaceService(deps: WorkspaceServiceDeps): WorkspaceSer
   }
 
   async function copyOutput(projectId: string, version: string): Promise<string> {
-    const workspaceDir = await assertProvisioned(projectId);
+    const workspaceDir = await locate(projectId);
     const dest = buildPathFor(projectId, version);
     if (await pathExists(dest)) {
       throw new BuildVersionExists(version);
@@ -127,7 +129,7 @@ export function createWorkspaceService(deps: WorkspaceServiceDeps): WorkspaceSer
     return dest;
   }
 
-  return { pathFor, buildPathFor, create, hashOutput, copyOutput };
+  return { pathFor, locate, buildPathFor, create, hashOutput, copyOutput };
 }
 
 async function pathExists(path: string): Promise<boolean> {

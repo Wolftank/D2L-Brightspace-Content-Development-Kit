@@ -132,6 +132,17 @@ describe('workspace service', () => {
     });
   });
 
+  describe('locate', () => {
+    it('returns the workspace path once it is provisioned', async () => {
+      await workspaces.create(projectId);
+      await expect(workspaces.locate(projectId)).resolves.toBe(workspaces.pathFor(projectId));
+    });
+
+    it('throws WorkspaceMissing when create() has not run', async () => {
+      await expect(workspaces.locate(projectId)).rejects.toThrow(WorkspaceMissing);
+    });
+  });
+
   describe('the provisioned checker', () => {
     it('runs against out/ from the workspace and passes on the unchanged starter', async () => {
       await workspaces.create(projectId);
