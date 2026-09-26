@@ -43,7 +43,7 @@ describe('builds repo', () => {
     expect(() => builds.create({ projectId, version: 1, avenue: 'scorm' })).toThrow();
   });
 
-  it('stores the final status, report, and error', () => {
+  it('stores the final status, report, error, and output hash', () => {
     const build = builds.create({ projectId, version: 1, avenue: 'scorm' });
     const qa = {
       passed: false,
@@ -56,9 +56,32 @@ describe('builds repo', () => {
       status: 'failed',
       qa,
       error: { code: 'qa_failed', message: 'The QA gate reported 1 error(s)' },
+      outputHash: 'hash-1',
     });
 
-    expect(finished).toMatchObject({ status: 'failed', qa, error: { code: 'qa_failed' } });
+    expect(finished).toMatchObject({ status: 'failed', qa, error: { code: 'qa_failed' }, outputHash: 'hash-1' });
     expect(builds.get(build.id)).toEqual(finished);
+  });
+
+  it('fails only checking builds, returning them', () => {
+    const checking = builds.create({ projectId, version: 1, avenue: 'scorm' });
+    const ready = builds.create({ projectId, version: 2, avenue: 'scorm' });
+    builds.finish(ready.id, { status: 'ready', qa: { passed: true, findings: [] }, error: null, outputHash: 'hash-2' });
+    const error = { code: 'interrupted', message: 'm' };
+
+    const failed = builds.failChecking(error);
+
+    expect(failed).toEqual([{ ...checking, status: 'failed', error }]);
+    expect(builds.get(ready.id)?.status).toBe('ready');
+  });
+
+  it("finds a project's highest version as its latest build", () => {
+    expect(builds.latest(projectId)).toBeUndefined();
+
+    builds.create({ projectId, version: 1, avenue: 'scorm' });
+    const second = builds.create({ projectId, version: 2, avenue: 'scorm' });
+    builds.create({ projectId: otherProjectId, version: 3, avenue: 'scorm' });
+
+    expect(builds.latest(projectId)).toEqual(second);
   });
 });

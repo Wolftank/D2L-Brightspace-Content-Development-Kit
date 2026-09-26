@@ -113,6 +113,7 @@ describe('mapClaudeStream: recorded fixture replay', () => {
           file_path: 'C:\\Users\\benja\\AppData\\Local\\Temp\\cdk-fixture-workspace-fGQ0EP\\hello.txt',
           content: 'hello',
         },
+        summary: 'Writing hello.txt',
       },
       {
         kind: 'tool_end',
@@ -141,6 +142,88 @@ describe('mapClaudeStream: recorded fixture replay', () => {
         steps: 2,
       },
     });
+  });
+});
+
+describe('summarizeTool', () => {
+  it.each([
+    ['PowerShell', { command: 'node lint.js out', description: 'Run the QA check' }, 'Run the QA check'],
+    ['Bash', { command: 'ls' }, 'Running a command'],
+    ['Read', { file_path: 'C:\\ws\\kit\\skills\\d2l-scorm-package\\SKILL.md' }, 'Reading SKILL.md'],
+    ['Write', { file_path: '/ws/out/index.html' }, 'Writing index.html'],
+    ['Edit', { file_path: '/ws/out/imsmanifest.xml' }, 'Editing imsmanifest.xml'],
+    ['Edit', {}, 'Editing a file'],
+    ['Grep', { pattern: 'suspend_data' }, 'Searching the files'],
+    ['TodoWrite', { todos: [] }, 'Using TodoWrite'],
+  ])('describes %s %j as %j', async (name, input, expected) => {
+    const { summarizeTool } = await import('./claude.js');
+    expect(summarizeTool(name, input)).toBe(expected);
+  });
+});
+
+describe('mapClaudeStream: provider failures', () => {
+  async function replay(messages: unknown[]) {
+    const { mapClaudeStream } = await import('./claude.js');
+    let result: TurnResult | undefined;
+    const events: AgentEvent[] = [];
+    for await (const event of mapClaudeStream(
+      toAsyncIterable(messages as SDKMessage[]),
+      new AbortController().signal,
+      (r) => {
+        result = r;
+      },
+      () => {},
+    )) {
+      events.push(event);
+    }
+    return { events, result };
+  }
+
+  const errorResult = {
+    type: 'result',
+    subtype: 'success',
+    is_error: true,
+    result: 'API Error: 429 rate limited',
+    api_error_status: 429,
+    session_id: 'session-1',
+    usage: { input_tokens: 3, output_tokens: 0 },
+    total_cost_usd: 0,
+    num_turns: 1,
+  };
+
+  it.each([
+    ['rate_limit', 'agent_busy'],
+    ['overloaded', 'agent_busy'],
+    ['authentication_failed', 'agent_signed_out'],
+    ['oauth_org_not_allowed', 'agent_signed_out'],
+    ['verification_required', 'agent_signed_out'],
+    ['billing_error', 'agent_billing'],
+    ['account_on_hold', 'agent_billing'],
+    ['server_error', 'agent_error'],
+  ])('fails a result the provider marked as an error after a %s message with code %s', async (assistantError, code) => {
+    const { result } = await replay([{ type: 'assistant', error: assistantError, message: { content: [] } }, errorResult]);
+
+    expect(result).toMatchObject({ status: 'failed', error: { code, message: 'API Error: 429 rate limited' } });
+  });
+
+  it('fails a result the provider marked as an error with no assistant error as agent_error', async () => {
+    const { result } = await replay([errorResult]);
+
+    expect(result).toMatchObject({ status: 'failed', error: { code: 'agent_error' } });
+  });
+
+  it('reports a denied tool call as a plain notice', async () => {
+    const { events } = await replay([
+      {
+        type: 'system',
+        subtype: 'permission_denied',
+        tool_name: 'Write',
+        decision_reason_type: 'mode',
+        message: 'Permission to use Write has been denied because Claude Code is running in don\'t ask mode.',
+      },
+    ]);
+
+    expect(events).toEqual([{ kind: 'notice', text: 'The agent was denied permission to use Write.' }]);
   });
 });
 

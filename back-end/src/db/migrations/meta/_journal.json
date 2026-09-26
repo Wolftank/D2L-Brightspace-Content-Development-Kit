@@ -15,6 +15,13 @@
       "when": 1790351305848,
       "tag": "0001_numerous_spitfire",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790392056256,
+      "tag": "0002_light_namor",
+      "breakpoints": true
     }
   ]
 }

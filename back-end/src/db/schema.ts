@@ -78,6 +78,8 @@ export const builds = sqliteTable(
     avenue: text('avenue', { enum: ['topic', 'scorm', 'widget', 'external'] }).notNull(),
     qa: text('qa', { mode: 'json' }).$type<QaReport>(),
     error: text('error', { mode: 'json' }).$type<{ code: string; message: string }>(),
+    /** Hash of the output copied into the build; null while checking and when the copy failed. */
+    outputHash: text('output_hash'),
     turnId: text('turn_id'),
     createdAt: integer('created_at').notNull(),
   },

@@ -114,9 +114,18 @@ describe('build service', () => {
       const failed = await builds.create(projectId);
       const next = await builds.create(projectId);
 
-      expect(failed).toMatchObject({ version: 1, status: 'failed', qa: null, error: { code: 'copy_failed' } });
+      expect(failed).toMatchObject({ version: 1, status: 'failed', qa: null, error: { code: 'copy_failed' }, outputHash: null });
       expect(kinds.slice(0, 2)).toEqual(['build.created', 'build.updated']);
       expect(next).toMatchObject({ version: 2, status: 'ready' });
+    });
+
+    it('stores the hash of the output it copied', async () => {
+      const outputHash = await workspaces.hashOutput(projectId);
+
+      const build = await builds.create(projectId);
+
+      expect(build.outputHash).toBe(outputHash);
+      expect(builds.latest(projectId)).toEqual(build);
     });
 
     it('gives concurrent builds of one project distinct versions', async () => {
@@ -219,6 +228,20 @@ describe('build service', () => {
       const build = await service.create(projectId);
 
       expect(build).toMatchObject({ status: 'failed', qa: null, error: { code: 'gate_inconsistent' } });
+    });
+  });
+
+  describe('failInterrupted', () => {
+    it('fails a build left checking and emits build.updated for it', () => {
+      const left = buildsRepo.create({ projectId, version: 1, avenue: 'scorm', turnId: 'turn-1' });
+      const updates: Event[] = [];
+      events.subscribe(projectId, (event) => updates.push(event));
+
+      builds.failInterrupted();
+
+      const failed = { ...left, status: 'failed', error: { code: 'interrupted', message: 'The app closed before this build was checked' } };
+      expect(buildsRepo.get(left.id)).toEqual(failed);
+      expect(updates).toMatchObject([{ kind: 'build.updated', turnId: 'turn-1', payload: { build: failed } }]);
     });
   });
 

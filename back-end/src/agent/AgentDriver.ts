@@ -78,11 +78,12 @@ export interface TurnInput {
   attachments: Array<{ path: string; name: string; mime: string }>;
 }
 
+/** Caps on one turn. An omitted field imposes no limit. */
 export interface TurnLimits {
   /** Maximum model calls in this turn. */
-  maxSteps: number;
+  maxSteps?: number;
   /** Maximum spend for this turn, in US dollars. */
-  maxBudgetUsd: number;
+  maxBudgetUsd?: number;
 }
 
 /** A named group of tools. The agent sees each one as `mcp__<name>__<tool>`. */
@@ -121,11 +122,28 @@ export type AgentEvent =
   /** Agent text as it is produced. A driver without streaming emits one
    *  delta with the whole message. */
   | { kind: 'text_delta'; text: string }
-  /** The agent called a tool, built-in or `cdk`. */
-  | { kind: 'tool_start'; callId: string; name: string; input: unknown }
+  /** The agent called a tool, built-in or `cdk`. `summary` is a plain-language
+   *  line for the instructor, e.g. "Writing index.html". */
+  | { kind: 'tool_start'; callId: string; name: string; input: unknown; summary: string }
   | { kind: 'tool_end'; callId: string; ok: boolean; output?: unknown }
   /** Something the instructor should see, e.g. "starting a fresh chat". */
   | { kind: 'notice'; text: string };
+
+/**
+ * Why a turn failed. `agent_signed_out`, `agent_billing` and `agent_busy`
+ * are the provider refusing the agent's account; `max_steps_exceeded` and
+ * `max_budget_exceeded` are the turn's limits; `no_result` and
+ * `driver_error` are the agent process ending or failing unexpectedly.
+ */
+export type TurnErrorCode =
+  | 'agent_error'
+  | 'agent_signed_out'
+  | 'agent_billing'
+  | 'agent_busy'
+  | 'max_steps_exceeded'
+  | 'max_budget_exceeded'
+  | 'no_result'
+  | 'driver_error';
 
 export interface TurnResult {
   status: 'completed' | 'failed' | 'cancelled';
@@ -133,7 +151,8 @@ export interface TurnResult {
   sessionId: string | null;
   /** The agent's message for this turn, assembled by the driver. */
   text: string;
-  error?: { code: string; message: string };
+  /** `message` is the technical detail, for logs rather than the instructor. */
+  error?: { code: TurnErrorCode; message: string };
   usage?: {
     inputTokens?: number;
     outputTokens?: number;

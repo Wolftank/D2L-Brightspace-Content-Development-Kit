@@ -30,7 +30,7 @@ User ─< Project ─┬─< Message
 | **Message** | `id, projectId, seq, role, content[], turnId?, createdAt` | `role` is `instructor \| agent`. `content` is a list of blocks (below) |
 | **Turn** | `id, projectId, messageId, replyId?, status, startedAt?, finishedAt?, error?, usage?` | `messageId` is the instructor's message, `replyId` the agent's. `status` is `queued \| running \| completed \| failed \| cancelled` |
 | **File** | `id, projectId, name, mime, size, createdAt` | Instructor uploads: syllabus, assignment text, images |
-| **Build** | `id, projectId, version, status, avenue, qa, error?, pedagogy?, turnId?, createdAt` | `status` is `checking \| ready \| failed`. `qa` is `{ passed, findings[] }`, each finding `{ rule, severity, file, line, message, because? }`, or null until the QA gate reports and when it produced no usable report. `error` is `{ code, message }` explaining why a build is `failed`, otherwise null. `pedagogy` is `{ tilt[], udl[] }` once the pedagogy check has run on this build, otherwise null |
+| **Build** | `id, projectId, version, status, avenue, qa, error?, outputHash?, pedagogy?, turnId?, createdAt` | `status` is `checking \| ready \| failed`. `outputHash` is the hash of the output the build copied, null while `checking` and when the copy failed. `qa` is `{ passed, findings[] }`, each finding `{ rule, severity, file, line, message, because? }`, or null until the QA gate reports and when it produced no usable report. `error` is `{ code, message }` explaining why a build is `failed`, otherwise null. `pedagogy` is `{ tilt[], udl[] }` once the pedagogy check has run on this build, otherwise null |
 | **Deployment** | `id, buildId, status, targetCourse, location?, verification?, turnId?, confirmedAt?, createdAt` | `status` is `requested \| confirmed \| deploying \| verified \| failed`. Only the instructor moves it past `requested` |
 | **Event** | `seq, projectId, turnId?, kind, payload, ts` | What the event stream carries. Replayable by `seq` |
 
@@ -144,8 +144,8 @@ Each event: `id` is the project-wide `seq`, `event` is the kind, `data` is JSON.
 | `turn.status` | `{ turnId, text }` | Plain-language progress: "Reading your syllabus…", "Checking accessibility…" |
 | `message.delta` | `{ turnId, messageId, text }` | Streamed agent text |
 | `message.completed` | `{ message }` | The agent's full message is stored |
-| `tool.started` | `{ turnId, callId, name, summary }` | The agent called a tool |
-| `tool.finished` | `{ turnId, callId, ok, summary, buildId? }` | The tool returned |
+| `tool.started` | `{ turnId, callId, name, summary }` | The agent called a tool. `summary` is the driver's plain-language line, such as "Writing index.html" |
+| `tool.finished` | `{ turnId, callId, ok, summary, buildId? }` | The tool returned. `summary` repeats the started one, prefixed "Failed: " when `ok` is false |
 | `build.created` | `{ build }` | A new build exists (status `checking`) |
 | `build.updated` | `{ build }` | QA gate report attached, pedagogy check report attached, or failed |
 | `deployment.updated` | `{ deployment }` | Any status change, including `requested` from the agent |
@@ -192,10 +192,11 @@ Runner rules:
 
 1. One active turn per project. Per-instructor concurrency cap: 1 in local mode, configurable in hosted mode. Extra turns wait in `queued`.
 2. Every driver event becomes an Event row **and** a live push, in that order.
-3. When the driver's result arrives: store the agent's message, release the session to the session service, mark the turn.
-4. `POST /turns/:id/cancel` and the per-turn wall-clock limit both fire the turn's abort signal. The driver stops the agent; the runner records `cancelled` or `failed`.
-5. On boot, any turn still `running` becomes `failed` with `error.code = 'interrupted'`. The UI offers to resend.
-6. The runner compares the workspace service's hash of `out/` before and after each turn. A turn that changed it and created no build gets one at turn end, with the QA gate and without the pedagogy check. This is what makes the single-text-box UI work without relying on the agent to remember.
+3. When the driver's result arrives, the runner hands the session back to the session service: `release` after a completed result, `close` after anything else, so a failed or aborted agent process is never reused. On a completed result it then stores the agent's message (the driver's final message, or all the streamed text when that is empty), emits `message.completed`, builds per rule 6, and marks the turn.
+4. Every turn ends with exactly one of `turn.completed`, `turn.failed`, and `turn.cancelled`. A failed turn's `error` is `{ code, message }`: the code from the driver, or `workspace_missing`, `interrupted`, or `internal_error` from the runner, and a fixed plain-language message for that code. The technical detail goes to the server log.
+5. `POST /turns/:id/cancel` fires the turn's abort signal. The driver stops the agent; the runner records `cancelled` or `failed`. V1 has no cancel route and imposes no step, spending, or time limit on a turn, so a stuck turn holds its project until the back end restarts.
+6. At the end of a completed turn, the runner compares the workspace service's hash of `out/` with the `outputHash` of the project's latest build, or with `out/` at the turn's start before the project's first build. When they differ it creates a build, with the QA gate and without the pedagogy check. This builds a turn's changes without relying on the agent to remember and, once the project has a build, also builds output a failed or interrupted turn left unbuilt. A build that fails the QA gate leaves the turn `completed`.
+7. On boot, before accepting requests, every turn still `queued` or `running` becomes `failed` with `error.code = 'interrupted'`. Its message and the workspace output are kept, and the UI offers to resend. Every build still `checking` becomes `failed` with the same code.
 
 Not every message produces a build. A question gets an answer. A request to change a colour edits the output and produces a new build. The agent's clarifying questions are ordinary messages; the next instructor message continues the chat.
 
@@ -239,7 +240,7 @@ A project whose workspace is missing cannot run a turn; the turn fails with `err
 1. `acquire(projectId)` returns the live session for the project, or opens one in the project's workspace with the Project's `sessionId` (null the first time).
 2. A session is busy while a turn runs. A second message during that time gets `409 turn_active`.
 3. After a turn the service saves the session id on the Project and starts a fixed idle timer, 15 minutes to begin with. On expiry it closes the session and releases whatever process it held.
-4. A process that dies mid-turn fails the turn and drops the session. The next message reopens it by session id.
+4. An agent result that is not `completed`, or an error while the agent runs, ends with the runner closing the session. The next message reopens it by session id.
 5. In hosted mode, live sessions are capped for memory. At the cap, the least recently used idle session is closed early.
 6. On boot the table is empty. Every project reopens from its stored session id on first use.
 
@@ -282,7 +283,7 @@ A workspace is the directory where the agent works on one project. It holds the 
 
 Layers 1 to 3 ship with V1. Layer 4 is on wherever the agent supports the host. Layer 5 is a driver-internal decision for hosted mode.
 
-**Bounds per turn.** The runner passes a step limit and a dollar budget, which the driver enforces through its agent, and enforces wall-clock time itself through the abort signal.
+**Bounds per turn.** The driver takes an optional step limit and dollar budget and enforces them through its agent; an omitted limit imposes none. V1 sets neither and has no wall-clock limit (Runner rule 5).
 
 **Agent state.** Each agent keeps transcripts, settings, and sign-in under its own configuration directory, listed per agent in [drivers.md](drivers.md). In local mode, leave the defaults so the instructor's existing sign-in is used. In hosted mode, point each at a directory owned by the service account so state has one known home; transcripts are already separated per project because every agent keys them by workspace.
 
