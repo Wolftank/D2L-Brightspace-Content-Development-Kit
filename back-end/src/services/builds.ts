@@ -66,12 +66,18 @@ export interface BuildService {
   /** The build, if it belongs to one of `ownerId`'s projects; otherwise throws `NotFound`. */
   get(ownerId: string, buildId: string): Build;
 
+  /** Unscoped lookup of the project's highest build version, for pipeline code acting on a project a route has already authorized. */
+  latest(projectId: string): Build | undefined;
+
   /**
    * A zip of a `ready` build with `imsmanifest.xml` at its root. Throws
    * `NotFound`, `BuildNotReady`, or `BuildIncomplete` before any byte is
    * streamed.
    */
   download(ownerId: string, buildId: string): Promise<BuildDownload>;
+
+  /** Fails every build left `checking` with code `interrupted`, emitting `build.updated` for each. Call once at startup, before accepting requests. */
+  failInterrupted(): void;
 }
 
 interface GateRun {
@@ -80,6 +86,9 @@ interface GateRun {
   stderr: string;
   failure?: string;
 }
+
+/** A build's final status, QA gate report, and error. */
+type Verdict = Omit<FinishBuildInput, 'outputHash'>;
 
 export function createBuildService(deps: BuildServiceDeps): BuildService {
   const gateScript = join(deps.kitDir ?? KIT_DIR, 'harness', 'lint', 'lint.js');
@@ -104,7 +113,7 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
     });
   }
 
-  async function check(buildDir: string): Promise<FinishBuildInput> {
+  async function check(buildDir: string): Promise<Verdict> {
     const run = await runGate(buildDir);
     const detail = run.failure ?? firstLine(run.stderr) ?? `exited with code ${run.exitCode}`;
 
@@ -152,15 +161,18 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
 
   async function copyAndCheck(projectId: string, version: number): Promise<FinishBuildInput> {
     let buildDir: string;
+    let outputHash: string;
     try {
+      outputHash = await deps.workspaces.hashOutput(projectId);
       buildDir = await deps.workspaces.copyOutput(projectId, String(version));
     } catch (err) {
-      return failure('copy_failed', `The output could not be copied into the build: ${(err as Error).message}`);
+      const verdict = failure('copy_failed', `The output could not be copied into the build: ${(err as Error).message}`);
+      return { ...verdict, outputHash: null };
     }
     try {
-      return await check(buildDir);
+      return { ...(await check(buildDir)), outputHash };
     } catch (err) {
-      return failure('gate_crashed', `The QA gate could not run: ${(err as Error).message}`);
+      return { ...failure('gate_crashed', `The QA gate could not run: ${(err as Error).message}`), outputHash };
     }
   }
 
@@ -196,10 +208,22 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
     return { filename: `build-${build.version}.zip`, stream: archive };
   }
 
-  return { create, get, download };
+  function failInterrupted(): void {
+    const error = { code: 'interrupted', message: 'The app closed before this build was checked' };
+    for (const build of deps.builds.failChecking(error)) {
+      deps.events.append({
+        projectId: build.projectId,
+        turnId: build.turnId ?? undefined,
+        kind: 'build.updated',
+        payload: { build },
+      });
+    }
+  }
+
+  return { create, get, latest: (projectId) => deps.builds.latest(projectId), download, failInterrupted };
 }
 
-function failure(code: string, message: string): FinishBuildInput {
+function failure(code: string, message: string): Verdict {
   return { status: 'failed', qa: null, error: { code, message } };
 }
 

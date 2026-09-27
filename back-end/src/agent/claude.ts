@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import {
   query,
   type Options,
+  type SDKAssistantMessageError,
   type SDKMessage,
   type SDKPermissionDeniedMessage,
   type SDKResultMessage,
@@ -15,6 +16,7 @@ import type {
   AgentTurn,
   ProbeResult,
   SessionRequest,
+  TurnErrorCode,
   TurnInput,
   TurnLimits,
   TurnResult,
@@ -40,9 +42,20 @@ export const WORKSPACE_SETTINGS = {
   },
 };
 
-const RESULT_ERROR_CODES: Record<string, string> = {
+const RESULT_ERROR_CODES: Record<string, TurnErrorCode> = {
   error_max_turns: 'max_steps_exceeded',
   error_max_budget_usd: 'max_budget_exceeded',
+};
+
+/** Provider refusals the SDK reports on an assistant message, by the code a failed turn carries. */
+const ASSISTANT_ERROR_CODES: Partial<Record<SDKAssistantMessageError, TurnErrorCode>> = {
+  authentication_failed: 'agent_signed_out',
+  oauth_org_not_allowed: 'agent_signed_out',
+  verification_required: 'agent_signed_out',
+  billing_error: 'agent_billing',
+  account_on_hold: 'agent_billing',
+  rate_limit: 'agent_busy',
+  overloaded: 'agent_busy',
 };
 
 /** Builds `options.allowedTools`: the mirrored file-tool patterns, every
@@ -83,24 +96,70 @@ function isAbortedError(err: unknown, signal: AbortSignal): boolean {
   return signal.aborted || (err instanceof Error && err.message === 'Operation aborted');
 }
 
-function describePermissionDenied(message: SDKPermissionDeniedMessage): string {
-  const reason = message.decision_reason_type ? ` (${message.decision_reason_type})` : '';
-  return `Denied ${message.tool_name}${reason}: ${message.message}`;
+/** A plain-language line for the instructor describing one of Claude's tool calls. */
+export function summarizeTool(name: string, input: unknown): string {
+  const fields = (typeof input === 'object' && input !== null ? input : {}) as {
+    description?: unknown;
+    file_path?: unknown;
+  };
+  switch (name) {
+    case 'PowerShell':
+    case 'Bash':
+      return typeof fields.description === 'string' && fields.description.trim() !== ''
+        ? fields.description
+        : 'Running a command';
+    case 'Read':
+      return `Reading ${fileName(fields.file_path)}`;
+    case 'Write':
+      return `Writing ${fileName(fields.file_path)}`;
+    case 'Edit':
+      return `Editing ${fileName(fields.file_path)}`;
+    case 'Glob':
+    case 'Grep':
+      return 'Searching the files';
+    default:
+      return `Using ${name}`;
+  }
 }
 
-function mapResult(message: SDKResultMessage, textFallback: string): TurnResult {
+/** The last segment of a Windows or POSIX path. */
+function fileName(path: unknown): string {
+  if (typeof path !== 'string') return 'a file';
+  return path.split(/[\\/]/).pop() || 'a file';
+}
+
+function describePermissionDenied(message: SDKPermissionDeniedMessage): string {
+  return `The agent was denied permission to use ${message.tool_name}.`;
+}
+
+function mapResult(
+  message: SDKResultMessage,
+  textFallback: string,
+  assistantError: SDKAssistantMessageError | undefined,
+): TurnResult {
   const usage = {
     inputTokens: message.usage.input_tokens,
     outputTokens: message.usage.output_tokens,
     costUsd: message.total_cost_usd,
     steps: message.num_turns,
   };
+  const providerCode = assistantError ? ASSISTANT_ERROR_CODES[assistantError] : undefined;
 
-  if (message.subtype === 'success') {
+  if (message.subtype === 'success' && !message.is_error) {
     return { status: 'completed', sessionId: message.session_id, text: message.result, usage };
   }
 
-  const code = RESULT_ERROR_CODES[message.subtype] ?? 'agent_error';
+  if (message.subtype === 'success') {
+    return {
+      status: 'failed',
+      sessionId: message.session_id,
+      text: textFallback,
+      error: { code: providerCode ?? 'agent_error', message: message.result || `API error ${message.api_error_status}` },
+      usage,
+    };
+  }
+
+  const code = RESULT_ERROR_CODES[message.subtype] ?? providerCode ?? 'agent_error';
   const detail = message.errors.length > 0 ? message.errors.join('; ') : message.subtype;
   return {
     status: 'failed',
@@ -123,6 +182,7 @@ export async function* mapClaudeStream(
   onSessionId: (sessionId: string) => void,
 ): AsyncGenerator<AgentEvent> {
   let textBuf = '';
+  let assistantError: SDKAssistantMessageError | undefined;
   try {
     for await (const message of messages) {
       switch (message.type) {
@@ -142,9 +202,16 @@ export async function* mapClaudeStream(
           break;
         }
         case 'assistant':
+          assistantError = message.error ?? assistantError;
           for (const block of message.message.content) {
             if (block.type === 'tool_use') {
-              yield { kind: 'tool_start', callId: block.id, name: block.name, input: block.input };
+              yield {
+                kind: 'tool_start',
+                callId: block.id,
+                name: block.name,
+                input: block.input,
+                summary: summarizeTool(block.name, block.input),
+              };
             }
           }
           break;
@@ -166,7 +233,7 @@ export async function* mapClaudeStream(
         }
         case 'result':
           onSessionId(message.session_id);
-          resolveResult(mapResult(message, textBuf));
+          resolveResult(mapResult(message, textBuf, assistantError));
           return;
         default:
           break;
