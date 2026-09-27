@@ -71,7 +71,7 @@ The stub uses the saved starter fixture in `stub/fixtures/preview/` for all read
 
 ### Backend integration contract
 
-Real-build preview depends on a separate backend service; it is not available on current `main`. F4 (#33, PR #42) and F5 (#34) are also pending. The preview component accepts only the selected build ID and version, so those changes can supply their build state without moving emulator logic into event handling.
+Real-build preview depends on a separate backend service; it is not available on current `main`. F4 (#82) supplies event and build state through useProjectEvents. Preview selection remains independent, so a newer build does not replace an open preview. F5 (#34) remains responsible for completing QA finding details.
 
 For real builds, configure `VITE_PREVIEW_ORIGIN` to a dedicated HTTP(S) origin and serve:
 

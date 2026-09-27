@@ -1,8 +1,9 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { App } from '../App';
 import type { BuildStatus } from '../api/types';
 
+beforeEach(() => sessionStorage.clear());
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 it('offers preview only for ready builds, pins the selected version, switches and restores focus', async () => {
@@ -19,8 +20,10 @@ it('offers preview only for ready builds, pins the selected version, switches an
   fireEvent.change(screen.getByLabelText('What should students learn or do?'), { target: { value: 'Practice' } });
   fireEvent.click(screen.getByRole('button', { name: 'Build activity' }));
   await waitFor(() => expect(listeners.has('build.updated')).toBe(true));
+  let sequence = 0;
   function update(status: BuildStatus, version = 1) {
     act(() => listeners.get('build.updated')!(new MessageEvent('build.updated', {
+      lastEventId: String(++sequence),
       data: JSON.stringify({ build: { id: `b${version}`, version, status, qa: null } }),
     })));
   }

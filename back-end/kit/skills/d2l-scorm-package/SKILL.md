@@ -167,15 +167,12 @@ node harness/lint/lint.js <your-build-folder> --avenue scorm
 Zero errors to deploy. The rules encode exactly the failures above, so a clean
 run means you have not made any of the four mistakes.
 
-Then package it. The manifest **must** be at the zip root:
-
-```bash
-powershell -File build-scorm.ps1 -Source <your-build-folder> -Out dist/<name>.zip
-```
-
-`Compress-Archive` on a folder path nests everything one level down and D2L
-rejects it with an unhelpful error. The build script passes `folder\*` for this
-reason and validates that every file the manifest declares actually exists.
+Then package it. The manifest **must** be at the zip root. The app does this:
+a build's download (`GET /api/builds/:buildId/download`) zips it with
+`imsmanifest.xml` at the root, after checking that every file the manifest
+declares actually exists. Do not zip a folder path by hand: `Compress-Archive`
+on a folder nests everything one level down and D2L rejects it with an
+unhelpful error.
 
 ---
 

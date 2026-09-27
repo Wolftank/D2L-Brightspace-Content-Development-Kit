@@ -1,10 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { AgentEvent, TurnResult } from './AgentDriver.js';
 
-const BARE_BUILTIN_TOOL_NAMES = ['Read', 'Edit', 'Write', 'Bash', 'Grep', 'Glob', 'WebFetch', 'WebSearch'];
+const BARE_FILE_AND_WEB_TOOL_NAMES = ['Read', 'Edit', 'Write', 'Grep', 'Glob', 'WebFetch', 'WebSearch'];
 
 const FIXTURE_PATH = fileURLToPath(new URL('./__fixtures__/claude-write-file-turn.jsonl', import.meta.url));
 
@@ -21,11 +21,11 @@ async function* toAsyncIterable<T>(items: T[]): AsyncGenerator<T> {
 }
 
 describe('buildAllowedTools', () => {
-  it('never contains a bare/unscoped built-in tool name', async () => {
+  it('never contains a bare file or web tool name', async () => {
     const { buildAllowedTools } = await import('./claude.js');
     const result = buildAllowedTools(['mcp__cdk__create_build', 'mcp__cdk__get_project']);
 
-    for (const bareName of BARE_BUILTIN_TOOL_NAMES) {
+    for (const bareName of BARE_FILE_AND_WEB_TOOL_NAMES) {
       expect(result).not.toContain(bareName);
     }
   });
@@ -48,91 +48,36 @@ describe('buildAllowedTools', () => {
   });
 });
 
-function fakePreToolUseInput(toolName: string, toolInput: unknown) {
-  return {
-    hook_event_name: 'PreToolUse' as const,
-    session_id: 'session-1',
-    transcript_path: '/tmp/transcript.jsonl',
-    cwd: '/workspace',
-    tool_name: toolName,
-    tool_input: toolInput,
-    tool_use_id: 'toolu_1',
-  };
-}
+describe('the shell', () => {
+  async function importOnPlatform(platform: NodeJS.Platform) {
+    vi.resetModules();
+    vi.doMock('node:os', async (importOriginal) => ({
+      ...(await importOriginal<typeof import('node:os')>()),
+      platform: () => platform,
+    }));
+    return import('./claude.js');
+  }
 
-const HOOK_CALL_OPTIONS = { signal: new AbortController().signal };
+  afterEach(() => {
+    vi.doUnmock('node:os');
+    vi.resetModules();
+  });
 
-describe('createShellDenyHook: PreToolUse backstop for Bash/PowerShell', () => {
-  it("denies a Bash call when no rule grants it — the regression test for the SDK's own non-denial", async () => {
-    const { createShellDenyHook } = await import('./claude.js');
-    const hook = createShellDenyHook([]);
+  it('allows every PowerShell command on Windows and withholds Bash, keeping the inherited environment', async () => {
+    const { buildAllowedTools, shellOptions } = await importOnPlatform('win32');
 
-    const result = await hook(fakePreToolUseInput('Bash', { command: 'git status' }), 'toolu_1', HOOK_CALL_OPTIONS);
-
-    expect(result).toEqual({
-      hookSpecificOutput: {
-        hookEventName: 'PreToolUse',
-        permissionDecision: 'deny',
-        permissionDecisionReason: expect.stringContaining('PreToolUse hook'),
-      },
+    expect(buildAllowedTools([])).toContain('PowerShell');
+    expect(shellOptions()).toEqual({
+      env: { ...process.env, CLAUDE_CODE_USE_POWERSHELL_TOOL: '1' },
+      disallowedTools: ['Bash'],
     });
   });
 
-  it('denies a PowerShell call the same way', async () => {
-    const { createShellDenyHook } = await import('./claude.js');
-    const hook = createShellDenyHook([]);
+  it('allows every Bash command elsewhere and leaves the environment to the SDK', async () => {
+    const { buildAllowedTools, shellOptions } = await importOnPlatform('linux');
 
-    const result = await hook(
-      fakePreToolUseInput('PowerShell', { command: 'Get-ChildItem' }),
-      'toolu_1',
-      HOOK_CALL_OPTIONS,
-    );
-
-    expect((result as { hookSpecificOutput?: { permissionDecision?: string } }).hookSpecificOutput?.permissionDecision).toBe(
-      'deny',
-    );
-  });
-
-  it('does not deny a Bash call that matches a granted exact-command rule', async () => {
-    const { createShellDenyHook } = await import('./claude.js');
-    const hook = createShellDenyHook(['Bash(git status)']);
-
-    const result = await hook(fakePreToolUseInput('Bash', { command: 'git status' }), 'toolu_1', HOOK_CALL_OPTIONS);
-
-    expect(result).toEqual({});
-  });
-
-  it('does not deny a Bash call that matches a granted prefix rule', async () => {
-    const { createShellDenyHook } = await import('./claude.js');
-    const hook = createShellDenyHook(['Bash(npm *)']);
-
-    const result = await hook(fakePreToolUseInput('Bash', { command: 'npm test' }), 'toolu_1', HOOK_CALL_OPTIONS);
-
-    expect(result).toEqual({});
-  });
-
-  it('still denies a Bash call whose command does not match the granted prefix', async () => {
-    const { createShellDenyHook } = await import('./claude.js');
-    const hook = createShellDenyHook(['Bash(npm *)']);
-
-    const result = await hook(fakePreToolUseInput('Bash', { command: 'git status' }), 'toolu_1', HOOK_CALL_OPTIONS);
-
-    expect((result as { hookSpecificOutput?: { permissionDecision?: string } }).hookSpecificOutput?.permissionDecision).toBe(
-      'deny',
-    );
-  });
-
-  it('leaves every non-shell tool alone (defers to the normal permission engine)', async () => {
-    const { createShellDenyHook } = await import('./claude.js');
-    const hook = createShellDenyHook([]);
-
-    const result = await hook(
-      fakePreToolUseInput('Write', { file_path: '/workspace/out/index.html', content: 'hi' }),
-      'toolu_1',
-      HOOK_CALL_OPTIONS,
-    );
-
-    expect(result).toEqual({});
+    expect(buildAllowedTools([])).toContain('Bash');
+    expect(shellOptions()).toEqual({});
   });
 });
 
@@ -168,6 +113,7 @@ describe('mapClaudeStream: recorded fixture replay', () => {
           file_path: 'C:\\Users\\benja\\AppData\\Local\\Temp\\cdk-fixture-workspace-fGQ0EP\\hello.txt',
           content: 'hello',
         },
+        summary: 'Writing hello.txt',
       },
       {
         kind: 'tool_end',
@@ -196,6 +142,88 @@ describe('mapClaudeStream: recorded fixture replay', () => {
         steps: 2,
       },
     });
+  });
+});
+
+describe('summarizeTool', () => {
+  it.each([
+    ['PowerShell', { command: 'node lint.js out', description: 'Run the QA check' }, 'Run the QA check'],
+    ['Bash', { command: 'ls' }, 'Running a command'],
+    ['Read', { file_path: 'C:\\ws\\kit\\skills\\d2l-scorm-package\\SKILL.md' }, 'Reading SKILL.md'],
+    ['Write', { file_path: '/ws/out/index.html' }, 'Writing index.html'],
+    ['Edit', { file_path: '/ws/out/imsmanifest.xml' }, 'Editing imsmanifest.xml'],
+    ['Edit', {}, 'Editing a file'],
+    ['Grep', { pattern: 'suspend_data' }, 'Searching the files'],
+    ['TodoWrite', { todos: [] }, 'Using TodoWrite'],
+  ])('describes %s %j as %j', async (name, input, expected) => {
+    const { summarizeTool } = await import('./claude.js');
+    expect(summarizeTool(name, input)).toBe(expected);
+  });
+});
+
+describe('mapClaudeStream: provider failures', () => {
+  async function replay(messages: unknown[]) {
+    const { mapClaudeStream } = await import('./claude.js');
+    let result: TurnResult | undefined;
+    const events: AgentEvent[] = [];
+    for await (const event of mapClaudeStream(
+      toAsyncIterable(messages as SDKMessage[]),
+      new AbortController().signal,
+      (r) => {
+        result = r;
+      },
+      () => {},
+    )) {
+      events.push(event);
+    }
+    return { events, result };
+  }
+
+  const errorResult = {
+    type: 'result',
+    subtype: 'success',
+    is_error: true,
+    result: 'API Error: 429 rate limited',
+    api_error_status: 429,
+    session_id: 'session-1',
+    usage: { input_tokens: 3, output_tokens: 0 },
+    total_cost_usd: 0,
+    num_turns: 1,
+  };
+
+  it.each([
+    ['rate_limit', 'agent_busy'],
+    ['overloaded', 'agent_busy'],
+    ['authentication_failed', 'agent_signed_out'],
+    ['oauth_org_not_allowed', 'agent_signed_out'],
+    ['verification_required', 'agent_signed_out'],
+    ['billing_error', 'agent_billing'],
+    ['account_on_hold', 'agent_billing'],
+    ['server_error', 'agent_error'],
+  ])('fails a result the provider marked as an error after a %s message with code %s', async (assistantError, code) => {
+    const { result } = await replay([{ type: 'assistant', error: assistantError, message: { content: [] } }, errorResult]);
+
+    expect(result).toMatchObject({ status: 'failed', error: { code, message: 'API Error: 429 rate limited' } });
+  });
+
+  it('fails a result the provider marked as an error with no assistant error as agent_error', async () => {
+    const { result } = await replay([errorResult]);
+
+    expect(result).toMatchObject({ status: 'failed', error: { code: 'agent_error' } });
+  });
+
+  it('reports a denied tool call as a plain notice', async () => {
+    const { events } = await replay([
+      {
+        type: 'system',
+        subtype: 'permission_denied',
+        tool_name: 'Write',
+        decision_reason_type: 'mode',
+        message: 'Permission to use Write has been denied because Claude Code is running in don\'t ask mode.',
+      },
+    ]);
+
+    expect(events).toEqual([{ kind: 'notice', text: 'The agent was denied permission to use Write.' }]);
   });
 });
 
