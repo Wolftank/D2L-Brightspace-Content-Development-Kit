@@ -129,71 +129,77 @@ describe('projectEventReducer', () => {
   });
 
   it('handles build.created', () => {
-    const result = projectEventReducer(initialProjectEventState, {
-      seq: 8,
-      kind: 'build.created',
-      payload: {
-        build: {
-          id: 'build-1',
-          projectId: 'project-1',
-          version: 1,
-          status: 'checking',
-          avenue: 'scorm',
-          qa: null,
-          pedagogy: null,
-          turnId: 'turn-1',
-          createdAt: 1,
-        },
+  const result = projectEventReducer(initialProjectEventState, {
+    seq: 8,
+    kind: 'build.created',
+    payload: {
+      build: {
+        id: 'build-1',
+        projectId: 'project-1',
+        version: 1,
+        status: 'checking',
+        avenue: 'scorm',
+        qa: null,
+        pedagogy: null,
+        error: null,
+        outputHash: null,
+        turnId: 'turn-1',
+        createdAt: 1,
       },
-    });
-
-    expect(result.builds).toHaveLength(1);
-    const build = result.builds[0];
-
-    expect(build).toBeDefined();
-    expect(build?.id).toBe('build-1');
-    expect(build?.status).toBe('checking');
+    },
   });
 
-  it('handles build.updated by replacing the existing build', () => {
-    const created = projectEventReducer(initialProjectEventState, {
-      seq: 9,
-      kind: 'build.created',
-      payload: {
-        build: {
-          id: 'build-1',
-          projectId: 'project-1',
-          version: 1,
-          status: 'checking',
-          avenue: 'scorm',
-          qa: null,
-          pedagogy: null,
-          turnId: 'turn-1',
-          createdAt: 1,
-        },
-      },
-    });
+  expect(result.builds).toHaveLength(1);
+  const build = result.builds[0];
 
-    const updated = projectEventReducer(created, {
-      seq: 10,
-      kind: 'build.updated',
-      payload: {
-        build: {
-          id: 'build-1',
-          projectId: 'project-1',
-          version: 1,
-          status: 'ready',
-          avenue: 'scorm',
-          qa: {
-            passed: true,
-            findings: [],
-          },
-          pedagogy: null,
-          turnId: 'turn-1',
-          createdAt: 1,
-        },
+  expect(build).toBeDefined();
+  expect(build?.id).toBe('build-1');
+  expect(build?.status).toBe('checking');
+});
+
+it('handles build.updated by replacing the existing build', () => {
+  const created = projectEventReducer(initialProjectEventState, {
+    seq: 9,
+    kind: 'build.created',
+    payload: {
+      build: {
+        id: 'build-1',
+        projectId: 'project-1',
+        version: 1,
+        status: 'checking',
+        avenue: 'scorm',
+        qa: null,
+        pedagogy: null,
+        error: null,
+        outputHash: null,
+        turnId: 'turn-1',
+        createdAt: 1,
       },
-    });
+    },
+  });
+
+  const updated = projectEventReducer(created, {
+    seq: 10,
+    kind: 'build.updated',
+    payload: {
+      build: {
+        id: 'build-1',
+        projectId: 'project-1',
+        version: 1,
+        status: 'ready',
+        avenue: 'scorm',
+        qa: {
+          passed: true,
+          findings: [],
+        },
+        pedagogy: null,
+        error: null,
+        outputHash: null,
+        turnId: 'turn-1',
+        createdAt: 1,
+      },
+    },
+  });
 
     expect(updated.builds).toHaveLength(1);
     const updatedBuild = updated.builds[0];
