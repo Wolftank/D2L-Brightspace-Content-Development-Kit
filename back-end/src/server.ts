@@ -15,12 +15,14 @@ import { createRunner, type Runner } from './pipeline/runner.js';
 import { createSessionService } from './pipeline/sessions.js';
 import { createBuildService, type BuildService } from './services/builds.js';
 import { createProjectService } from './services/projects.js';
+import { createTurnService } from './services/turns.js';
 import { createWorkspaceService } from './services/workspaces.js';
 
 function buildDeps(cfg: Config): { deps: Deps; runner: Runner; builds: BuildService } {
   const db = openDb(join(cfg.DATA_DIR, 'cdk.db'));
   const projectsRepo = createProjectsRepo(db);
   const buildsRepo = createBuildsRepo(db);
+  const messages = createMessagesRepo(db);
   const turns = createTurnsRepo(db);
   const events = createEventService(createEventsRepo(db));
   const workspaces = createWorkspaceService({ dataDir: cfg.DATA_DIR });
@@ -28,7 +30,7 @@ function buildDeps(cfg: Config): { deps: Deps; runner: Runner; builds: BuildServ
 
   const runner = createRunner({
     turns,
-    messages: createMessagesRepo(db),
+    messages,
     events,
     sessions: createSessionService({ projects: projectsRepo, workspaces, driver: createClaudeAgentDriver() }),
     workspaces,
@@ -39,6 +41,7 @@ function buildDeps(cfg: Config): { deps: Deps; runner: Runner; builds: BuildServ
     users: createUsersRepo(db),
     projects: createProjectService({ projects: projectsRepo, workspaces, builds: buildsRepo, turns }),
     builds,
+    turns: createTurnService({ projects: projectsRepo, messages, turns, runner }),
     events,
     driver: {
       async probe() {

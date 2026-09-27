@@ -9,7 +9,16 @@ export interface FinishTurnInput {
   replyId?: string;
 }
 
+export interface CreateTurnInput {
+  id: string;
+  projectId: string;
+  /** The instructor message this turn responds to. */
+  messageId: string;
+}
+
 export interface TurnsRepo {
+  /** Inserts a `queued` turn for an instructor message. */
+  create(input: CreateTurnInput): Turn;
   /** The project's `queued` or `running` turn, if it has one. */
   findActive(projectId: string): Turn | undefined;
   /** Marks a `queued` turn `running` with its start time. Undefined when the turn is missing or not `queued`. */
@@ -22,6 +31,9 @@ export interface TurnsRepo {
 
 export function createTurnsRepo(db: Db): TurnsRepo {
   return {
+    create({ id, projectId, messageId }) {
+      return db.insert(turns).values({ id, projectId, messageId, status: 'queued' }).returning().get()!;
+    },
     findActive(projectId) {
       return db
         .select()

@@ -37,6 +37,11 @@ describe('project routes', () => {
         turns: createTurnsRepo(db),
       }),
       builds: createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces: workspaceService, events }),
+      turns: {
+        start: () => {
+          throw new Error('not used by these tests');
+        },
+      },
       events,
       driver: { probe: async () => ({ ok: true }) },
     };

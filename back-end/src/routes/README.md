@@ -4,5 +4,6 @@ One file per resource defined in [`../../../docs/architecture.md`](../../../docs
 
 - `me.ts` and `health.ts`: identity and liveness.
 - `projects.ts`: create a project and read its state.
+- `messages.ts`: accept an instructor request, storing the message and the queued turn the runner executes.
 - `builds.ts`: read a build and download it as a zip.
 - `events.ts`: a project's event stream over Server-Sent Events.

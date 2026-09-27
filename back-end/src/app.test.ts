@@ -33,6 +33,11 @@ function fakeDeps(): Deps {
         throw new Error('not used by these tests');
       },
     },
+    turns: {
+      start: () => {
+        throw new Error('not used by these tests');
+      },
+    },
     events: {
       append: (input) => ({
         seq: 1,

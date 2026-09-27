@@ -127,6 +127,11 @@ describe('GET /api/projects/:projectId/events', () => {
           throw new Error('not used by these tests');
         },
       },
+      turns: {
+        start: () => {
+          throw new Error('not used by these tests');
+        },
+      },
       events: service,
       driver: { probe: async () => ({ ok: true }) },
       ...overrides,

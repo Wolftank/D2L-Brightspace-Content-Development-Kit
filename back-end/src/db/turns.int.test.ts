@@ -22,6 +22,23 @@ describe('turns repo', () => {
     projectId = createProjectsRepo(db).create({ id: 'project-1', ownerId, title: 'Cell division practice' }).id;
   });
 
+  it('inserts a queued turn for an instructor message', () => {
+    const created = turns.create({ id: 'turn-1', projectId, messageId: 'message-1' });
+
+    expect(created).toMatchObject({
+      id: 'turn-1',
+      projectId,
+      messageId: 'message-1',
+      replyId: null,
+      status: 'queued',
+      startedAt: null,
+      finishedAt: null,
+      error: null,
+      usage: null,
+    });
+    expect(turns.findActive(projectId)?.id).toBe('turn-1');
+  });
+
   it("finds the project's queued or running turn", () => {
     insertTurn('finished', 'completed');
     expect(turns.findActive(projectId)).toBeUndefined();
