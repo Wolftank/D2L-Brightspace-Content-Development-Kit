@@ -32,6 +32,12 @@ describe('projects repo', () => {
     expect(projects.get('someone-else', project.id)).toBeUndefined();
   });
 
+  it('gets a project by id regardless of owner, and undefined for an unknown id', () => {
+    const project = projects.create({ ownerId, title: 'Cell division practice' });
+    expect(projects.getById(project.id)).toEqual(project);
+    expect(projects.getById('missing')).toBeUndefined();
+  });
+
   it('sets the session id', () => {
     const project = projects.create({ ownerId, title: 'Cell division practice' });
     projects.setSessionId(project.id, 'session-123');
