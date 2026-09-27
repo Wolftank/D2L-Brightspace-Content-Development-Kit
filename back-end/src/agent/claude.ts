@@ -3,6 +3,7 @@ import { platform } from 'node:os';
 import { join } from 'node:path';
 import {
   query,
+  type EffortLevel,
   type Options,
   type SDKAssistantMessageError,
   type SDKMessage,
@@ -259,7 +260,18 @@ export async function* mapClaudeStream(
   }
 }
 
-function createClaudeSession(req: SessionRequest): AgentSession {
+/** The model and reasoning effort Claude runs with. An omitted field keeps the account's default. */
+export interface ClaudeSettings {
+  model?: string;
+  effort?: EffortLevel;
+}
+
+/** The query options for a model and effort, leaving out any that is unset. */
+function modelOptions({ model, effort }: ClaudeSettings): Pick<Options, 'model' | 'effort'> {
+  return { ...(model ? { model } : {}), ...(effort ? { effort } : {}) };
+}
+
+function createClaudeSession(req: SessionRequest, settings: ClaudeSettings): AgentSession {
   let sessionId = req.sessionId;
 
   return {
@@ -282,6 +294,7 @@ function createClaudeSession(req: SessionRequest): AgentSession {
         includePartialMessages: true,
         allowedTools: buildAllowedTools(req.allowedTools),
         ...shellOptions(),
+        ...modelOptions(settings),
         abortController: controller,
       };
 
@@ -348,7 +361,7 @@ export const PROBE_TIMEOUT_MS = 15_000;
  * `assistant`, or `result` arrives first keeps the spend to at most the
  * first partial chunk of a one-word reply, capped again by `maxBudgetUsd`.
  */
-async function probeClaude(): Promise<ProbeResult> {
+async function probeClaude(model: string | undefined): Promise<ProbeResult> {
   const controller = new AbortController();
 
   const attempt = async (): Promise<ProbeResult> => {
@@ -359,6 +372,8 @@ async function probeClaude(): Promise<ProbeResult> {
         maxBudgetUsd: 0.01,
         settingSources: [],
         permissionMode: 'dontAsk',
+        persistSession: false,
+        ...modelOptions({ model }),
         abortController: controller,
       },
     });
@@ -411,12 +426,12 @@ async function probeClaude(): Promise<ProbeResult> {
   }
 }
 
-export function createClaudeAgentDriver(): AgentDriver {
+export function createClaudeAgentDriver(settings: ClaudeSettings = {}): AgentDriver {
   return {
     name: 'claude',
 
     probe(): Promise<ProbeResult> {
-      return probeClaude();
+      return probeClaude(settings.model);
     },
 
     async open(req: SessionRequest): Promise<AgentSession> {
@@ -424,7 +439,7 @@ export function createClaudeAgentDriver(): AgentDriver {
       // sessionId: that's how an agent switch or a skill fix reaches a
       // project already in progress.
       await writeWorkspaceFiles(req);
-      return createClaudeSession(req);
+      return createClaudeSession(req, settings);
     },
   };
 }

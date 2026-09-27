@@ -11,7 +11,7 @@ export const LOCK_RETRY_ATTEMPTS = 3;
 const LOCK_RETRY_DELAY_MS = 100;
 
 export interface WorkspaceServiceDeps {
-  /** Where projects live on disk; `config.DATA_DIR`. */
+  /** Where projects live on disk; `Config.dataDir`. */
   dataDir: string;
   /** The kit's root directory. Defaults to `back-end/kit`. */
   kitDir?: string;

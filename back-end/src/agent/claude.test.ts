@@ -335,6 +335,29 @@ const INIT_MESSAGE = {
 };
 
 describe('createClaudeAgentDriver().probe()', () => {
+  it.each([
+    ['the configured model', { model: 'claude-sonnet-5' }, { model: 'claude-sonnet-5' }],
+    ['no model when none is configured', {}, {}],
+  ])('probes with %s and saves no transcript', async (_case, settings, expected) => {
+    vi.resetModules();
+    const calls: Array<{ options: Record<string, unknown> }> = [];
+    vi.doMock('@anthropic-ai/claude-agent-sdk', () => ({
+      query: (call: { options: Record<string, unknown> }) => {
+        calls.push(call);
+        return fakeQuery([INIT_MESSAGE, { type: 'rate_limit_event', rate_limit_info: { status: 'allowed' } }]);
+      },
+    }));
+
+    const { createClaudeAgentDriver } = await import('./claude.js');
+    await createClaudeAgentDriver(settings).probe();
+
+    expect(calls[0]!.options).toMatchObject({ persistSession: false, ...expected });
+    if (!('model' in expected)) expect(calls[0]!.options).not.toHaveProperty('model');
+
+    vi.doUnmock('@anthropic-ai/claude-agent-sdk');
+    vi.resetModules();
+  });
+
   it('returns ok: false with a non-empty detail when the turn fails to authenticate', async () => {
     vi.resetModules();
     vi.doMock('@anthropic-ai/claude-agent-sdk', () => ({

@@ -50,7 +50,12 @@ describe('build routes', () => {
       projects: createProjectService({ projects: projectsRepo, workspaces, builds: buildsRepo, turns: createTurnsRepo(db) }),
       builds,
       events,
-      driver: { probe: async () => ({ ok: true }) },
+      turns: {
+        start: () => {
+          throw new Error('not used by these tests');
+        },
+      },
+      driver: { name: 'claude', probe: async () => ({ ok: true }) },
     };
 
     const ownerId = createUsersRepo(db).ensureLocalUser().id;

@@ -38,7 +38,12 @@ describe('project routes', () => {
       }),
       builds: createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces: workspaceService, events }),
       events,
-      driver: { probe: async () => ({ ok: true }) },
+      turns: {
+        start: () => {
+          throw new Error('not used by these tests');
+        },
+      },
+      driver: { name: 'claude', probe: async () => ({ ok: true }) },
     };
     return createApp(deps);
   }
