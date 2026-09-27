@@ -1,10 +1,10 @@
 import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { platform } from 'node:os';
 import { join } from 'node:path';
 import {
   query,
-  type HookCallback,
-  type HookJSONOutput,
   type Options,
+  type SDKAssistantMessageError,
   type SDKMessage,
   type SDKPermissionDeniedMessage,
   type SDKResultMessage,
@@ -16,6 +16,7 @@ import type {
   AgentTurn,
   ProbeResult,
   SessionRequest,
+  TurnErrorCode,
   TurnInput,
   TurnLimits,
   TurnResult,
@@ -27,13 +28,13 @@ import type {
  * confirmed"): `dontAsk` does not honor these from settings alone — the
  * identical scoped pattern must also be listed in `options.allowedTools`,
  * so `MUTATING_TOOL_RULES` is mirrored into both places. `Read` is not
- * included here: it auto-approves from settings.json alone. No `Bash` rule
- * is written anywhere in V1 — `SessionRequest` carries no shell allowlist.
- * Bash/PowerShell denial is NOT left to the SDK's own permission engine
- * (see the 2026-09-17 addendum in docs/drivers.md): `createShellDenyHook`
- * below is an independent, in-process backstop for those two tools.
+ * included here: it auto-approves from settings.json alone.
  */
 export const MUTATING_TOOL_RULES = ['Edit(/**)', 'Write(/**)'];
+
+/** The agent's shell: PowerShell on Windows, so instructors need no Git for
+ *  Windows, and Bash elsewhere. */
+const SHELL_TOOL = platform() === 'win32' ? 'PowerShell' : 'Bash';
 
 export const WORKSPACE_SETTINGS = {
   permissions: {
@@ -41,78 +42,41 @@ export const WORKSPACE_SETTINGS = {
   },
 };
 
-const RESULT_ERROR_CODES: Record<string, string> = {
+const RESULT_ERROR_CODES: Record<string, TurnErrorCode> = {
   error_max_turns: 'max_steps_exceeded',
   error_max_budget_usd: 'max_budget_exceeded',
 };
 
-/** Builds `options.allowedTools`: the mirrored built-in patterns, then the
- *  MCP tool names as-is. Never a bare/unscoped built-in tool name (see
- *  MUTATING_TOOL_RULES) — a bare name would override settings.json's
+/** Provider refusals the SDK reports on an assistant message, by the code a failed turn carries. */
+const ASSISTANT_ERROR_CODES: Partial<Record<SDKAssistantMessageError, TurnErrorCode>> = {
+  authentication_failed: 'agent_signed_out',
+  oauth_org_not_allowed: 'agent_signed_out',
+  verification_required: 'agent_signed_out',
+  billing_error: 'agent_billing',
+  account_on_hold: 'agent_billing',
+  rate_limit: 'agent_busy',
+  overloaded: 'agent_busy',
+};
+
+/** Builds `options.allowedTools`: the mirrored file-tool patterns, every
+ *  command in `SHELL_TOOL`, then the MCP tool names as-is. File tools are
+ *  never listed by bare name: a bare name would override settings.json's
  *  path-scoped rules, including denies. */
 export function buildAllowedTools(mcpToolNames: string[]): string[] {
-  return [...MUTATING_TOOL_RULES, ...mcpToolNames];
+  return [...MUTATING_TOOL_RULES, SHELL_TOOL, ...mcpToolNames];
 }
 
 /**
- * Shell tools whose denial this driver enforces itself rather than trusting
- * the SDK's native permission engine. Found 2026-09-17: on
- * @anthropic-ai/claude-agent-sdk@0.3.274, a bare `Bash` call with zero
- * `Bash` rules anywhere (settings.json or `options.allowedTools`) was NOT
- * denied — `git status` executed and only failed because the workspace
- * wasn't a git repo. That contradicts docs/drivers.md's "Permissions,
- * confirmed 2026-09-15" section, so this driver no longer relies on
- * rule-omission for these two tools.
+ * Query options that leave `SHELL_TOOL` as the agent's only shell. On
+ * Windows the CLI offers Bash whenever Git for Windows is installed, and
+ * PowerShell only when `CLAUDE_CODE_USE_POWERSHELL_TOOL`, a missing Git, or
+ * an account flag enables it (docs/drivers.md, "Shell").
  */
-const SHELL_TOOL_NAMES = new Set(['Bash', 'PowerShell']);
-
-function shellCommandFrom(toolInput: unknown): string | undefined {
-  if (toolInput && typeof toolInput === 'object' && 'command' in toolInput) {
-    const command = (toolInput as { command?: unknown }).command;
-    return typeof command === 'string' ? command : undefined;
-  }
-  return undefined;
-}
-
-/** Whether `rule` (a settings/allowedTools entry) covers this shell call.
- *  Implements the documented rule syntax (docs/drivers.md, "Permissions"):
- *  `Tool(exact)` matches that exact command, `Tool(prefix *)` matches any
- *  command starting with `prefix `, and `Tool(*)` matches every command. */
-function matchesShellRule(rule: string, toolName: string, command: string | undefined): boolean {
-  const prefix = `${toolName}(`;
-  if (!rule.startsWith(prefix) || !rule.endsWith(')')) return false;
-  const pattern = rule.slice(prefix.length, -1);
-  if (pattern === '*') return true;
-  if (command === undefined) return false;
-  if (pattern.endsWith(' *')) return command.startsWith(pattern.slice(0, -1));
-  return command === pattern;
-}
-
-/**
- * Builds the `PreToolUse` hook that backstops Bash/PowerShell denial. Every
- * other tool is left to the existing settings.json + `options.allowedTools`
- * mechanism (`{}` = no opinion, i.e. defer to the normal permission engine).
- * `shellRules` should be the union of what settings.json and
- * `options.allowedTools` actually grant, so a project that legitimately
- * needs shell access in a later phase isn't blocked by this hook.
- */
-export function createShellDenyHook(shellRules: string[]): HookCallback {
-  return async (input): Promise<HookJSONOutput> => {
-    if (input.hook_event_name !== 'PreToolUse' || !SHELL_TOOL_NAMES.has(input.tool_name)) {
-      return {};
-    }
-
-    const command = shellCommandFrom(input.tool_input);
-    const granted = shellRules.some((rule) => matchesShellRule(rule, input.tool_name, command));
-    if (granted) return {};
-
-    return {
-      hookSpecificOutput: {
-        hookEventName: 'PreToolUse',
-        permissionDecision: 'deny',
-        permissionDecisionReason: `${input.tool_name} has no matching allow rule for this project; denied by the driver's own PreToolUse hook rather than the SDK's permission engine.`,
-      },
-    };
+export function shellOptions(): Pick<Options, 'env' | 'disallowedTools'> {
+  if (SHELL_TOOL === 'Bash') return {};
+  return {
+    env: { ...process.env, CLAUDE_CODE_USE_POWERSHELL_TOOL: '1' },
+    disallowedTools: ['Bash'],
   };
 }
 
@@ -132,24 +96,70 @@ function isAbortedError(err: unknown, signal: AbortSignal): boolean {
   return signal.aborted || (err instanceof Error && err.message === 'Operation aborted');
 }
 
-function describePermissionDenied(message: SDKPermissionDeniedMessage): string {
-  const reason = message.decision_reason_type ? ` (${message.decision_reason_type})` : '';
-  return `Denied ${message.tool_name}${reason}: ${message.message}`;
+/** A plain-language line for the instructor describing one of Claude's tool calls. */
+export function summarizeTool(name: string, input: unknown): string {
+  const fields = (typeof input === 'object' && input !== null ? input : {}) as {
+    description?: unknown;
+    file_path?: unknown;
+  };
+  switch (name) {
+    case 'PowerShell':
+    case 'Bash':
+      return typeof fields.description === 'string' && fields.description.trim() !== ''
+        ? fields.description
+        : 'Running a command';
+    case 'Read':
+      return `Reading ${fileName(fields.file_path)}`;
+    case 'Write':
+      return `Writing ${fileName(fields.file_path)}`;
+    case 'Edit':
+      return `Editing ${fileName(fields.file_path)}`;
+    case 'Glob':
+    case 'Grep':
+      return 'Searching the files';
+    default:
+      return `Using ${name}`;
+  }
 }
 
-function mapResult(message: SDKResultMessage, textFallback: string): TurnResult {
+/** The last segment of a Windows or POSIX path. */
+function fileName(path: unknown): string {
+  if (typeof path !== 'string') return 'a file';
+  return path.split(/[\\/]/).pop() || 'a file';
+}
+
+function describePermissionDenied(message: SDKPermissionDeniedMessage): string {
+  return `The agent was denied permission to use ${message.tool_name}.`;
+}
+
+function mapResult(
+  message: SDKResultMessage,
+  textFallback: string,
+  assistantError: SDKAssistantMessageError | undefined,
+): TurnResult {
   const usage = {
     inputTokens: message.usage.input_tokens,
     outputTokens: message.usage.output_tokens,
     costUsd: message.total_cost_usd,
     steps: message.num_turns,
   };
+  const providerCode = assistantError ? ASSISTANT_ERROR_CODES[assistantError] : undefined;
 
-  if (message.subtype === 'success') {
+  if (message.subtype === 'success' && !message.is_error) {
     return { status: 'completed', sessionId: message.session_id, text: message.result, usage };
   }
 
-  const code = RESULT_ERROR_CODES[message.subtype] ?? 'agent_error';
+  if (message.subtype === 'success') {
+    return {
+      status: 'failed',
+      sessionId: message.session_id,
+      text: textFallback,
+      error: { code: providerCode ?? 'agent_error', message: message.result || `API error ${message.api_error_status}` },
+      usage,
+    };
+  }
+
+  const code = RESULT_ERROR_CODES[message.subtype] ?? providerCode ?? 'agent_error';
   const detail = message.errors.length > 0 ? message.errors.join('; ') : message.subtype;
   return {
     status: 'failed',
@@ -172,6 +182,7 @@ export async function* mapClaudeStream(
   onSessionId: (sessionId: string) => void,
 ): AsyncGenerator<AgentEvent> {
   let textBuf = '';
+  let assistantError: SDKAssistantMessageError | undefined;
   try {
     for await (const message of messages) {
       switch (message.type) {
@@ -191,9 +202,16 @@ export async function* mapClaudeStream(
           break;
         }
         case 'assistant':
+          assistantError = message.error ?? assistantError;
           for (const block of message.message.content) {
             if (block.type === 'tool_use') {
-              yield { kind: 'tool_start', callId: block.id, name: block.name, input: block.input };
+              yield {
+                kind: 'tool_start',
+                callId: block.id,
+                name: block.name,
+                input: block.input,
+                summary: summarizeTool(block.name, block.input),
+              };
             }
           }
           break;
@@ -215,7 +233,7 @@ export async function* mapClaudeStream(
         }
         case 'result':
           onSessionId(message.session_id);
-          resolveResult(mapResult(message, textBuf));
+          resolveResult(mapResult(message, textBuf, assistantError));
           return;
         default:
           break;
@@ -254,9 +272,6 @@ function createClaudeSession(req: SessionRequest): AgentSession {
       if (signal.aborted) controller.abort();
       signal.addEventListener('abort', () => controller.abort(), { once: true });
 
-      const allowedTools = buildAllowedTools(req.allowedTools);
-      const shellRules = [...WORKSPACE_SETTINGS.permissions.allow, ...allowedTools];
-
       const options: Options = {
         cwd: req.workspaceDir,
         ...(sessionId ? { resume: sessionId } : {}),
@@ -265,11 +280,9 @@ function createClaudeSession(req: SessionRequest): AgentSession {
         maxTurns: limits.maxSteps,
         maxBudgetUsd: limits.maxBudgetUsd,
         includePartialMessages: true,
-        allowedTools,
+        allowedTools: buildAllowedTools(req.allowedTools),
+        ...shellOptions(),
         abortController: controller,
-        hooks: {
-          PreToolUse: [{ hooks: [createShellDenyHook(shellRules)] }],
-        },
       };
 
       let resolveResult!: (result: TurnResult) => void;

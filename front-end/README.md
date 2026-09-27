@@ -20,12 +20,29 @@ npm run dev:stub
 
 `dev:stub` starts Vite in the `stub` mode, whose `.env.stub` points the proxy at the stub on port 3001.
 
+## Browser tests
+
+The Playwright tests in `e2e/` run the app in Chromium and Firefox against the stub. Install the browsers once per machine:
+
+```
+npx playwright install chromium firefox
+```
+
+Then run:
+
+```
+npm run test:e2e
+```
+
+This starts the stub and `dev:stub` automatically, or reuses them if they are already running. If a test fails, `npx playwright show-report` opens the HTML report.
+
 ## Scripts
 
 - `npm run dev` — serve the app, proxying `/api` to the back end
 - `npm run dev:stub` — serve the app, proxying `/api` to the stub
 - `npm run stub` — run the stub back end (`stub/server.ts`) on port 3001
 - `npm test` — run the Vitest suite in `src/`
+- `npm runt test:e2e` - run the Playwright browser tests in `e2e/` against the stub
 - `npm run lint` — ESLint over the project
 - `npm run typecheck` — `tsc --noEmit`
 
@@ -37,6 +54,8 @@ npm run dev:stub
 - `stub/server.ts` — the stub back end, until the real routes land
 - `vite.config.ts` — the dev server proxy and the Vitest configuration
 - `.env.stub` — the proxy target used by `dev:stub`
+- `e2e/` - Playwright browser tests
+- `Playwright.config.ts` - the Playwright configuration: which browsers to test, and the stub and dev server it starts
 
 ## V1 configurator
 
