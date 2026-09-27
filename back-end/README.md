@@ -15,7 +15,19 @@ npm install
 npm run dev
 ```
 
-`npm run dev` starts the server from source with `tsx watch` and logs the port it's listening on. It reads `DATA_DIR` (default `%LOCALAPPDATA%\CDK` on Windows) and `PORT` (default `3000`) from the environment; see [`src/config.ts`](src/config.ts).
+`npm run dev` starts the server from source with `tsx watch` and logs the port it's listening on. The defaults work as-is; to change a setting, copy the example file and edit your copy:
+
+```
+cp .env.example .env      # copy .env.example to .env on Windows
+```
+
+`.env` lives next to this README in `back-end/`, is ignored by Git, and is read at startup. A real environment variable (`PORT=4000 npm run dev`) always takes precedence over the file. The settings, validated in [`src/config.ts`](src/config.ts), with startup stopping on an invalid value:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `AGENT_DRIVER` | `claude` | The agent that builds the content; `claude` is the only supported value |
+| `PORT` | `3000` | The TCP port, an integer from 1 to 65535 |
+| `DATA_DIR` | `%LOCALAPPDATA%\CDK` on Windows, `~/.cdk` elsewhere | Where projects, workspaces, builds, and the database live; a relative path is resolved against the starting directory |
 
 ## Scripts
 

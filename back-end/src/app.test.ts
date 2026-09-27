@@ -51,6 +51,7 @@ function fakeDeps(): Deps {
       subscribe: () => () => {},
     },
     driver: {
+      name: 'claude',
       probe: async () => ({ ok: true, version: '0.0.0' }),
     },
   };
@@ -66,7 +67,7 @@ describe('createApp', () => {
     expect(res.body).toEqual({
       user: fakeUser,
       mode: 'local',
-      agent: { ok: true, version: '0.0.0' },
+      agent: { name: 'claude', ok: true, version: '0.0.0' },
     });
   });
 

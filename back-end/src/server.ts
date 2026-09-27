@@ -1,7 +1,8 @@
 import { join } from 'node:path';
+import type { AgentDriver } from './agent/AgentDriver.js';
 import { createClaudeAgentDriver } from './agent/claude.js';
 import { createApp } from './app.js';
-import { type Config, config } from './config.js';
+import { type Config, loadConfig, loadDotEnv } from './config.js';
 import type { Deps } from './deps.js';
 import { createBuildsRepo } from './db/builds.js';
 import { openDb } from './db/index.js';
@@ -18,7 +19,15 @@ import { createProjectService } from './services/projects.js';
 import { createTurnService } from './services/turns.js';
 import { createWorkspaceService } from './services/workspaces.js';
 
+function createDriver(cfg: Config): AgentDriver {
+  switch (cfg.AGENT_DRIVER) {
+    case 'claude':
+      return createClaudeAgentDriver();
+  }
+}
+
 function buildDeps(cfg: Config): { deps: Deps; runner: Runner; builds: BuildService } {
+  const driver = createDriver(cfg);
   const db = openDb(join(cfg.DATA_DIR, 'cdk.db'));
   const projectsRepo = createProjectsRepo(db);
   const buildsRepo = createBuildsRepo(db);
@@ -32,7 +41,7 @@ function buildDeps(cfg: Config): { deps: Deps; runner: Runner; builds: BuildServ
     turns,
     messages,
     events,
-    sessions: createSessionService({ projects: projectsRepo, workspaces, driver: createClaudeAgentDriver() }),
+    sessions: createSessionService({ projects: projectsRepo, workspaces, driver }),
     workspaces,
     builds,
   });
@@ -43,19 +52,39 @@ function buildDeps(cfg: Config): { deps: Deps; runner: Runner; builds: BuildServ
     builds,
     turns: createTurnService({ projects: projectsRepo, messages, turns, runner }),
     events,
-    driver: {
-      async probe() {
-        return { ok: false, detail: 'no agent driver configured yet' };
-      },
-    },
+    driver,
   };
   return { deps, runner, builds };
 }
 
-const { deps, runner, builds } = buildDeps(config);
+function fail(message: string): never {
+  console.error(message);
+  process.exit(1);
+}
+
+loadDotEnv();
+
+let config: Config;
+try {
+  config = loadConfig();
+} catch (err) {
+  fail((err as Error).message);
+}
+
+let started: ReturnType<typeof buildDeps>;
+try {
+  started = buildDeps(config);
+} catch (err) {
+  fail(`The data directory ${config.DATA_DIR} cannot be used: ${(err as Error).message}`);
+}
+const { deps, runner, builds } = started;
 runner.failInterrupted();
 builds.failInterrupted();
 
-createApp(deps).listen(config.PORT, '127.0.0.1', () => {
-  console.log(`back-end listening on http://127.0.0.1:${config.PORT}`);
-});
+createApp(deps)
+  .listen(config.PORT, '127.0.0.1', () => {
+    console.log(`back-end listening on http://127.0.0.1:${config.PORT}`);
+  })
+  .on('error', (err) => {
+    fail(`Cannot listen on port ${config.PORT}: ${err.message}`);
+  });

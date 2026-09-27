@@ -12,5 +12,5 @@ export interface Deps {
   builds: Pick<BuildService, 'get' | 'download'>;
   turns: TurnService;
   events: EventService;
-  driver: Pick<AgentDriver, 'probe'>;
+  driver: Pick<AgentDriver, 'name' | 'probe'>;
 }

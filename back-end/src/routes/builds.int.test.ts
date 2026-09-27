@@ -55,7 +55,7 @@ describe('build routes', () => {
         },
       },
       events,
-      driver: { probe: async () => ({ ok: true }) },
+      driver: { name: 'claude', probe: async () => ({ ok: true }) },
     };
 
     const ownerId = createUsersRepo(db).ensureLocalUser().id;

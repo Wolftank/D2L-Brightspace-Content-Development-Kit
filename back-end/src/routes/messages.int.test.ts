@@ -53,7 +53,7 @@ describe('POST /api/projects/:projectId/messages', () => {
         after: () => [],
         subscribe: () => () => {},
       },
-      driver: { probe: async () => ({ ok: true }) },
+      driver: { name: 'claude', probe: async () => ({ ok: true }) },
     };
     return createApp(deps);
   }

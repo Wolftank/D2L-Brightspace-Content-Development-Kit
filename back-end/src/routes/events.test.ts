@@ -133,7 +133,7 @@ describe('GET /api/projects/:projectId/events', () => {
         },
       },
       events: service,
-      driver: { probe: async () => ({ ok: true }) },
+      driver: { name: 'claude', probe: async () => ({ ok: true }) },
       ...overrides,
     };
   }

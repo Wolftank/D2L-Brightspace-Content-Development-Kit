@@ -43,7 +43,7 @@ describe('project routes', () => {
         },
       },
       events,
-      driver: { probe: async () => ({ ok: true }) },
+      driver: { name: 'claude', probe: async () => ({ ok: true }) },
     };
     return createApp(deps);
   }
