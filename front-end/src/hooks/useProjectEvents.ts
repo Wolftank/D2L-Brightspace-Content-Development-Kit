@@ -1,4 +1,4 @@
-import { useEffect, useReducer } from 'react';
+import { useEffect, useReducer, useRef } from 'react';
 import { projectEventsUrl } from '../api/client';
 import type {
   Build,
@@ -19,6 +19,13 @@ export interface ProjectEventState {
   replyText: string;
   builds: Build[];
 }
+
+type ProjectEventReducerAction =
+  | ProjectEvent
+  | {
+      type: 'restore';
+      state: ProjectEventState;
+    };
 
 export const initialProjectEventState: ProjectEventState = {
   turn: {
@@ -45,8 +52,14 @@ function updateBuilds(builds: Build[], updatedBuild: Build): Build[] {
 
 export function projectEventReducer(
   state: ProjectEventState,
-  event: ProjectEvent,
+  action: ProjectEventReducerAction,
 ): ProjectEventState {
+  if (!('kind' in action)) {
+    return action.state;
+  }
+
+  const event = action;
+
   switch (event.kind) {
     case 'turn.started':
       return {
@@ -77,7 +90,13 @@ export function projectEventReducer(
       };
 
     case 'message.completed':
-      return state;
+  return {
+    ...state,
+    replyText: event.payload.message.content
+      .filter((block) => block.type === 'text')
+      .map((block) => block.text)
+      .join(''),
+  };
 
     case 'tool.started':
       return {
@@ -134,18 +153,21 @@ export function projectEventReducer(
       };
 
     case 'turn.cancelled':
-      return {
-        ...state,
-        turn: {
-          id: event.payload.turnId,
-          status: 'cancelled',
-        },
-        statusLines: [
-          ...state.statusLines,
-          { seq: event.seq, text: 'Build cancelled' },
-        ],
-      };
-  }
+  return {
+    ...state,
+    turn: {
+      id: event.payload.turnId,
+      status: 'cancelled',
+    },
+    statusLines: [
+      ...state.statusLines,
+      { seq: event.seq, text: 'Build cancelled' },
+    ],
+  };
+
+default:
+  return state;
+}
 }
 
 
@@ -176,8 +198,55 @@ const [state, dispatch] = useReducer(
   },
 );
 
+const previousStorageStateKey = useRef(storageStateKey);
+const skipNextPersist = useRef(false);
+
+useEffect(() => {
+  if (previousStorageStateKey.current === storageStateKey) {
+    return;
+  }
+
+  previousStorageStateKey.current = storageStateKey;
+  skipNextPersist.current = true;
+
+  if (!storageStateKey) {
+    dispatch({
+      type: 'restore',
+      state: initialProjectEventState,
+    });
+    return;
+  }
+
+  const saved = sessionStorage.getItem(storageStateKey);
+
+  if (!saved) {
+    dispatch({
+      type: 'restore',
+      state: initialProjectEventState,
+    });
+    return;
+  }
+
+  try {
+    dispatch({
+      type: 'restore',
+      state: JSON.parse(saved) as ProjectEventState,
+    });
+  } catch {
+    dispatch({
+      type: 'restore',
+      state: initialProjectEventState,
+    });
+  }
+}, [storageStateKey]);
+
 useEffect(() => {
   if (!storageStateKey) {
+    return;
+  }
+
+  if (skipNextPersist.current) {
+    skipNextPersist.current = false;
     return;
   }
 
@@ -221,17 +290,26 @@ useEffect(() => {
         const message = event as MessageEvent<string>;
 
         const projectEvent = {
-          seq: Number(message.lastEventId),
-          kind,
-          payload: JSON.parse(message.data),
-        } as ProjectEvent;
+  seq: Number(message.lastEventId),
+  kind,
+  payload: JSON.parse(message.data),
+} as ProjectEvent;
 
-        sessionStorage.setItem(
-          storageKey,
-          String(projectEvent.seq),
-        );
+const lastProcessedSeq = Number(
+  sessionStorage.getItem(storageKey) ?? '0',
+);
 
-        dispatch(projectEvent);
+if (projectEvent.seq <= lastProcessedSeq) {
+  return;
+}
+
+sessionStorage.setItem(
+  storageKey,
+  String(projectEvent.seq),
+);
+
+dispatch(projectEvent);
+
       });
     }
 

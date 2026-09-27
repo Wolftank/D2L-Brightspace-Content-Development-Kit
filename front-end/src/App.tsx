@@ -57,16 +57,20 @@ export function App() {
   }
 }, [project]);
 
+  const buildActive = turn.status === 'running';
+
   const buildFinished =
     turn.status === 'completed' ||
     turn.status === 'failed' ||
     turn.status === 'cancelled';
 
   useEffect(() => {
-    if (buildFinished) {
-      setIsBuilding(false);
-    }
-  }, [buildFinished]);
+  if (buildActive) {
+    setIsBuilding(true);
+  } else if (buildFinished) {
+    setIsBuilding(false);
+  }
+}, [buildActive, buildFinished]);
 
   async function handleBuild(
     event: React.FormEvent<HTMLFormElement>,

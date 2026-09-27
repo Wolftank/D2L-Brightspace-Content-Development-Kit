@@ -89,7 +89,7 @@ describe('projectEventReducer', () => {
       },
     });
 
-    expect(result).toEqual(initialProjectEventState);
+    expect(result.replyText).toBe('Finished');
   });
 
   it('handles tool.started', () => {
