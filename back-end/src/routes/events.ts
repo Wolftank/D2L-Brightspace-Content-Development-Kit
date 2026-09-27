@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { z } from 'zod';
 import type { Event } from '../db/schema.js';
 import type { Deps } from '../deps.js';
-import { NotFound } from '../errors.js';
 
 const cursorSchema = z
   .string()
@@ -21,11 +20,7 @@ export function eventsRouter(deps: Deps): Router {
   const router = Router();
 
   router.get('/projects/:projectId/events', (req, res, next) => {
-    const project = deps.projects.get(req.user.id, req.params.projectId);
-    if (!project) {
-      next(new NotFound('Not found'));
-      return;
-    }
+    const { project } = deps.projects.get(req.user.id, req.params.projectId);
 
     const lastEventId = req.header('Last-Event-ID');
     const cursorSource = lastEventId !== undefined ? lastEventId : (req.query.after ?? '0');

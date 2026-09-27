@@ -6,7 +6,7 @@ import { ZipArchive } from 'archiver';
 import { z } from 'zod';
 import type { BuildsRepo, FinishBuildInput } from '../db/builds.js';
 import type { ProjectsRepo } from '../db/projects.js';
-import type { Build } from '../db/schema.js';
+import type { Build, Project } from '../db/schema.js';
 import { BuildIncomplete, BuildNotReady, NotFound } from '../errors.js';
 import { KIT_DIR } from '../kit.js';
 import type { EventService } from '../pipeline/events.js';
@@ -49,9 +49,14 @@ export interface BuildServiceDeps {
   gateTimeoutMs?: number;
 }
 
+/** A build as the API sends it: the stored row plus `pedagogy`, which is null until the pedagogy check exists. */
+export type ApiBuild = Build & { pedagogy: null };
+
 export interface BuildDownload {
   filename: string;
   stream: Readable;
+  /** Stops producing the zip and releases its open files. For a client that disconnects mid-download. */
+  cancel(): void;
 }
 
 export interface BuildService {
@@ -61,18 +66,18 @@ export interface BuildService {
    * Emits `build.created` once the build is stored, and `build.updated` once
    * its final status is stored. A failed copy finishes the build as `failed`.
    */
-  create(projectId: string, turnId?: string): Promise<Build>;
+  create(projectId: string, turnId?: string): Promise<ApiBuild>;
 
   /** The build, if it belongs to one of `ownerId`'s projects; otherwise throws `NotFound`. */
-  get(ownerId: string, buildId: string): Build;
+  get(ownerId: string, buildId: string): ApiBuild;
 
   /** Unscoped lookup of the project's highest build version, for pipeline code acting on a project a route has already authorized. */
   latest(projectId: string): Build | undefined;
 
   /**
-   * A zip of a `ready` build with `imsmanifest.xml` at its root. Throws
-   * `NotFound`, `BuildNotReady`, or `BuildIncomplete` before any byte is
-   * streamed.
+   * A zip of a `ready` build with `imsmanifest.xml` at its root, named after
+   * the project's title and the build version. Throws `NotFound`,
+   * `BuildNotReady`, or `BuildIncomplete` before any byte is streamed.
    */
   download(ownerId: string, buildId: string): Promise<BuildDownload>;
 
@@ -151,12 +156,14 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
       : { status: 'failed', qa, error: { code: 'qa_failed', message: `The QA gate reported ${errorCount} error(s)` } };
   }
 
-  function get(ownerId: string, buildId: string): Build {
+  /** The build and its project, if the project is `ownerId`'s; otherwise throws `NotFound`. */
+  function owned(ownerId: string, buildId: string): { build: Build; project: Project } {
     const build = deps.builds.get(buildId);
-    if (!build || !deps.projects.get(ownerId, build.projectId)) {
+    const project = build && deps.projects.get(ownerId, build.projectId);
+    if (!build || !project) {
       throw new NotFound();
     }
-    return build;
+    return { build, project };
   }
 
   async function copyAndCheck(projectId: string, version: number): Promise<FinishBuildInput> {
@@ -176,21 +183,21 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
     }
   }
 
-  async function create(projectId: string, turnId?: string): Promise<Build> {
+  async function create(projectId: string, turnId?: string): Promise<ApiBuild> {
     // No await between choosing the version and storing the row, so concurrent
     // calls never pick the same version and a failed copy uses its version up.
     const version = deps.builds.nextVersion(projectId);
     const build = deps.builds.create({ projectId, version, avenue: AVENUE, turnId });
-    deps.events.append({ projectId, turnId, kind: 'build.created', payload: { build } });
+    deps.events.append({ projectId, turnId, kind: 'build.created', payload: { build: toApi(build) } });
 
     const result = await copyAndCheck(projectId, version);
-    const finished = deps.builds.finish(build.id, result);
+    const finished = toApi(deps.builds.finish(build.id, result));
     deps.events.append({ projectId, turnId, kind: 'build.updated', payload: { build: finished } });
     return finished;
   }
 
   async function download(ownerId: string, buildId: string): Promise<BuildDownload> {
-    const build = get(ownerId, buildId);
+    const { build, project } = owned(ownerId, buildId);
     if (build.status !== 'ready') {
       throw new BuildNotReady(build.status);
     }
@@ -205,7 +212,16 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
     archive.directory(buildDir, false, (entry) => (entry.name === QA_REPORT_FILE ? false : entry));
     // A failure also reaches the consumer as the stream's 'error' event.
     archive.finalize().catch(() => {});
-    return { filename: `build-${build.version}.zip`, stream: archive };
+    return {
+      filename: downloadFilename(project.title, build.version),
+      stream: archive,
+      cancel: () => {
+        // abort drops the queued files; resume drains the file being read so its handle closes.
+        archive.unpipe();
+        archive.abort();
+        archive.resume();
+      },
+    };
   }
 
   function failInterrupted(): void {
@@ -215,12 +231,36 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
         projectId: build.projectId,
         turnId: build.turnId ?? undefined,
         kind: 'build.updated',
-        payload: { build },
+        payload: { build: toApi(build) },
       });
     }
   }
 
-  return { create, get, latest: (projectId) => deps.builds.latest(projectId), download, failInterrupted };
+  return {
+    create,
+    get: (ownerId, buildId) => toApi(owned(ownerId, buildId).build),
+    latest: (projectId) => deps.builds.latest(projectId),
+    download,
+    failInterrupted,
+  };
+}
+
+function toApi(build: Build): ApiBuild {
+  return { ...build, pedagogy: null };
+}
+
+/**
+ * `<title>-v<version>.zip`, with the title folded to lowercase ASCII letters
+ * and digits joined by dashes, or `build` when none are left.
+ */
+export function downloadFilename(title: string, version: number): string {
+  const slug = title
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return `${slug || 'build'}-v${version}.zip`;
 }
 
 function failure(code: string, message: string): Verdict {

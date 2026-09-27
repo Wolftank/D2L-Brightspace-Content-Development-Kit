@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentEvent, AgentSession, TurnResult } from '../agent/AgentDriver.js';
 import type { CreateMessageInput } from '../db/messages.js';
-import type { Build, Event, Message, Turn } from '../db/schema.js';
+import type { Event, Message, Turn } from '../db/schema.js';
 import type { FinishTurnInput } from '../db/turns.js';
 import { WorkspaceMissing } from '../errors.js';
+import type { ApiBuild } from '../services/builds.js';
 import type { AppendEventInput } from './events.js';
 import { createRunner, type RunnerDeps } from './runner.js';
 
@@ -101,8 +102,8 @@ function setup(options: { session?: AgentSession; hashes?: string[] } = {}) {
       hashOutput: vi.fn(async () => hashes.shift() ?? 'after'),
     },
     builds: {
-      latest: vi.fn((): Build | undefined => undefined),
-      create: vi.fn(async (projectId: string, turnId?: string) => ({ projectId, turnId, status: 'ready' }) as Build),
+      latest: vi.fn((): ApiBuild | undefined => undefined),
+      create: vi.fn(async (projectId: string, turnId?: string) => ({ projectId, turnId, status: 'ready' }) as ApiBuild),
     },
   } satisfies RunnerDeps;
 
@@ -198,7 +199,7 @@ describe('runner', () => {
     ['skips output that matches the latest build', 'after', ['before', 'after'], false],
   ])('once the project has a build, compares with it: %s', async (_case, latestHash, hashes, builds) => {
     const { deps, runner } = setup({ hashes });
-    deps.builds.latest.mockReturnValue({ outputHash: latestHash } as Build);
+    deps.builds.latest.mockReturnValue({ outputHash: latestHash } as ApiBuild);
 
     await runner.executeTurn('turn-1');
 
@@ -207,7 +208,7 @@ describe('runner', () => {
 
   it('completes the turn when its build fails QA', async () => {
     const { deps, runner, finished, kinds } = setup();
-    deps.builds.create.mockResolvedValue({ status: 'failed', error: { code: 'qa_failed', message: 'm' } } as Build);
+    deps.builds.create.mockResolvedValue({ status: 'failed', error: { code: 'qa_failed', message: 'm' } } as ApiBuild);
 
     await runner.executeTurn('turn-1');
 

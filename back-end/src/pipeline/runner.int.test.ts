@@ -90,7 +90,7 @@ describe('runner, end to end', () => {
     runner = createRunner({ turns: createTurnsRepo(db), messages, events, sessions, workspaces, builds });
 
     const ownerId = createUsersRepo(db).ensureLocalUser().id;
-    projectId = projects.create({ ownerId, title: 'Cell division practice', avenue: 'scorm' }).id;
+    projectId = projects.create({ id: 'project-1', ownerId, title: 'Cell division practice', avenue: 'scorm' }).id;
     await workspaces.create(projectId);
   });
 
