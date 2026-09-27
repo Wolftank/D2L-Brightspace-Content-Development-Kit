@@ -81,7 +81,7 @@ export interface BuildService {
    */
   download(ownerId: string, buildId: string): Promise<BuildDownload>;
 
-  /** Fails every build left `checking` with code `interrupted`, emitting `build.updated` for each. Call once at startup, before accepting requests. */
+  /** Fails every build left `checking` with code `interrupted`, emitting `build.updated` for each. Call once at startup, after the back end holds its port and before it handles a request. */
   failInterrupted(): void;
 }
 

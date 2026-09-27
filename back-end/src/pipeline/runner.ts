@@ -43,7 +43,7 @@ export interface Runner {
    * turn and reported through the event stream.
    */
   executeTurn(turnId: string): Promise<void>;
-  /** Fails every `queued` or `running` turn with code `interrupted`. Call once at startup, before accepting requests. */
+  /** Fails every `queued` or `running` turn with code `interrupted`. Call once at startup, after the back end holds its port and before it handles a request. */
   failInterrupted(): void;
 }
 
