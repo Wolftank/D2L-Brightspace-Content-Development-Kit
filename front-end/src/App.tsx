@@ -278,19 +278,30 @@ export function App() {
               )}
 
               {findings.length > 0 && (
-                <ul className="findings">
-                  {findings.map((finding) => (
-                    <li
-                      key={`${finding.rule}-${finding.file}-${finding.line ?? 'none'}`}
-                    >
-                      <strong>
-                        {finding.severity.toUpperCase()}
-                      </strong>{' '}
-                      {finding.message}
-                    </li>
-                  ))}
-                </ul>
-              )}
+  <ul className="findings">
+    {findings.map((finding) => (
+      <li
+        key={`${finding.rule}-${finding.file}-${finding.line ?? 'none'}`}
+      >
+        <div className="finding-header">
+          <strong>{finding.rule}</strong>
+          <span className="finding-severity">
+            {finding.severity.toUpperCase()}
+          </span>
+        </div>
+
+        <p className="finding-location">
+          {finding.file}
+          {finding.line != null ? `:${finding.line}` : ''}
+        </p>
+
+        <p className="finding-message">
+          {finding.message}
+        </p>
+      </li>
+    ))}
+  </ul>
+)}
 
               {build.status === 'ready' && (
                 <a
