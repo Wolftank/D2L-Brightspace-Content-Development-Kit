@@ -16,6 +16,10 @@ describe('projects repo', () => {
     ownerId = createUsersRepo(db).ensureLocalUser().id;
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('creates a project under the given id, owned by the given user', () => {
     const project = projects.create({ id: 'project-1', ownerId, title: 'Cell division practice' });
     expect(project.id).toBe('project-1');
@@ -46,12 +50,8 @@ describe('projects repo', () => {
     expect(projects.get(ownerId, project.id)?.sessionId).toBe('session-123');
   });
 
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
   it('stores the avenue when one is given (F9)', () => {
-    const project = projects.create({ ownerId, title: 'Cell division practice', avenue: 'scorm' });
+    const project = projects.create({ id: 'project-1', ownerId, title: 'Cell division practice', avenue: 'scorm' });
     expect(project.avenue).toBe('scorm');
     expect(projects.get(ownerId, project.id)?.avenue).toBe('scorm');
   });
@@ -63,7 +63,7 @@ describe('projects repo', () => {
   it('changes updatedAt when the session id is set (F13)', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-09-01T12:00:00Z'));
-    const project = projects.create({ ownerId, title: 'Cell division practice' });
+    const project = projects.create({ id: 'project-1', ownerId, title: 'Cell division practice' });
 
     vi.setSystemTime(new Date('2026-09-01T12:00:05Z'));
     projects.setSessionId(project.id, 'session-123');
@@ -75,7 +75,7 @@ describe('projects repo', () => {
   });
 
   it('never returns a project for any other owner id (NF9)', () => {
-    const project = projects.create({ ownerId, title: 'Cell division practice' });
+    const project = projects.create({ id: 'project-1', ownerId, title: 'Cell division practice' });
     const otherOwners = [
       '',
       'someone-else',
