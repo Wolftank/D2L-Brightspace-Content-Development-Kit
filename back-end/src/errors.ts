@@ -9,7 +9,7 @@ export class NotFound extends Error {
   }
 }
 
-/** A project already has a turn running; the caller must wait for it. */
+/** A project already has a `queued` or `running` turn; the caller must wait for it. */
 export class TurnActive extends Error {
   constructor(public readonly turnId: string) {
     super('A turn is already active for this project');
@@ -55,6 +55,11 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
 
   if (err instanceof SyntaxError && (err as { type?: string }).type === 'entity.parse.failed') {
     res.status(400).json({ error: { code: 'invalid_json', message: 'Invalid JSON body' } });
+    return;
+  }
+
+  if ((err as { type?: string }).type === 'entity.too.large') {
+    res.status(413).json({ error: { code: 'payload_too_large', message: 'The request is too large.' } });
     return;
   }
 

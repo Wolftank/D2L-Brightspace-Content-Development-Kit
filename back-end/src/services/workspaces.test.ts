@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkspaceMissing } from '../errors.js';
 import {
   BuildVersionExists,
-  COPY_RETRY_ATTEMPTS,
+  LOCK_RETRY_ATTEMPTS,
   createWorkspaceService,
   type WorkspaceService,
 } from './workspaces.js';
@@ -115,7 +115,7 @@ describe('workspace service', () => {
       };
 
       await expect(workspaces.create(projectId)).rejects.toMatchObject({ code: 'EBUSY' });
-      expect(calls).toBe(COPY_RETRY_ATTEMPTS);
+      expect(calls).toBe(LOCK_RETRY_ATTEMPTS);
     });
 
     it('does not retry, and propagates immediately, for a non-lock error', async () => {
@@ -129,6 +129,29 @@ describe('workspace service', () => {
 
       await expect(workspaces.create(projectId)).rejects.toMatchObject({ code: 'ENOSPC' });
       expect(calls).toBe(1);
+    });
+  });
+
+  describe('remove', () => {
+    it('removes the workspace and builds, and does nothing for a project with no directory', async () => {
+      await workspaces.create(projectId);
+      await workspaces.copyOutput(projectId, '1');
+
+      await workspaces.remove(projectId);
+
+      await expect(fs.access(join(dataDir, 'projects', projectId))).rejects.toThrow();
+      await expect(workspaces.remove(projectId)).resolves.toBeUndefined();
+    });
+  });
+
+  describe('locate', () => {
+    it('returns the workspace path once it is provisioned', async () => {
+      await workspaces.create(projectId);
+      await expect(workspaces.locate(projectId)).resolves.toBe(workspaces.pathFor(projectId));
+    });
+
+    it('throws WorkspaceMissing when create() has not run', async () => {
+      await expect(workspaces.locate(projectId)).rejects.toThrow(WorkspaceMissing);
     });
   });
 

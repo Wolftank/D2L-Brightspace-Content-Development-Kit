@@ -11,7 +11,6 @@ For the full proposal, see [`docs/Capstone_Project_Proposal.pdf`](docs/Capstone_
 | [`docs/`](docs/) | The finished project proposal, plus the contract the tracks build against (`architecture.md`), the first slice to build (`v1.md`), and what was verified about each agent (`drivers.md`) |
 | [`back-end/kit/`](back-end/kit/) | The actual D2L Content Development Kit — skills, harness/lint gate, probes, kit-level docs. Hardened and extended in place; not a frozen reference copy |
 | [`back-end/src/`](back-end/src/) | The back end — runs turns with the agent, runs the QA gate and the pedagogy check, creates builds, deploys to D2L, translates findings to plain language |
-| [`back-end/config/`](back-end/config/) | Mode (local / hosted) and agent (Claude / Copilot) as configuration, not hard-coded branches |
 | [`front-end/`](front-end/) | Local server + browser app: chat, configurator, build panel, preview. Displays the turn status, QA gate findings, and pedagogy check findings the back end produces — does not run those checks itself |
 | [`.github/`](.github/) | Issue/PR templates, CI workflow |
 

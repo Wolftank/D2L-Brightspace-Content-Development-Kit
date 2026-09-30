@@ -16,8 +16,8 @@ describe('builds repo', () => {
     builds = createBuildsRepo(db);
     const ownerId = createUsersRepo(db).ensureLocalUser().id;
     const projects = createProjectsRepo(db);
-    projectId = projects.create({ ownerId, title: 'Cell division practice' }).id;
-    otherProjectId = projects.create({ ownerId, title: 'Photosynthesis practice' }).id;
+    projectId = projects.create({ id: 'project-1', ownerId, title: 'Cell division practice' }).id;
+    otherProjectId = projects.create({ id: 'project-2', ownerId, title: 'Photosynthesis practice' }).id;
   });
 
   it('starts a project at version 1 and counts up per project', () => {
@@ -43,7 +43,7 @@ describe('builds repo', () => {
     expect(() => builds.create({ projectId, version: 1, avenue: 'scorm' })).toThrow();
   });
 
-  it('stores the final status, report, and error', () => {
+  it('stores the final status, report, error, and output hash', () => {
     const build = builds.create({ projectId, version: 1, avenue: 'scorm' });
     const qa = {
       passed: false,
@@ -56,9 +56,40 @@ describe('builds repo', () => {
       status: 'failed',
       qa,
       error: { code: 'qa_failed', message: 'The QA gate reported 1 error(s)' },
+      outputHash: 'hash-1',
     });
 
-    expect(finished).toMatchObject({ status: 'failed', qa, error: { code: 'qa_failed' } });
+    expect(finished).toMatchObject({ status: 'failed', qa, error: { code: 'qa_failed' }, outputHash: 'hash-1' });
     expect(builds.get(build.id)).toEqual(finished);
+  });
+
+  it('fails only checking builds, returning them', () => {
+    const checking = builds.create({ projectId, version: 1, avenue: 'scorm' });
+    const ready = builds.create({ projectId, version: 2, avenue: 'scorm' });
+    builds.finish(ready.id, { status: 'ready', qa: { passed: true, findings: [] }, error: null, outputHash: 'hash-2' });
+    const error = { code: 'interrupted', message: 'm' };
+
+    const failed = builds.failChecking(error);
+
+    expect(failed).toEqual([{ ...checking, status: 'failed', error }]);
+    expect(builds.get(ready.id)?.status).toBe('ready');
+  });
+
+  it("lists a project's builds, oldest version first", () => {
+    const second = builds.create({ projectId, version: 2, avenue: 'scorm' });
+    const first = builds.create({ projectId, version: 1, avenue: 'scorm' });
+    builds.create({ projectId: otherProjectId, version: 1, avenue: 'scorm' });
+
+    expect(builds.listByProject(projectId)).toEqual([first, second]);
+  });
+
+  it("finds a project's highest version as its latest build", () => {
+    expect(builds.latest(projectId)).toBeUndefined();
+
+    builds.create({ projectId, version: 1, avenue: 'scorm' });
+    const second = builds.create({ projectId, version: 2, avenue: 'scorm' });
+    builds.create({ projectId: otherProjectId, version: 3, avenue: 'scorm' });
+
+    expect(builds.latest(projectId)).toEqual(second);
   });
 });

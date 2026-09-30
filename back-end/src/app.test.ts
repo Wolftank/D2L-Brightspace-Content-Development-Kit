@@ -18,11 +18,20 @@ function fakeDeps(): Deps {
       get: (id) => (id === fakeUser.id ? fakeUser : undefined),
     },
     projects: {
-      create: () => {
+      create: async () => {
         throw new Error('not used by these tests');
       },
-      get: () => undefined,
-      setSessionId: () => {},
+      get: () => {
+        throw new Error('not used by these tests');
+      },
+    },
+    builds: {
+      get: () => {
+        throw new Error('not used by these tests');
+      },
+      download: async () => {
+        throw new Error('not used by these tests');
+      },
     },
     events: {
       append: (input) => ({
@@ -36,7 +45,13 @@ function fakeDeps(): Deps {
       after: () => [],
       subscribe: () => () => {},
     },
+    turns: {
+      start: () => {
+        throw new Error('not used by these tests');
+      },
+    },
     driver: {
+      name: 'claude',
       probe: async () => ({ ok: true, version: '0.0.0' }),
     },
   };
@@ -52,7 +67,7 @@ describe('createApp', () => {
     expect(res.body).toEqual({
       user: fakeUser,
       mode: 'local',
-      agent: { ok: true, version: '0.0.0' },
+      agent: { name: 'claude', ok: true, version: '0.0.0' },
     });
   });
 
@@ -74,6 +89,17 @@ describe('createApp', () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('invalid_json');
+  });
+
+  it('returns 413 and the error envelope for a body over the JSON limit', async () => {
+    const app = createApp(fakeDeps());
+
+    const res = await request(app)
+      .post('/api/health')
+      .send({ content: [{ type: 'text', text: 'x'.repeat(150_000) }] });
+
+    expect(res.status).toBe(413);
+    expect(res.body.error).toEqual({ code: 'payload_too_large', message: 'The request is too large.' });
   });
 
   it('returns 404 and the error envelope for an unknown /api route', async () => {
