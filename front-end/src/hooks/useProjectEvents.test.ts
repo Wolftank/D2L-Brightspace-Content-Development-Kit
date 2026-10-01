@@ -302,4 +302,28 @@ it('handles build.updated by replacing the existing build', () => {
       text: 'Build cancelled',
     });
   });
+  
+  it('clears the previous reply when a new turn starts', () => {
+    const afterFirstTurn = {
+      ...initialProjectEventState,
+      turn: { id: 'turn-1', status: 'completed' as const },
+      replyText: 'First reply.',
+    };
+
+    const started = projectEventReducer(afterFirstTurn, {
+      seq: 20,
+      kind: 'turn.started',
+      payload: { turnId: 'turn-2' },
+    });
+
+    expect(started.replyText).toBe('');
+
+    const streaming = projectEventReducer(started, {
+      seq: 21,
+      kind: 'message.delta',
+      payload: { turnId: 'turn-2', messageId: 'message-2', text: 'Second' },
+    });
+
+    expect(streaming.replyText).toBe('Second');
+  });
 });
