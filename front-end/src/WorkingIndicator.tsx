@@ -21,7 +21,8 @@ export function WorkingIndicator({ startedAt, step, connection }: {
   return (
     <div className={`working-indicator connection-${connection}`} aria-label="Request progress">
       <span className="working-dot" aria-hidden="true" />
-      <span role="status">{text}</span>
+      <span aria-live="off">{connection === 'connected' ? text : ''}</span>
+      <span role="status">{connection === 'connected' ? '' : text}</span>
       <span className="elapsed-time" aria-live="off" aria-label="Elapsed time">
         {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}
       </span>

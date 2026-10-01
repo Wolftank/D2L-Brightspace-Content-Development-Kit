@@ -25,7 +25,8 @@ describe('WorkingIndicator', () => {
 
   it('shows the fallback and connection states', () => {
     const view = render(<WorkingIndicator startedAt={Date.now()} step="" connection="connected" />);
-    expect(screen.getByRole('status')).toHaveTextContent('Working on your request');
+    expect(screen.getByText('Working on your request')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
     view.rerender(<WorkingIndicator startedAt={Date.now()} step="Writing index.html" connection="reconnecting" />);
     expect(screen.getByRole('status')).toHaveTextContent('Reconnecting');
     view.rerender(<WorkingIndicator startedAt={Date.now()} step="Writing index.html" connection="lost" />);

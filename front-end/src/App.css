@@ -26,6 +26,11 @@ button:hover { background: #602035; }
 button:disabled { cursor: wait; opacity: .7; }
 .error { margin: 16px 0 0; color: #a1223a; font-size: 13px; }
 .status-feed { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.status-feed-viewport { max-height: clamp(10rem, 30vh, 18rem); overflow-y: auto; overflow-x: hidden; padding: 4px; scrollbar-gutter: stable; overflow-anchor: none; scroll-behavior: auto; }
+.status-feed-viewport:focus-visible { outline: 3px solid #a65169; outline-offset: 3px; }
+.status-feed li { overflow-wrap: anywhere; }
+.status-feed-controls { min-height: 48px; }
+.status-feed-controls button { padding: 8px 12px; font-size: 13px; }
 .working-indicator { display: flex; align-items: center; gap: 10px; margin: 20px 0; color: #273239; font-size: 14px; }
 .working-dot { flex: 0 0 10px; height: 10px; border-radius: 50%; background: #315947; animation: working-pulse 1.5s ease-in-out infinite; }
 .connection-lost .working-dot, .connection-reconnecting .working-dot { animation: none; }
