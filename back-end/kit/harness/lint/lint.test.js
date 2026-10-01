@@ -26,7 +26,7 @@ const bsRules = rulesIn(bs);
   'scorm/storage-key-learner-id', 'scorm/root-height', 'scorm/manifest',
   'shared/no-viewport-units', 'shared/external-cdn', 'shared/missing-assets'
 ].forEach(id => check(id, bsRules.has(id)));
-check('bad-scorm fails the gate', errs(bs) === 0);
+check('bad-scorm fails the gate', errs(bs) > 0);
 
 console.log('\n== bad-topic trips every topic rule ==');
 const bt = lint(fx('bad-topic'), 'topic', profile);
