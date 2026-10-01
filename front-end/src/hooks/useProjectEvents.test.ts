@@ -107,6 +107,7 @@ describe('projectEventReducer', () => {
     expect(result.statusLines.at(-1)).toEqual({
       seq: 6,
       text: 'Generating activity',
+      callId: 'call-1',
     });
   });
 
@@ -122,10 +123,7 @@ describe('projectEventReducer', () => {
       },
     });
 
-    expect(result.statusLines.at(-1)).toEqual({
-      seq: 7,
-      text: 'Activity generated',
-    });
+    expect(result.statusLines).toEqual([]);
   });
 
   it('handles build.created', () => {
