@@ -146,7 +146,7 @@ Each event: `id` is the project-wide `seq`, `event` is the kind, `data` is JSON.
 
 | kind | payload | When |
 |---|---|---|
-| `turn.started` | `{ turnId }` | The runner picked the turn up |
+| `turn.started` | `{ turnId, startedAt }` | The runner picked the turn up; `startedAt` is the recorded turn start in epoch milliseconds |
 | `turn.status` | `{ turnId, text }` | Plain-language progress: "Reading your syllabus…", "Checking accessibility…" |
 | `message.delta` | `{ turnId, messageId, text }` | Streamed agent text |
 | `message.completed` | `{ message }` | The agent's full message is stored |

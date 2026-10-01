@@ -36,7 +36,7 @@ const EMPTY_ZIP = Buffer.from([0x50, 0x4b, 0x05, 0x06, ...new Array<number>(18).
 
 const user: User = { id: 'stub-user', displayName: 'Stub Instructor', email: null, role: 'instructor' };
 
-type Scenario = 'ok' | 'qa-fail' | 'turn-fail';
+type Scenario = 'ok' | 'qa-fail' | 'turn-fail' | 'long-step';
 
 interface StoredEvent {
   seq: number;
@@ -113,6 +113,7 @@ function textOf(content: ContentBlock[]): string {
 }
 
 function scenarioFor(text: string): Scenario {
+  if (text.includes('[long-step]')) return 'long-step';
   if (text.includes('[turn-fail]')) return 'turn-fail';
   if (text.includes('[qa-fail]')) return 'qa-fail';
   return 'ok';
@@ -155,7 +156,7 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
       () => {
         turn.status = 'running';
         turn.startedAt = Date.now();
-        append(state, 'turn.started', { turnId: turn.id });
+        append(state, 'turn.started', { turnId: turn.id, startedAt: turn.startedAt });
       },
     ],
     [400, () => append(state, 'turn.status', { turnId: turn.id, text: 'Reading your request' })],
@@ -184,7 +185,7 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
       },
     ]);
   } else {
-    const passed = scenario === 'ok';
+    const passed = scenario === 'ok' || scenario === 'long-step';
     steps.push(
       [
         4800,
@@ -259,7 +260,9 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
     );
   }
 
-  for (const [delay, step] of steps) setTimeout(step, delay);
+  for (const [delay, step] of steps) {
+    setTimeout(step, delay + (scenario === 'long-step' && delay >= 2000 ? 20_000 : 0));
+  }
 }
 
 function createProject(body: unknown): CreateProjectResponse {
@@ -344,6 +347,9 @@ function streamEvents(req: IncomingMessage, res: ServerResponse, state: ProjectS
   const write = (event: StoredEvent) => {
     res.write(`id: ${event.seq}\nevent: ${event.kind}\ndata: ${JSON.stringify(event.payload)}\n\n`);
   };
+
+  res.flushHeaders();
+  res.write(': connected\n\n');
 
   for (const event of state.events) {
     if (event.seq > after) write(event);

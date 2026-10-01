@@ -10,6 +10,7 @@ describe('projectEventReducer', () => {
       seq: 1,
       kind: 'turn.started',
       payload: {
+        startedAt: 1000,
         turnId: 'turn-1',
       },
     });
@@ -17,6 +18,8 @@ describe('projectEventReducer', () => {
     expect(result.turn).toEqual({
       id: 'turn-1',
       status: 'running',
+      startedAt: 1000,
+      currentStep: '',
     });
 
     expect(result.statusLines).toEqual([
@@ -234,6 +237,7 @@ it('handles build.updated by replacing the existing build', () => {
       seq: 12,
       kind: 'turn.started',
       payload: {
+        startedAt: 1000,
         turnId: 'turn-1',
       },
     });
@@ -249,6 +253,8 @@ it('handles build.updated by replacing the existing build', () => {
     expect(result.turn).toEqual({
       id: 'turn-1',
       status: 'completed',
+      startedAt: 1000,
+      currentStep: '',
     });
 
     expect(result.statusLines.at(-1)).toEqual({
@@ -273,6 +279,8 @@ it('handles build.updated by replacing the existing build', () => {
     expect(result.turn).toEqual({
       id: 'turn-1',
       status: 'failed',
+      startedAt: null,
+      currentStep: '',
     });
 
     expect(result.statusLines.at(-1)).toEqual({
@@ -293,6 +301,8 @@ it('handles build.updated by replacing the existing build', () => {
     expect(result.turn).toEqual({
       id: 'turn-1',
       status: 'cancelled',
+      startedAt: null,
+      currentStep: '',
     });
 
     expect(result.statusLines.at(-1)).toEqual({
