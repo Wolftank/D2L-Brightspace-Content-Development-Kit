@@ -76,6 +76,7 @@ export function projectEventReducer(
           currentStep: '',
           status: 'running',
         },
+        replyText: '',
         statusLines: [
           ...state.statusLines,
           { seq: event.seq, text: 'Starting your build' },
