@@ -147,11 +147,11 @@ Each event: `id` is the project-wide `seq`, `event` is the kind, `data` is JSON.
 | kind | payload | When |
 |---|---|---|
 | `turn.started` | `{ turnId }` | The runner picked the turn up |
-| `turn.status` | `{ turnId, text }` | Plain-language progress: "Reading your syllabus…", "Checking accessibility…" |
+| `turn.status` | `{ turnId, text }` | Plain-language progress, sent when the agent starts a new step: "Thinking…", "The agent's service is busy. Trying again…", "Condensing the conversation…", "Checking your build". Never sent on a timer, and never stored when its text repeats the turn's latest `turn.status`, `tool.started`, or `tool.finished` line. Only the main agent's steps are reported, not a subagent's |
 | `message.delta` | `{ turnId, messageId, text }` | Streamed agent text |
 | `message.completed` | `{ message }` | The agent's full message is stored |
-| `tool.started` | `{ turnId, callId, name, summary }` | The agent called a tool. `summary` is the driver's plain-language line, such as "Writing index.html" |
-| `tool.finished` | `{ turnId, callId, ok, summary, buildId? }` | The tool returned. `summary` repeats the started one, prefixed "Failed: " when `ok` is false |
+| `tool.started` | `{ turnId, callId, name, summary }` | The agent is calling a tool. Sent once per `callId`, as soon as the driver knows `summary`, its plain-language line such as "Writing index.html", which can be before the call's input is complete |
+| `tool.finished` | `{ turnId, callId, ok, summary, buildId? }` | The tool returned, or the turn ended before it did, which is `ok: false`. `summary` repeats the started one, prefixed "Failed: " when `ok` is false |
 | `build.created` | `{ build }` | A new build exists (status `checking`) |
 | `build.updated` | `{ build }` | QA gate report attached, pedagogy check report attached, or failed |
 | `deployment.updated` | `{ deployment }` | Any status change, including `requested` from the agent |
@@ -180,7 +180,7 @@ sequenceDiagram
   Runner->>Sessions: acquire(project)
   Sessions-->>Runner: the live session, or one reopened by session id
   Runner->>Agent: send(input)
-  Agent-->>Runner: text and tool events
+  Agent-->>Runner: text, tool, and status events
   Runner-->>UI: turn.status, message.delta
   Agent->>Tools: create_build()
   Tools->>Tools: copy out/, run the QA gate
@@ -197,7 +197,7 @@ sequenceDiagram
 Runner rules:
 
 1. One active turn per project. Per-instructor concurrency cap: 1 in local mode, configurable in hosted mode. Extra turns wait in `queued`. V1 enforces the per-project rule when a message is posted and has no per-instructor cap, so a turn stays `queued` only until the runner starts it.
-2. Every driver event becomes an Event row **and** a live push, in that order.
+2. Every driver event becomes an Event row **and** a live push, in that order, except a status or notice whose text repeats the turn's latest status line. When the driver's events end, every tool call without a `tool.finished` gets one with `ok: false`.
 3. When the driver's result arrives, the runner hands the session back to the session service: `release` after a completed result, `close` after anything else, so a failed or aborted agent process is never reused. On a completed result it then stores the agent's message (the driver's final message, or all the streamed text when that is empty), emits `message.completed`, builds per rule 6, and marks the turn.
 4. Every turn ends with exactly one of `turn.completed`, `turn.failed`, and `turn.cancelled`. A failed turn's `error` is `{ code, message }`: the code from the driver, or `workspace_missing`, `interrupted`, or `internal_error` from the runner, and a fixed plain-language message for that code. The technical detail goes to the server log.
 5. `POST /turns/:id/cancel` fires the turn's abort signal. The driver stops the agent; the runner records `cancelled` or `failed`. V1 has no cancel route and imposes no step, spending, or time limit on a turn, so a stuck turn holds its project until the back end restarts.

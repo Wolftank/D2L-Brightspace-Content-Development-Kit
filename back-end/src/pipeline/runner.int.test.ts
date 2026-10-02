@@ -35,7 +35,7 @@ function writingDriver(): Pick<AgentDriver, 'open'> {
           });
           const notes = join(req.workspaceDir, 'out', 'notes.txt');
           const events = (async function* (): AsyncGenerator<AgentEvent> {
-            yield { kind: 'tool_start', callId: 'call-1', name: 'Write', input: { file_path: notes }, summary: 'Writing notes.txt' };
+            yield { kind: 'tool_start', callId: 'call-1', name: 'Write', summary: 'Writing notes.txt' };
             await fs.writeFile(notes, input.text);
             yield { kind: 'tool_end', callId: 'call-1', ok: true };
             yield { kind: 'text_delta', text: 'Done.' };
