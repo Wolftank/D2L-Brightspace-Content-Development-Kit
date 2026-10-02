@@ -38,6 +38,21 @@ jobs:
       - run: npm test
         working-directory: back-end
 
-  # Add a job here that runs back-end/kit/harness/lint/lint.js against
-  # anything in back-end/ that touches D2L build/deploy — that script is
-  # the tenant-specific QA gate.
+  kit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Kit QA gate tests (lint.test.js)
+        run: node harness/lint/lint.test.js
+        working-directory: back-end/kit
+      - name: Kit emulator tests (emulator.test.js)
+        if: success() || failure()
+        run: node harness/emulator.test.js
+        working-directory: back-end/kit
+      - name: Kit routing tests (routing.test.js)
+        if: success() || failure()
+        run: node builds/cdk/routing.test.js
+        working-directory: back-end/kit
