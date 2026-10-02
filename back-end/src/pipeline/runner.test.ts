@@ -125,7 +125,7 @@ describe('runner', () => {
     const { session } = scriptedSession(
       [
         { kind: 'text_delta', text: 'Reading the guide. ' },
-        { kind: 'tool_start', callId: 'call-1', name: 'Write', input: {}, summary: 'Writing index.html' },
+        { kind: 'tool_start', callId: 'call-1', name: 'Write', summary: 'Writing index.html' },
         { kind: 'tool_end', callId: 'call-1', ok: true },
         { kind: 'notice', text: 'The agent was denied permission to use WebFetch.' },
       ],
@@ -171,7 +171,7 @@ describe('runner', () => {
   it('marks a failed tool call in its finished summary', async () => {
     const { session } = scriptedSession(
       [
-        { kind: 'tool_start', callId: 'call-1', name: 'PowerShell', input: {}, summary: 'Run the QA check' },
+        { kind: 'tool_start', callId: 'call-1', name: 'PowerShell', summary: 'Run the QA check' },
         { kind: 'tool_end', callId: 'call-1', ok: false },
       ],
       COMPLETED,
