@@ -103,6 +103,8 @@ POST   /api/turns/:turnId/cancel            → 202
 
 Posting a message never blocks on the agent. It stores the message, creates a queued turn, and returns. Progress arrives on the event stream. One turn runs per project at a time; the client disables send while `activeTurn` exists.
 
+In V1, `POST /api/projects/:projectId/messages` takes `content` holding at least one `{ type: 'text', text }` block and nothing else. Each `text` is trimmed and must not be blank; a `file` block or any other shape gets `400 invalid_request`, and any other field is ignored. A body over 100 KB of JSON gets `413 payload_too_large`. The message and its turn are stored together, or not at all when the project already has a `queued` or `running` turn, which the `409 turn_active` names. V1 has no route to list messages and no cancel route.
+
 ### Builds and deployments
 
 Reading builds, creating one without the agent, running the pedagogy check on one, and the human gate for deployments.
@@ -194,13 +196,13 @@ sequenceDiagram
 
 Runner rules:
 
-1. One active turn per project. Per-instructor concurrency cap: 1 in local mode, configurable in hosted mode. Extra turns wait in `queued`.
+1. One active turn per project. Per-instructor concurrency cap: 1 in local mode, configurable in hosted mode. Extra turns wait in `queued`. V1 enforces the per-project rule when a message is posted and has no per-instructor cap, so a turn stays `queued` only until the runner starts it.
 2. Every driver event becomes an Event row **and** a live push, in that order.
 3. When the driver's result arrives, the runner hands the session back to the session service: `release` after a completed result, `close` after anything else, so a failed or aborted agent process is never reused. On a completed result it then stores the agent's message (the driver's final message, or all the streamed text when that is empty), emits `message.completed`, builds per rule 6, and marks the turn.
 4. Every turn ends with exactly one of `turn.completed`, `turn.failed`, and `turn.cancelled`. A failed turn's `error` is `{ code, message }`: the code from the driver, or `workspace_missing`, `interrupted`, or `internal_error` from the runner, and a fixed plain-language message for that code. The technical detail goes to the server log.
 5. `POST /turns/:id/cancel` fires the turn's abort signal. The driver stops the agent; the runner records `cancelled` or `failed`. V1 has no cancel route and imposes no step, spending, or time limit on a turn, so a stuck turn holds its project until the back end restarts.
 6. At the end of a completed turn, the runner compares the workspace service's hash of `out/` with the `outputHash` of the project's latest build, or with `out/` at the turn's start before the project's first build. When they differ it creates a build, with the QA gate and without the pedagogy check. This builds a turn's changes without relying on the agent to remember and, once the project has a build, also builds output a failed or interrupted turn left unbuilt. A build that fails the QA gate leaves the turn `completed`.
-7. On boot, before accepting requests, every turn still `queued` or `running` becomes `failed` with `error.code = 'interrupted'`. Its message and the workspace output are kept, and the UI offers to resend. Every build still `checking` becomes `failed` with the same code.
+7. On boot, once the back end holds its port and before it handles a request, every turn still `queued` or `running` becomes `failed` with `error.code = 'interrupted'`. Its message and the workspace output are kept, and the UI offers to resend. Every build still `checking` becomes `failed` with the same code.
 
 Not every message produces a build. A question gets an answer. A request to change a colour edits the output and produces a new build. The agent's clarifying questions are ordinary messages; the next instructor message continues the chat.
 
@@ -242,7 +244,7 @@ A project whose workspace is missing cannot run a turn; the turn fails with `err
 **The session service** (`src/pipeline/`) hands the runner an open session per project and owns process lifetime:
 
 1. `acquire(projectId)` returns the live session for the project, or opens one in the project's workspace with the Project's `sessionId` (null the first time).
-2. A session is busy while a turn runs. A second message during that time gets `409 turn_active`.
+2. A session is busy while a turn runs. A message posted while the project's turn is `queued` or `running` gets `409 turn_active` from the turn rows, before any session is involved.
 3. After a turn the service saves the session id on the Project and starts a fixed idle timer, 15 minutes to begin with. On expiry it closes the session and releases whatever process it held.
 4. An agent result that is not `completed`, or an error while the agent runs, ends with the runner closing the session. The next message reopens it by session id.
 5. In hosted mode, live sessions are capped for memory. At the cap, the least recently used idle session is closed early.
@@ -318,7 +320,7 @@ How `back-end/src` is laid out, so that each concern above has exactly one home.
 | Folder | Role |
 |---|---|
 | `src/routes/` | HTTP only: parse, validate (zod), call one service, shape the response |
-| `src/services/` | Projects, messages, builds, deployments, and the workspace service. Receives plain arguments, never `req`/`res` |
+| `src/services/` | Projects, turns, builds, deployments, and the workspace service. Receives plain arguments, never `req`/`res` |
 | `src/pipeline/` | The runner, the session service, and the event service |
 | `src/agent/` | `AgentDriver` and the drivers |
 | `src/tools/` | The `cdk` tool handlers, plus the in-process and stdio adapters |
