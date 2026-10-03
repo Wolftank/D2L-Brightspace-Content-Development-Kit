@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sample SCORM activity</title>
+<style>
+  /* Fixed pixel height, never viewport units, and kept SHORT. The embedded
+     SCORM player will not scroll a tall child: we measured wheel, scrollbar
+     drag, keyboard and parent resize all failing against a 1100px root.
+     Over ~600px, set the instance to "Open player in new window" instead. */
+  #root {
+    height: 520px; overflow: auto; box-sizing: border-box; padding: 20px 24px;
+    background: #fff; color: #1c2126;
+    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  }
+  #root * { box-sizing: border-box; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: #6d7883; font-size: 14px; margin: 0 0 14px; }
+  .banner {
+    background: #fdf1e7; border-left: 4px solid #d9a406; padding: 9px 13px;
+    font-size: 14px; margin-bottom: 14px;
+  }
+  .banner[hidden] { display: none; }
+  .q { border-bottom: 1px solid #eaeef1; padding: 11px 0; }
+  .q:last-of-type { border-bottom: 0; }
+  .q p { margin: 0 0 8px; font-size: 15px; }
+  .opts { display: flex; gap: 8px; flex-wrap: wrap; }
+  .opts button {
+    font: 500 14px/1 inherit; padding: 8px 13px; border: 1px solid #c3ccd4;
+    border-radius: 6px; background: #fff; color: #45505a; cursor: pointer;
+  }
+  .opts button[aria-pressed="true"] { background: #1f4a86; border-color: #1f4a86; color: #fff; }
+  .foot { margin-top: 16px; display: flex; gap: 12px; align-items: center; }
+  .foot button {
+    font: 600 14px/1 inherit; padding: 10px 16px; border: 1px solid #1f4a86;
+    border-radius: 6px; background: #1f4a86; color: #fff; cursor: pointer;
+  }
+  .foot button[disabled] { opacity: .45; cursor: default; }
+  .score { font-size: 14px; color: #45505a; }
+</style>
+<link rel="stylesheet" href="sample.css">
+</head>
+<body>
+<div id="root">
+  <h1>Sample SCORM activity</h1>
+  <p class="sub">Replace this with your activity. The wiring below is the part worth keeping.</p>
+  <div class="banner" id="banner" hidden></div>
+  <div id="questions"></div>
+  <div class="foot">
+    <button type="button" id="submit">Submit</button>
+    <span class="score" id="score"></span>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ------------------------------------------------ SCORM plumbing */
+
+  var api = null, w = window, depth = 0;
+  while (depth < 12 && !api) {
+    try { if (w.API) { api = w.API; break; } } catch (e) { /* cross-origin ancestor */ }
+    var next; try { next = w.parent; } catch (e) { break; }
+    if (!next || next === w) break;
+    w = next; depth++;
+  }
+
+  function G(k) { try { return api ? api.LMSGetValue(k) : ''; } catch (e) { return ''; } }
+  function S(k, v) { try { return api ? api.LMSSetValue(k, String(v)) : 'false'; } catch (e) { return 'false'; } }
+  function C() { try { return api ? api.LMSCommit('') : 'false'; } catch (e) { return 'false'; } }
+
+  if (api) { try { api.LMSInitialize(''); } catch (e) { api = null; } }
+
+  /* Is this launch actually being recorded? "no-credit" covers BOTH instructor
+     preview and post-completion review. In those modes every write is silently
+     discarded AND the error code stays 0, so this is the only honest check. */
+  var recording = !!api && G('cmi.core.credit') !== 'no-credit';
+  var learnerId = G('cmi.core.student_id') || 'anonymous';
+
+  if (!recording) {
+    var b = document.getElementById('banner');
+    b.textContent = api
+      ? 'Preview mode. Nothing you do here is recorded. Open this as a student to test it properly.'
+      : 'No SCORM connection. Opened outside D2L, so nothing is recorded.';
+    b.hidden = false;
+  }
+
+  /* ------------------------------------------------------- state */
+
+  /* suspend_data is capped at 4096 on this tenant (SCORM 1.2 only, no 2004).
+     Budget under it deliberately and degrade rather than let D2L truncate. */
+  var SUSPEND_MAX = 4000;
+
+  var QUESTIONS = [
+    { q: 'Replace this question.', opts: ['Right answer', 'Wrong answer'], correct: 0 },
+    { q: 'And this one.', opts: ['Wrong', 'Right', 'Also wrong'], correct: 1 },
+    { q: 'And this one too.', opts: ['Right', 'Wrong'], correct: 0 }
+  ];
+
+  var chosen = {};
+  var finished = false;
+
+  function loadState() {
+    var raw = G('cmi.suspend_data');
+    if (!raw) return;
+    try {
+      var parsed = JSON.parse(raw);
+      chosen = parsed.chosen || {};
+      finished = !!parsed.finished;
+    } catch (e) { chosen = {}; finished = false; }
+  }
+
+  function saveState() {
+    var blob = JSON.stringify({ chosen: chosen, finished: finished });
+    if (blob.length > SUSPEND_MAX) {
+      // Shed the least important thing rather than letting it be cut mid-string.
+      blob = JSON.stringify({ chosen: {}, finished: finished });
+    }
+    S('cmi.suspend_data', blob);
+    S('cmi.core.lesson_location', finished ? 'done' : 'working');
+    C();
+  }
+
+  /* --------------------------------------------------------- ui */
+
+  function render() {
+    var host = document.getElementById('questions');
+    host.textContent = '';
+    QUESTIONS.forEach(function (item, qi) {
+      var wrap = document.createElement('div');
+      wrap.className = 'q';
+      var p = document.createElement('p');
+      p.textContent = (qi + 1) + '. ' + item.q;
+      wrap.appendChild(p);
+
+      var opts = document.createElement('div');
+      opts.className = 'opts';
+      opts.setAttribute('role', 'group');
+      opts.setAttribute('aria-label', item.q);
+      item.opts.forEach(function (label, oi) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = label;
+        b.setAttribute('aria-pressed', String(chosen[qi] === oi));
+        if (finished) { b.disabled = true; }
+        b.addEventListener('click', function () {
+          chosen[qi] = oi;
+          saveState();
+          render();
+        });
+        opts.appendChild(b);
+      });
+      wrap.appendChild(opts);
+      host.appendChild(wrap);
+    });
+
+    var answered = Object.keys(chosen).length;
+    document.getElementById('submit').disabled = finished || answered < QUESTIONS.length;
+    document.getElementById('score').textContent = finished
+      ? 'Submitted. Score: ' + scoreNow() + ' of ' + QUESTIONS.length
+      : answered + ' of ' + QUESTIONS.length + ' answered';
+  }
+
+  function scoreNow() {
+    return QUESTIONS.reduce(function (n, item, qi) {
+      return n + (chosen[qi] === item.correct ? 1 : 0);
+    }, 0);
+  }
+
+  /* Completion is written ONLY here, from the explicit finish action.
+     Writing it on load would put every later launch into review mode, where
+     all writes are rejected, and best-of-N would silently stop working. */
+  function submit() {
+    if (finished) return;
+    finished = true;
+
+    var raw = scoreNow();
+    var pct = Math.round((raw / QUESTIONS.length) * 100);
+
+    S('cmi.core.score.min', '0');
+    S('cmi.core.score.max', '100');
+    S('cmi.core.score.raw', pct);
+    S('cmi.core.lesson_status', 'completed');
+    saveState();
+    render();
+  }
+
+  document.getElementById('submit').addEventListener('click', submit);
+
+  loadState();
+  render();
+
+  /* Deliberately NOT calling LMSFinish here. Terminating makes the D2L player
+     replace this page with "This activity is complete." and the learner sees
+     nothing. Commit has already persisted everything; D2L closes the attempt
+     when the learner navigates away. */
+
+  window.SCSU_ACTIVITY_READY = true;
+})();
+</script>
+</body>
+</html>
