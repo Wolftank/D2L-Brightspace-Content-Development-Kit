@@ -44,6 +44,7 @@ describe('project routes', () => {
         },
       },
       driver: { name: 'claude', probe: async () => ({ ok: true }) },
+      preview: { origin: 'http://preview.localhost:3000', appOrigin: 'http://127.0.0.1:5173' },
     };
     return createApp(deps);
   }

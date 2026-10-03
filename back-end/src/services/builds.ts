@@ -81,6 +81,14 @@ export interface BuildService {
    */
   download(ownerId: string, buildId: string): Promise<BuildDownload>;
 
+  /**
+   * The absolute path of the file at `path` (its segments, as a URL gives
+   * them) in a `ready` build of one of `ownerId`'s projects. Only the files
+   * the download contains can be named, so the QA report, links, and anything
+   * outside the build throw `NotFound`, as does a build that isn't ready.
+   */
+  previewFile(ownerId: string, buildId: string, path: string[]): Promise<string>;
+
   /** Fails every build left `checking` with code `interrupted`, emitting `build.updated` for each. Call once at startup, after the back end holds its port and before it handles a request. */
   failInterrupted(): void;
 }
@@ -209,7 +217,7 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
     }
 
     const archive = new ZipArchive({ zlib: { level: 9 } });
-    archive.directory(buildDir, false, (entry) => (entry.name === QA_REPORT_FILE ? false : entry));
+    archive.directory(buildDir, false, (entry) => (isPackageFile(entry.name) ? entry : false));
     // A failure also reaches the consumer as the stream's 'error' event.
     archive.finalize().catch(() => {});
     return {
@@ -222,6 +230,19 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
         archive.resume();
       },
     };
+  }
+
+  async function previewFile(ownerId: string, buildId: string, path: string[]): Promise<string> {
+    const { build } = owned(ownerId, buildId);
+    if (build.status !== 'ready') {
+      throw new NotFound();
+    }
+    const buildDir = deps.workspaces.buildPathFor(build.projectId, String(build.version));
+    const wanted = path.join('/');
+    if (!(await packageFiles(buildDir)).includes(wanted)) {
+      throw new NotFound();
+    }
+    return join(buildDir, ...wanted.split('/'));
   }
 
   function failInterrupted(): void {
@@ -241,8 +262,31 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
     get: (ownerId, buildId) => toApi(owned(ownerId, buildId).build),
     latest: (projectId) => deps.builds.latest(projectId),
     download,
+    previewFile,
     failInterrupted,
   };
+}
+
+/** Whether the file at `path`, relative to the build with `/` separators, belongs in the package. */
+function isPackageFile(path: string): boolean {
+  return path !== QA_REPORT_FILE;
+}
+
+/** The package's regular files, as paths relative to `buildDir` with `/` separators. Links are left out. */
+async function packageFiles(buildDir: string): Promise<string[]> {
+  const files: string[] = [];
+  async function walk(dir: string): Promise<void> {
+    for (const entry of await fs.readdir(join(buildDir, dir), { withFileTypes: true })) {
+      const path = dir ? `${dir}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        await walk(path);
+      } else if (entry.isFile() && isPackageFile(path)) {
+        files.push(path);
+      }
+    }
+  }
+  await walk('');
+  return files;
 }
 
 function toApi(build: Build): ApiBuild {

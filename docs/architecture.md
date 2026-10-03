@@ -114,7 +114,6 @@ GET    /api/projects/:projectId/builds        → { items: Build[] }
 POST   /api/projects/:projectId/builds        { note? } → 202 { build }     instructor-triggered, no agent involved
 GET    /api/builds/:buildId                   → { build, deployments: [] }
 POST   /api/builds/:buildId/pedagogy          → 202 { build }               runs the pedagogy check on this build
-GET    /api/builds/:buildId/preview/*         the preview (iframe target)
 GET    /api/builds/:buildId/download          the build as a zip, for manual upload
 POST   /api/builds/:buildId/deploy            { targetCourse?, confirm: true } → 202 { deployment }
 GET    /api/deployments/:deploymentId         → { deployment }
@@ -125,6 +124,21 @@ The download is an attachment named `<title>-v<version>.zip`, with the project's
 A build always runs the QA gate. The pedagogy check is a separate step on a build, requested by the instructor here or by the agent through its tool, so an intermediate build costs nothing it does not need.
 
 `POST /builds/:id/deploy` is the **human gate**. The agent can propose a deployment; only this call, made by the instructor, executes one. The D2L write happens in `back-end/src/deploy/`, never inside the agent.
+
+### Preview origin
+
+Previews are served on their own origin, so an activity's scripts never run on the app's origin, where they could call the API or reach into the app's page. Locally the preview origin is `http://preview.localhost:<PORT>`: the back end's own port, under a hostname browsers resolve to this computer. The back end tells the two apart by the `Host` header. The preview origin serves only these routes, and the app origin serves none of them.
+
+```
+GET    /preview/player.html?buildId=&attempt=&parentOrigin=   the emulator player; 403 unless parentOrigin is the app origin
+GET    /preview/player.js, /preview/player.css                the player's script and style, from back-end/preview/
+GET    /preview/d2l-emulator.js, /preview/tenant-profile.json the kit's emulator and tenant profile, unchanged
+GET    /api/builds/:buildId/preview/*                         a file of a ready build; index.html is the launch page
+```
+
+Every response is `no-store` and `nosniff`, with a Content-Security-Policy whose `frame-ancestors` is the app origin (the `APP_ORIGIN` setting), so only the app can frame the player. Only GET and HEAD are answered. A build file is served only when the build is `ready` and the path names one of the files its download contains; the QA report, links, and anything outside the build get 404. The player and the activity share the preview origin, because the activity finds the SCORM API on its parent window.
+
+In local mode a build's id is what names its files: the back end listens on 127.0.0.1 only, the `Host` must be the preview origin's, and build ids are random. Hosted mode needs two more things before it serves previews: a separate preview domain, and short-lived signed preview links tied to the build and the instructor, because a build id can leak.
 
 ### Checks without the agent
 
@@ -310,6 +324,7 @@ A mode is where the app runs and for whom. Local mode runs the whole app on one 
 | Agent sign-in | The instructor's own | A shared service account, or per instructor |
 | D2L credentials | One token | One token per instructor, stored server-side |
 | Concurrency | One turn at a time | Per-instructor cap, plus a cap on live sessions |
+| Preview | `http://preview.localhost:<PORT>`, framed only by `APP_ORIGIN` | Off until a separate preview domain and signed preview links exist |
 
 The launch token matters even in local mode: any website open in the instructor's browser can send requests to localhost. The app serves the page with the token embedded; every API call sends it back in a header; the server rejects anything else.
 
@@ -320,6 +335,7 @@ How `back-end/src` is laid out, so that each concern above has exactly one home.
 | Folder | Role |
 |---|---|
 | `src/routes/` | HTTP only: parse, validate (zod), call one service, shape the response |
+| `src/preview/` | The preview origin's routes, chosen by `Host`: the emulator player and the files of ready builds |
 | `src/services/` | Projects, turns, builds, deployments, and the workspace service. Receives plain arguments, never `req`/`res` |
 | `src/pipeline/` | The runner, the session service, and the event service |
 | `src/agent/` | `AgentDriver` and the drivers |
@@ -364,6 +380,8 @@ Every document in `docs/` and every comment in `back-end/src/` uses these words,
 | **avenue** | One of the ways content can live in D2L: `topic`, `scorm`, `widget`, `external`. |
 | **emulator** | The kit's local reproduction of the tenant's D2L behavior. |
 | **preview** | A build rendered through the emulator. |
+| **preview origin** | The origin previews are served from, separate from the app origin: `http://preview.localhost:<PORT>` locally. |
+| **app origin** | The origin the app is opened at, set by `APP_ORIGIN`; the only origin allowed to frame the preview. |
 | **tool** | A function the back end exposes to the agent. |
 | **event service** | The back-end component that persists events and notifies a project's live subscribers, backing the event stream. |
 | **event stream** | The per-project Server-Sent Events feed. |
