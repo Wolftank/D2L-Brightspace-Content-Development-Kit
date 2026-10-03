@@ -10,6 +10,7 @@ describe('projectEventReducer', () => {
       seq: 1,
       kind: 'turn.started',
       payload: {
+        startedAt: 1000,
         turnId: 'turn-1',
       },
     });
@@ -17,6 +18,8 @@ describe('projectEventReducer', () => {
     expect(result.turn).toEqual({
       id: 'turn-1',
       status: 'running',
+      startedAt: 1000,
+      currentStep: '',
     });
 
     expect(result.statusLines).toEqual([
@@ -107,6 +110,7 @@ describe('projectEventReducer', () => {
     expect(result.statusLines.at(-1)).toEqual({
       seq: 6,
       text: 'Generating activity',
+      callId: 'call-1',
     });
   });
 
@@ -122,10 +126,7 @@ describe('projectEventReducer', () => {
       },
     });
 
-    expect(result.statusLines.at(-1)).toEqual({
-      seq: 7,
-      text: 'Activity generated',
-    });
+    expect(result.statusLines).toEqual([]);
   });
 
   it('handles build.created', () => {
@@ -236,6 +237,7 @@ it('handles build.updated by replacing the existing build', () => {
       seq: 12,
       kind: 'turn.started',
       payload: {
+        startedAt: 1000,
         turnId: 'turn-1',
       },
     });
@@ -251,6 +253,8 @@ it('handles build.updated by replacing the existing build', () => {
     expect(result.turn).toEqual({
       id: 'turn-1',
       status: 'completed',
+      startedAt: 1000,
+      currentStep: '',
     });
 
     expect(result.statusLines.at(-1)).toEqual({
@@ -275,6 +279,8 @@ it('handles build.updated by replacing the existing build', () => {
     expect(result.turn).toEqual({
       id: 'turn-1',
       status: 'failed',
+      startedAt: null,
+      currentStep: '',
     });
 
     expect(result.statusLines.at(-1)).toEqual({
@@ -295,11 +301,38 @@ it('handles build.updated by replacing the existing build', () => {
     expect(result.turn).toEqual({
       id: 'turn-1',
       status: 'cancelled',
+      startedAt: null,
+      currentStep: '',
     });
 
     expect(result.statusLines.at(-1)).toEqual({
       seq: 15,
       text: 'Build cancelled',
     });
+  });
+
+  it('clears the previous reply when a new turn starts', () => {
+    const afterFirstTurn = {
+      ...initialProjectEventState,
+      turn: { id: 'turn-1', status: 'completed' as const, startedAt: 1000, currentStep: 'Checking your build' },
+      replyText: 'First reply.',
+    };
+
+    const started = projectEventReducer(afterFirstTurn, {
+      seq: 20,
+      kind: 'turn.started',
+      payload: { turnId: 'turn-2', startedAt: 2000 },
+    });
+
+    expect(started.replyText).toBe('');
+    expect(started.turn).toMatchObject({ startedAt: 2000, currentStep: '', status: 'running' });
+
+    const streaming = projectEventReducer(started, {
+      seq: 21,
+      kind: 'message.delta',
+      payload: { turnId: 'turn-2', messageId: 'message-2', text: 'Second' },
+    });
+
+    expect(streaming.replyText).toBe('Second');
   });
 });

@@ -22,6 +22,10 @@ npm run dev:stub
 
 ## Browser tests
 
+Include `[long-step]` in a stub request to pause for 20 seconds after the current step. The working indicator counts from the recorded turn start, including after reload or event replay in another tab. A disconnected stream shows reconnecting status; after 30 seconds without recovery it closes and asks the instructor to reload. A permanently closed stream shows that message immediately. The elapsed time is outside live regions, and the animation stops under reduced motion.
+
+Manual accessibility check: with NVDA running, submit `[long-step]`, keep focus on the Build button, and verify that the step is announced but timer ticks are silent and focus stays put. This check requires NVDA and remains manual.
+
 The Playwright tests in `e2e/` run the app in Chromium and Firefox against the stub. Install the browsers once per machine:
 
 ```

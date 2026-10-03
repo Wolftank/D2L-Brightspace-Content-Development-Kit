@@ -1,4 +1,5 @@
-import { useEffect, useReducer, useRef } from 'react';
+import { useEffect, useReducer, useRef, useState } from 'react';
+import type { ConnectionStatus } from '../WorkingIndicator';
 import { projectEventsUrl } from '../api/client';
 import type {
   Build,
@@ -8,11 +9,14 @@ import type {
 export interface StatusLine {
   seq: number;
   text: string;
+  callId?: string;
 }
 
 export interface ProjectEventState {
   turn: {
     id: string | null;
+    startedAt: number | null;
+    currentStep: string;
     status: 'idle' | 'running' | 'completed' | 'failed' | 'cancelled';
   };
   statusLines: StatusLine[];
@@ -30,6 +34,8 @@ type ProjectEventReducerAction =
 export const initialProjectEventState: ProjectEventState = {
   turn: {
     id: null,
+    startedAt: null,
+    currentStep: '',
     status: 'idle',
   },
   statusLines: [],
@@ -66,8 +72,11 @@ export function projectEventReducer(
         ...state,
         turn: {
           id: event.payload.turnId,
+          startedAt: event.payload.startedAt,
+          currentStep: '',
           status: 'running',
         },
+        replyText: '',
         statusLines: [
           ...state.statusLines,
           { seq: event.seq, text: 'Starting your build' },
@@ -77,6 +86,7 @@ export function projectEventReducer(
     case 'turn.status':
       return {
         ...state,
+        turn: { ...state.turn, currentStep: event.payload.text },
         statusLines: [
           ...state.statusLines,
           { seq: event.seq, text: event.payload.text },
@@ -101,19 +111,22 @@ export function projectEventReducer(
     case 'tool.started':
       return {
         ...state,
+        turn: { ...state.turn, currentStep: event.payload.summary },
         statusLines: [
           ...state.statusLines,
-          { seq: event.seq, text: event.payload.summary },
+          { seq: event.seq, text: event.payload.summary, callId: event.payload.callId },
         ],
       };
 
     case 'tool.finished':
       return {
         ...state,
-        statusLines: [
-          ...state.statusLines,
-          { seq: event.seq, text: event.payload.summary },
-        ],
+        turn: { ...state.turn, currentStep: event.payload.summary },
+        statusLines: state.statusLines.map((line) =>
+          line.callId === event.payload.callId && !event.payload.ok
+            ? { ...line, text: event.payload.summary }
+            : line,
+        ),
       };
 
     case 'build.created':
@@ -145,6 +158,8 @@ export function projectEventReducer(
         turn: {
           id: event.payload.turnId,
           status: 'failed',
+          startedAt: state.turn.startedAt,
+          currentStep: state.turn.currentStep,
         },
         statusLines: [
           ...state.statusLines,
@@ -158,6 +173,8 @@ export function projectEventReducer(
     turn: {
       id: event.payload.turnId,
       status: 'cancelled',
+      startedAt: state.turn.startedAt,
+      currentStep: state.turn.currentStep,
     },
     statusLines: [
       ...state.statusLines,
@@ -172,6 +189,7 @@ default:
 
 
 export function useProjectEvents(projectId: string | null) {
+  const [connection, setConnection] = useState<ConnectionStatus>('reconnecting');
   const storageStateKey = projectId
   ? `project-${projectId}-event-state`
   : null;
@@ -269,6 +287,24 @@ useEffect(() => {
     }
 
     const stream = new EventSource(url);
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    stream.addEventListener('open', () => {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = undefined;
+      setConnection('connected');
+    });
+    stream.addEventListener('error', () => {
+      if (stream.readyState === 2) {
+        clearTimeout(reconnectTimer);
+        setConnection('lost');
+        return;
+      }
+      setConnection('reconnecting');
+      reconnectTimer ??= setTimeout(() => {
+        stream.close();
+        setConnection('lost');
+      }, 30_000);
+    });
 
     const eventKinds = [
       'turn.started',
@@ -314,9 +350,10 @@ dispatch(projectEvent);
     }
 
     return () => {
+      clearTimeout(reconnectTimer);
       stream.close();
     };
   }, [projectId]);
 
-  return state;
+  return { ...state, connection };
 }

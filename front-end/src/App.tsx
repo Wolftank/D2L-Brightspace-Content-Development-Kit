@@ -8,6 +8,7 @@ import {
 import type { Project } from './api/types';
 import { useProjectEvents } from './hooks/useProjectEvents';
 import './App.css';
+import { WorkingIndicator } from './WorkingIndicator';
 
 function InlineError({ error }: { error: ApiError | null }) {
   return error ? (
@@ -43,6 +44,7 @@ export function App() {
     replyText,
     builds,
     turn,
+    connection,
   } = useProjectEvents(project?.id ?? null);
 
   const build = builds.at(-1) ?? null;
@@ -243,6 +245,13 @@ export function App() {
               </ol>
             )}
 
+          </div>
+
+          {turn.status === 'running' && turn.startedAt !== null && (
+            <WorkingIndicator startedAt={turn.startedAt} step={turn.currentStep} connection={connection} />
+          )}
+
+          <div aria-live="polite">
             {replyText && (
               <p className="agent-reply">
                 {replyText}
