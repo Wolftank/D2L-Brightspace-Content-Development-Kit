@@ -5,22 +5,16 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createClaudeAgentDriver } from './claude.js';
 import type { AgentEvent, SessionRequest } from './AgentDriver.js';
 
-/**
- * Re-verifies, through the AgentDriver interface, what the B6 spike (issue
- * #24) proved against the raw SDK: a turn edits files in the workspace, a
- * second turn resumes by session id, and an out-of-allowlist call is denied
- * and surfaces as a notice event. These make a real, billed call, so they
- * only run when `probe()` reports a signed-in CLI; otherwise every test in
- * this file is skipped.
- */
 const driver = createClaudeAgentDriver();
-let credentialAvailable = false;
 
 beforeAll(async () => {
   const result = await driver.probe();
-  credentialAvailable = result.ok;
   if (!result.ok) {
-    console.warn(`Skipping claude.live.test.ts: probe() reported ${result.detail}`);
+    throw new Error(
+      `Cannot run live tests: the Claude CLI is not signed in.\n` +
+      `probe() reported: ${result.detail}\n` +
+      `Sign in with \`claude login\` and try again.`,
+    );
   }
 }, 20_000);
 
@@ -57,11 +51,7 @@ describe('ClaudeAgentDriver, live SDK', () => {
     await rm(skillsDir, { recursive: true, force: true });
   });
 
-  it('edits a file in the workspace, then resumes the session by id on a second turn', async (ctx) => {
-    if (!credentialAvailable) {
-      ctx.skip();
-    }
-
+  it('edits a file in the workspace, then resumes the session by id on a second turn', async () => {
     const session = await driver.open(baseRequest(workspaceDir, skillsDir));
 
     const turn1 = session.send(
@@ -96,11 +86,7 @@ describe('ClaudeAgentDriver, live SDK', () => {
     expect(result2.text.toLowerCase()).toContain('hello.txt');
   }, 60_000);
 
-  it('denies a Write outside the workspace and surfaces it as a notice event', async (ctx) => {
-    if (!credentialAvailable) {
-      ctx.skip();
-    }
-
+  it('denies a Write outside the workspace and surfaces it as a notice event', async () => {
     // `Write(/**)`/`Edit(/**)` are workspace-relative (docs/drivers.md:
     // "`/` is workspace-relative"), so a path outside workspaceDir matches
     // no allow rule under `dontAsk` and must be denied.
