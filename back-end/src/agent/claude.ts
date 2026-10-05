@@ -10,6 +10,7 @@ import {
   type SDKPermissionDeniedMessage,
   type SDKResultMessage,
 } from '@anthropic-ai/claude-agent-sdk';
+import { Allow, parse as parsePartialJson } from 'partial-json';
 import type {
   AgentDriver,
   AgentEvent,
@@ -97,8 +98,21 @@ function isAbortedError(err: unknown, signal: AbortSignal): boolean {
   return signal.aborted || (err instanceof Error && err.message === 'Operation aborted');
 }
 
-/** A plain-language line for the instructor describing one of Claude's tool calls. */
-export function summarizeTool(name: string, input: unknown): string {
+const THINKING = 'Thinking…';
+const RETRYING = "The agent's service is busy. Trying again…";
+const CONDENSING = 'Condensing the conversation…';
+
+const FILE_TOOL_VERBS: Record<string, string> = { Read: 'Reading', Write: 'Writing', Edit: 'Editing' };
+
+/**
+ * The plain-language line for one of Claude's tool calls, built from input
+ * that may still be streaming.
+ *
+ * Returns:
+ *   The line, or `undefined` while `input` lacks the field the line is
+ *   built from. A line returned here never changes as more input arrives.
+ */
+function knownSummary(name: string, input: unknown): string | undefined {
   const fields = (typeof input === 'object' && input !== null ? input : {}) as {
     description?: unknown;
     file_path?: unknown;
@@ -108,13 +122,11 @@ export function summarizeTool(name: string, input: unknown): string {
     case 'Bash':
       return typeof fields.description === 'string' && fields.description.trim() !== ''
         ? fields.description
-        : 'Running a command';
+        : undefined;
     case 'Read':
-      return `Reading ${fileName(fields.file_path)}`;
     case 'Write':
-      return `Writing ${fileName(fields.file_path)}`;
     case 'Edit':
-      return `Editing ${fileName(fields.file_path)}`;
+      return typeof fields.file_path === 'string' ? `${FILE_TOOL_VERBS[name]} ${fileName(fields.file_path)}` : undefined;
     case 'Glob':
     case 'Grep':
       return 'Searching the files';
@@ -123,10 +135,23 @@ export function summarizeTool(name: string, input: unknown): string {
   }
 }
 
+/** A plain-language line for the instructor describing one of Claude's tool calls, given its complete input. */
+export function summarizeTool(name: string, input: unknown): string {
+  return knownSummary(name, input) ?? (FILE_TOOL_VERBS[name] ? `${FILE_TOOL_VERBS[name]} a file` : 'Running a command');
+}
+
 /** The last segment of a Windows or POSIX path. */
-function fileName(path: unknown): string {
-  if (typeof path !== 'string') return 'a file';
+function fileName(path: string): string {
   return path.split(/[\\/]/).pop() || 'a file';
+}
+
+/** The fields of a tool call's partial input JSON whose values are complete. */
+function parseCompleteFields(json: string): unknown {
+  try {
+    return parsePartialJson(json, Allow.OBJ);
+  } catch {
+    return undefined;
+  }
 }
 
 function describePermissionDenied(message: SDKPermissionDeniedMessage): string {
@@ -171,10 +196,21 @@ function mapResult(
   };
 }
 
+/** A tool call whose input is streaming and whose line is not yet known. */
+interface StreamingToolCall {
+  callId: string;
+  name: string;
+  inputJson: string;
+}
+
 /**
  * Maps one query()'s message stream to AgentEvents and resolves `result`.
  * Exported separately from `send` so the fixture-replay test can drive it
  * directly against a recorded stream instead of a live SDK call.
+ *
+ * Messages from a subagent (a non-null `parent_tool_use_id`) produce no
+ * events. A tool call's `tool_start` is emitted from its streaming input as
+ * soon as its summary is known, or else from the completed assistant message.
  */
 export async function* mapClaudeStream(
   messages: AsyncIterable<SDKMessage>,
@@ -184,39 +220,76 @@ export async function* mapClaudeStream(
 ): AsyncGenerator<AgentEvent> {
   let textBuf = '';
   let assistantError: SDKAssistantMessageError | undefined;
+  const startedCallIds = new Set<string>();
+  const streamingCalls = new Map<number, StreamingToolCall>();
+
+  function toolStart(callId: string, name: string, summary: string): AgentEvent {
+    startedCallIds.add(callId);
+    return { kind: 'tool_start', callId, name, summary };
+  }
+
   try {
     for await (const message of messages) {
       switch (message.type) {
         case 'system':
-          if (message.subtype === 'init') {
-            onSessionId(message.session_id);
-          } else if (message.subtype === 'permission_denied') {
-            yield { kind: 'notice', text: describePermissionDenied(message) };
+          switch (message.subtype) {
+            case 'init':
+              onSessionId(message.session_id);
+              break;
+            case 'permission_denied':
+              yield { kind: 'notice', text: describePermissionDenied(message) };
+              break;
+            case 'status':
+              if (message.status === 'requesting') yield { kind: 'status', text: THINKING };
+              if (message.status === 'compacting') yield { kind: 'status', text: CONDENSING };
+              break;
+            case 'api_retry':
+              yield { kind: 'status', text: RETRYING };
+              break;
           }
           break;
         case 'stream_event': {
+          if (message.parent_tool_use_id) break;
           const event = message.event;
-          if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-            textBuf += event.delta.text;
-            yield { kind: 'text_delta', text: event.delta.text };
+          if (event.type === 'message_start') {
+            streamingCalls.clear();
+          } else if (event.type === 'content_block_start') {
+            const block = event.content_block;
+            if (block.type === 'thinking' || block.type === 'redacted_thinking') {
+              yield { kind: 'status', text: THINKING };
+            } else if (block.type === 'tool_use') {
+              const summary = knownSummary(block.name, block.input);
+              if (summary) yield toolStart(block.id, block.name, summary);
+              else streamingCalls.set(event.index, { callId: block.id, name: block.name, inputJson: '' });
+            }
+          } else if (event.type === 'content_block_delta') {
+            if (event.delta.type === 'text_delta') {
+              textBuf += event.delta.text;
+              yield { kind: 'text_delta', text: event.delta.text };
+            } else if (event.delta.type === 'input_json_delta') {
+              const call = streamingCalls.get(event.index);
+              if (!call) break;
+              call.inputJson += event.delta.partial_json;
+              const summary = knownSummary(call.name, parseCompleteFields(call.inputJson));
+              if (summary) {
+                streamingCalls.delete(event.index);
+                yield toolStart(call.callId, call.name, summary);
+              }
+            }
           }
           break;
         }
         case 'assistant':
           assistantError = message.error ?? assistantError;
+          if (message.parent_tool_use_id) break;
           for (const block of message.message.content) {
-            if (block.type === 'tool_use') {
-              yield {
-                kind: 'tool_start',
-                callId: block.id,
-                name: block.name,
-                input: block.input,
-                summary: summarizeTool(block.name, block.input),
-              };
+            if (block.type === 'tool_use' && !startedCallIds.has(block.id)) {
+              yield toolStart(block.id, block.name, summarizeTool(block.name, block.input));
             }
           }
           break;
         case 'user': {
+          if (message.parent_tool_use_id) break;
           const content = message.message.content;
           if (Array.isArray(content)) {
             for (const block of content) {
