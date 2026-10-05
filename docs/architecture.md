@@ -161,7 +161,7 @@ Each event: `id` is the project-wide `seq`, `event` is the kind, `data` is JSON.
 | kind | payload | When |
 |---|---|---|
 | `turn.started` | `{ turnId, startedAt }` | The runner picked the turn up; `startedAt` is the recorded turn start in epoch milliseconds |
-| `turn.status` | `{ turnId, text }` | Plain-language progress: "Reading your syllabus…", "Checking accessibility…" |
+| `turn.status` | `{ turnId, text }` | Plain-language progress, sent when the agent starts a new step: "Thinking…", "The agent's service is busy. Trying again…", "Condensing the conversation…", "Checking your build". Never sent on a timer, and never stored when its text repeats the turn's latest `turn.status`, `tool.started`, or `tool.finished` line. Only the main agent's steps are reported, not a subagent's |
 | `message.delta` | `{ turnId, messageId, text }` | Streamed agent text |
 | `message.completed` | `{ message }` | The agent's full message is stored |
 | `tool.started` | `{ turnId, callId, name, summary }` | The agent is calling a tool. Sent once per `callId`, as soon as the driver knows `summary`, its plain-language line such as "Writing index.html", which can be before the call's input is complete |

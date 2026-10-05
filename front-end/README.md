@@ -22,6 +22,10 @@ npm run dev:stub
 
 ## Browser tests
 
+Include `[long-feed]` in a stub request to emit 60 progress lines. The feed scrolls within a responsive maximum height, follows while at the bottom, pauses when scrolled up, and resumes through Jump to latest, returning to the bottom, or a new turn. Tab reaches the named Build progress log; Home/End and arrow keys scroll it. The working indicator and reply remain outside its scroll area. New lines and failed tool updates use one live region; following and scrolling do not alter its contents.
+
+Manual NVDA check: run `[long-feed]`, scroll back and jump to latest; verify each new line is announced once, successful tool completion is silent, failed calls are announced once when updated, scrolling is silent, and the reply is announced.
+
 Include `[long-step]` in a stub request to pause for 20 seconds after the current step. The working indicator counts from the recorded turn start, including after reload or event replay in another tab. A disconnected stream shows reconnecting status; after 30 seconds without recovery it closes and asks the instructor to reload. A permanently closed stream shows that message immediately. The elapsed time is outside live regions, and the animation stops under reduced motion.
 
 Manual accessibility check: with NVDA running, submit `[long-step]`, keep focus on the Build button, and verify that the step is announced but timer ticks are silent and focus stays put. This check requires NVDA and remains manual.
