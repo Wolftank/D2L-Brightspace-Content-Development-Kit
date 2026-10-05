@@ -24,6 +24,7 @@
     "better-sqlite3": "^12.11.1",
     "drizzle-orm": "^0.45.2",
     "express": "^5.2.1",
+    "partial-json": "^0.1.7",
     "zod": "^4.6.5"
   },
   "devDependencies": {

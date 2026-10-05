@@ -5,7 +5,7 @@ import type { Build } from '../src/api/types';
 const fixture = new URL('./fixtures/preview/', import.meta.url);
 const files = new Map(['index.html', 'imsmanifest.xml', 'sample.css'].map((name) => [name, readFileSync(new URL(name, fixture))]));
 export const previewZip = readFileSync(new URL('./fixtures/preview.zip', import.meta.url));
-const player = new URL('../preview/', import.meta.url);
+const player = new URL('../../back-end/preview/', import.meta.url);
 const harness = new URL('../../back-end/kit/harness/', import.meta.url);
 const playerFiles = new Map([
   ...['player.html', 'player.js', 'player.css'].map((name) => [name, readFileSync(new URL(name, player))] as const),

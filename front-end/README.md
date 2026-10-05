@@ -69,22 +69,16 @@ The V1 screen follows [`docs/v1.md`](../docs/v1.md): it collects a project title
 
 Ready builds offer **Preview** beside **Download**. The panel keeps the selected build and version until it closes or another build is selected. Restart and retry replace the player and create a fresh simulated Student attempt. Closing restores focus to the opening button, or the build panel heading if that button has been removed.
 
-In stub mode, `npm run stub` also starts a preview server at `http://127.0.0.1:3002`. `.env.stub` configures `VITE_PREVIEW_ORIGIN` to that separate origin. The player installs the kit's unchanged `d2l-emulator.js` with `tenant-profile.json` before loading the activity in its child frame. The app accepts status messages only from its active frame, preview origin, build ID, and attempt ID. A 20-second startup timeout offers retry when the service cannot respond.
+With the real back end, previews come from its preview origin, `http://preview.localhost:3000`, which `.env.development` sets as `VITE_PREVIEW_ORIGIN`. If the back end runs on another `PORT`, set `VITE_PREVIEW_ORIGIN=http://preview.localhost:<PORT>` in `.env.development.local`. In stub mode, `npm run stub` also starts a preview server at `http://127.0.0.1:3002`, and `.env.stub` points `VITE_PREVIEW_ORIGIN` there. The player installs the kit's unchanged `d2l-emulator.js` with `tenant-profile.json` before loading the activity in its child frame. The app accepts status messages only from its active frame, preview origin, build ID, and attempt ID. A 20-second startup timeout offers retry when the service cannot respond.
 
 The stub uses the saved starter fixture in `stub/fixtures/preview/` for all ready builds and serves its matching `preview.zip` for download. The activity includes an external stylesheet to exercise relative asset loading. Regenerate both from the kit starter with `python stub/create-preview-fixture.py`; commit the directory and ZIP together. Preview interactions never modify these files or the build's QA result. This fixture does not represent generated instructor content.
 
 ### Backend integration contract
 
-Real-build preview depends on a separate backend service; it is not available on current `main`. F4 (#82) supplies event and build state through useProjectEvents. Preview selection remains independent, so a newer build does not replace an open preview. F5 (#34) remains responsible for completing QA finding details.
+The back end's preview origin serves the player (`back-end/preview/`), the kit's emulator, and the files of ready builds, with the routes and checks in [`docs/architecture.md`](../docs/architecture.md#preview-origin). F4 (#82) supplies event and build state through useProjectEvents. Preview selection remains independent, so a newer build does not replace an open preview.
 
-For real builds, configure `VITE_PREVIEW_ORIGIN` to a dedicated HTTP(S) origin and serve:
-
-- `/preview/player.html`, `player.js`, and `player.css` from `front-end/preview/`.
-- `/preview/d2l-emulator.js` and `/preview/tenant-profile.json` from the kit harness.
-- `/api/builds/:buildId/preview/index.html` and relative assets from the exact immutable package used by `/api/builds/:buildId/download`. Expose the saved package's launch page at `index.html`.
-
-The service must enforce project ownership, ready-build eligibility, safe file paths, and authorization appropriate to the preview origin. The stub is a local fixture server with an explicit file allowlist, not the ownership-enforcing production service. Allow framing only by the configured app origin and the preview origin; keep the player and activity on the same preview origin for SCORM API access. The application refuses its own origin as a preview origin. Do not proxy the player through the app origin.
+The stub is a local fixture server with an explicit file allowlist; it reads the same player files from `back-end/preview/`. Allow framing only by the configured app origin and the preview origin; keep the player and activity on the same preview origin for SCORM API access. The application refuses its own origin as a preview origin. Do not proxy the player through the app origin.
 
 The wrapper reports `{ type: 'cdk-preview', buildId, attempt, status: 'ready' | 'error', reason?: 'unavailable' | 'launch' }` with `postMessage` to the exact `parentOrigin` supplied by the app. Configure and validate that allowed parent origin in the service. No scores or learner data are sent to the app or Brightspace.
 
-Run `npm test` for the focused component tests and `npm run test:e2e` for the starter interaction, asset loading, restart, selected-version stability, focus restoration, origin isolation, unchanged download/QA, and retry checks in Chromium and Firefox. Real generated-build validation remains pending until the backend service lands.
+Run `npm test` for the focused component tests and `npm run test:e2e` for the starter interaction, asset loading, restart, selected-version stability, focus restoration, origin isolation, unchanged download/QA, and retry checks in Chromium and Firefox. The Playwright specs run against the stub.
