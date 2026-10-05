@@ -52,6 +52,14 @@ function thrownCode(err: unknown): RunnerErrorCode {
   return err instanceof WorkspaceMissing ? 'workspace_missing' : 'internal_error';
 }
 
+interface StatusFeed {
+  status(text: string): void;
+  toolStarted(callId: string, name: string, summary: string): void;
+  toolFinished(callId: string, ok: boolean): void;
+  /** Finishes every started call that has no `tool.finished` with `ok: false`. */
+  failUnfinished(): void;
+}
+
 interface Conversation {
   result: TurnResult;
   /** Every text delta the agent streamed, joined. */
@@ -75,42 +83,71 @@ export function createRunner(deps: RunnerDeps): Runner {
     return { text, attachments: [] };
   }
 
-  function progress(turn: Turn, replyId: string, event: AgentEvent, summaries: Map<string, string>): void {
+  /**
+   * The turn's status feed: its `turn.status`, `tool.started` and
+   * `tool.finished` lines. A `turn.status` repeating the latest line is not
+   * stored.
+   */
+  function statusFeed(turn: Turn): StatusFeed {
+    const unfinishedCalls = new Map<string, string>();
+    let latestLine: string | undefined;
+
+    function line(kind: AppEventKind, payload: unknown, text: string): void {
+      append(turn, kind, payload);
+      latestLine = text;
+    }
+
+    function toolFinished(callId: string, ok: boolean): void {
+      const summary = unfinishedCalls.get(callId) ?? 'Using a tool';
+      unfinishedCalls.delete(callId);
+      const text = ok ? summary : `Failed: ${summary}`;
+      line('tool.finished', { turnId: turn.id, callId, ok, summary: text }, text);
+    }
+
+    return {
+      status(text) {
+        if (text !== latestLine) line('turn.status', { turnId: turn.id, text }, text);
+      },
+      toolStarted(callId, name, summary) {
+        unfinishedCalls.set(callId, summary);
+        line('tool.started', { turnId: turn.id, callId, name, summary }, summary);
+      },
+      toolFinished,
+      failUnfinished() {
+        for (const callId of [...unfinishedCalls.keys()]) toolFinished(callId, false);
+      },
+    };
+  }
+
+  function progress(turn: Turn, replyId: string, event: AgentEvent, feed: StatusFeed): void {
     switch (event.kind) {
       case 'text_delta':
         append(turn, 'message.delta', { turnId: turn.id, messageId: replyId, text: event.text });
         return;
       case 'tool_start':
-        summaries.set(event.callId, event.summary);
-        append(turn, 'tool.started', { turnId: turn.id, callId: event.callId, name: event.name, summary: event.summary });
+        feed.toolStarted(event.callId, event.name, event.summary);
         return;
-      case 'tool_end': {
-        const summary = summaries.get(event.callId) ?? 'Using a tool';
-        append(turn, 'tool.finished', {
-          turnId: turn.id,
-          callId: event.callId,
-          ok: event.ok,
-          summary: event.ok ? summary : `Failed: ${summary}`,
-        });
+      case 'tool_end':
+        feed.toolFinished(event.callId, event.ok);
         return;
-      }
+      case 'status':
       case 'notice':
-        append(turn, 'turn.status', { turnId: turn.id, text: event.text });
+        feed.status(event.text);
         return;
     }
   }
 
-  /** Sends the request and reports the agent's progress. On a thrown error the turn's agent work is aborted. */
-  async function converse(turn: Turn, session: AgentSession, input: TurnInput, replyId: string): Promise<Conversation> {
+  /** Sends the request and reports the agent's progress, failing any tool call left unfinished when the agent's events end. On a thrown error the turn's agent work is aborted. */
+  async function converse(turn: Turn, session: AgentSession, input: TurnInput, replyId: string, feed: StatusFeed): Promise<Conversation> {
     const controller = new AbortController();
-    const summaries = new Map<string, string>();
     let streamed = '';
     try {
       const agentTurn = session.send(input, {}, controller.signal);
       for await (const event of agentTurn.events) {
         if (event.kind === 'text_delta') streamed += event.text;
-        progress(turn, replyId, event, summaries);
+        progress(turn, replyId, event, feed);
       }
+      feed.failUnfinished();
       return { result: await agentTurn.result, streamed };
     } catch (err) {
       controller.abort();
@@ -119,11 +156,11 @@ export function createRunner(deps: RunnerDeps): Runner {
   }
 
   /** Acquires the project's session for the conversation, then releases it after a completed result and closes it otherwise. */
-  async function converseInSession(turn: Turn, input: TurnInput, replyId: string): Promise<Conversation> {
+  async function converseInSession(turn: Turn, input: TurnInput, replyId: string, feed: StatusFeed): Promise<Conversation> {
     const session = await deps.sessions.acquire(turn.projectId);
     let conversation: Conversation | undefined;
     try {
-      conversation = await converse(turn, session, input, replyId);
+      conversation = await converse(turn, session, input, replyId, feed);
       return conversation;
     } finally {
       if (conversation?.result.status === 'completed') {
@@ -137,11 +174,11 @@ export function createRunner(deps: RunnerDeps): Runner {
   }
 
   /** Builds the output when it differs from the latest build's, or from `startHash` before the project's first build. */
-  async function buildIfChanged(turn: Turn, startHash: string): Promise<void> {
+  async function buildIfChanged(turn: Turn, startHash: string, feed: StatusFeed): Promise<void> {
     const outputHash = await deps.workspaces.hashOutput(turn.projectId);
     const latest = deps.builds.latest(turn.projectId);
     if (outputHash === (latest ? latest.outputHash : startHash)) return;
-    append(turn, 'turn.status', { turnId: turn.id, text: 'Checking your build' });
+    feed.status('Checking your build');
     await deps.builds.create(turn.projectId, turn.id);
   }
 
@@ -150,7 +187,8 @@ export function createRunner(deps: RunnerDeps): Runner {
     const startHash = await deps.workspaces.hashOutput(turn.projectId);
     const input = instructorInput(turn);
     const replyId = randomUUID();
-    const { result, streamed } = await converseInSession(turn, input, replyId);
+    const feed = statusFeed(turn);
+    const { result, streamed } = await converseInSession(turn, input, replyId, feed);
 
     if (result.status === 'cancelled') return { status: 'cancelled', usage: result.usage };
     if (result.status === 'failed') {
@@ -168,7 +206,7 @@ export function createRunner(deps: RunnerDeps): Runner {
     });
     try {
       append(turn, 'message.completed', { message: reply });
-      await buildIfChanged(turn, startHash);
+      await buildIfChanged(turn, startHash, feed);
     } catch (err) {
       return failure(turn, thrownCode(err), err, { usage: result.usage, replyId });
     }

@@ -56,6 +56,7 @@ describe('build routes', () => {
         },
       },
       driver: { name: 'claude', probe: async () => ({ ok: true }) },
+      preview: { origin: 'http://preview.localhost:3000', appOrigin: 'http://127.0.0.1:5173' },
     };
 
     const ownerId = createUsersRepo(db).ensureLocalUser().id;
@@ -125,6 +126,7 @@ describe('build routes', () => {
         ...deps,
         builds: {
           get: builds.get,
+          previewFile: builds.previewFile,
           download: async (ownerId, buildId) => {
             const download = await builds.download(ownerId, buildId);
             archiveClosed = once(download.stream, 'close');

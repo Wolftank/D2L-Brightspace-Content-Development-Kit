@@ -34,6 +34,7 @@ Copy-Item .env.example .env
 | `AGENT_EFFORT` | the agent's default | `low`, `medium`, `high`, `xhigh`, or `max` |
 | `PORT` | `3000` | A whole number from 1 to 65535. When you change it, start the front end with `API_TARGET=http://127.0.0.1:<port>` |
 | `DATA_DIR` | `%LOCALAPPDATA%\CDK` on Windows, `~/.cdk` elsewhere | Where the database, workspaces, and builds are stored. A relative path is resolved against `back-end/` |
+| `APP_ORIGIN` | `http://127.0.0.1:5173` | The origin the app is opened at, and the only one allowed to frame build previews: an http or https origin with no path. The default is the Vite dev server; set it to the back end's own origin when it serves the built app |
 
 `ANTHROPIC_API_KEY` is read by the Claude CLI, not by the back end. The agent's shell commands can read it too.
 
@@ -41,7 +42,10 @@ Copy-Item .env.example .env
 
 - `npm start` — run the server from source
 - `npm run dev` — run the server from source, restarting on change
-- `npm test` — run the Vitest suite in `src/`
+- `npm test` — run all unit and integration tests in `src/` (excludes live tests)
+- `npm run test:unit` — run only unit tests (`*.test.ts`)
+- `npm run test:int` — run only integration tests (`*.int.test.ts`)
+- `npm run test:live` — run only live agent tests (`*.live.test.ts`); requires a signed-in Claude CLI
 - `npm run lint` — ESLint over `src/` (`kit/` is excluded; it's plain JS with its own conventions)
 - `npm run typecheck` — `tsc --noEmit`
 - `npm run db:generate` — generate a Drizzle migration from `src/db/schema.ts` into `src/db/migrations/`, after changing the schema
@@ -56,6 +60,7 @@ Copy-Item .env.example .env
 - `config.ts` — loads `back-end/.env` and validates the settings in the environment
 - `db/` — the Drizzle schema, migrations, `openDb`, and the repositories
 - `routes/` — one file per resource's routes, each calling one service
+- `preview/` — the preview origin, `http://preview.localhost:<PORT>`: the emulator player and the files of ready builds, kept off the app's origin
 - `services/` — the project, turn, workspace, and build services the routes and the pipeline call
 - `agent/` — the `AgentDriver` interface, the Claude driver, and `createAgentDriver`, which builds the driver `AGENT_DRIVER` names
 - `pipeline/` — the runner and the session service, emitting events to the event stream

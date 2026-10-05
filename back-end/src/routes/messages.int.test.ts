@@ -33,9 +33,10 @@ describe('POST /api/projects/:projectId/messages', () => {
       users: createUsersRepo(db),
       projects: { create: unused, get: unused },
       turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, runner: { executeTurn } }),
-      builds: { get: unused, download: unused },
+      builds: { get: unused, download: unused, previewFile: unused },
       events,
       driver: { name: 'claude', probe: async () => ({ ok: true }) },
+      preview: { origin: 'http://preview.localhost:3000', appOrigin: 'http://127.0.0.1:5173' },
     };
     return createApp(deps);
   }
