@@ -114,14 +114,12 @@ describe('mapClaudeStream: recorded fixture replay', () => {
     }
 
     expect(events).toEqual([
+      { kind: 'status', text: 'Thinking…' },
+      { kind: 'status', text: 'Thinking…' },
       {
         kind: 'tool_start',
         callId: 'toolu_018tyabejV94NG5tssLuXjyE',
         name: 'Write',
-        input: {
-          file_path: 'C:\\Users\\benja\\AppData\\Local\\Temp\\cdk-fixture-workspace-fGQ0EP\\hello.txt',
-          content: 'hello',
-        },
         summary: 'Writing hello.txt',
       },
       {
@@ -131,6 +129,7 @@ describe('mapClaudeStream: recorded fixture replay', () => {
         output:
           'File created successfully at: C:\\Users\\benja\\AppData\\Local\\Temp\\cdk-fixture-workspace-fGQ0EP\\hello.txt (file state is current in your context — no need to Read it back)',
       },
+      { kind: 'status', text: 'Thinking…' },
       { kind: 'text_delta', text: 'Created' },
       { kind: 'text_delta', text: ' h' },
       { kind: 'text_delta', text: 'ello' },
@@ -152,4 +151,39 @@ describe('mapClaudeStream: recorded fixture replay', () => {
       },
     });
   });
+
+  it("sends the recorded Write call's line once its file name has streamed, before its content", async () => {
+    const messages = await loadFixtureMessages();
+    const { events, readAt } = await replayCountingReads(messages);
+
+    const lineAt = readAt[events.findIndex((event) => event.kind === 'tool_start')];
+    const inputStillStreaming = messages.slice(lineAt).some(
+      (message) =>
+        message.type === 'stream_event' &&
+        message.event.type === 'content_block_delta' &&
+        message.event.delta.type === 'input_json_delta',
+    );
+    expect(inputStillStreaming).toBe(true);
+  });
 });
+
+/** Replays `messages` through mapClaudeStream. `readAt[i]` is how many
+ *  messages had been read from the stream when `events[i]` was emitted. */
+async function replayCountingReads(messages: SDKMessage[]) {
+  const { mapClaudeStream } = await import('./claude.js');
+  let read = 0;
+  async function* source(): AsyncGenerator<SDKMessage> {
+    for (const message of messages) {
+      read++;
+      yield message;
+    }
+  }
+
+  const events: AgentEvent[] = [];
+  const readAt: number[] = [];
+  for await (const event of mapClaudeStream(source(), new AbortController().signal, () => {}, () => {})) {
+    events.push(event);
+    readAt.push(read);
+  }
+  return { events, readAt };
+}
