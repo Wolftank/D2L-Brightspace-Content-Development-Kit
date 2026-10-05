@@ -8,6 +8,8 @@ import {
 import type { Build, Project } from './api/types';
 import { useProjectEvents } from './hooks/useProjectEvents';
 import './App.css';
+import { WorkingIndicator } from './WorkingIndicator';
+import { StatusFeed } from './StatusFeed';
 import { PreviewPanel } from './preview/PreviewPanel';
 
 function InlineError({ error }: { error: ApiError | null }) {
@@ -53,6 +55,7 @@ export function App() {
     replyText,
     builds,
     turn,
+    connection,
   } = useProjectEvents(project?.id ?? null);
 
   const build = builds.at(-1) ?? null;
@@ -233,7 +236,7 @@ export function App() {
 
           <h2 id="build-title" tabIndex={-1}>Build panel</h2>
 
-          <div aria-live="polite">
+          <div>
             {statusLines.length === 0 &&
               !error &&
               !replyText && (
@@ -244,15 +247,16 @@ export function App() {
               )}
 
             {statusLines.length > 0 && (
-              <ol className="status-feed">
-                {statusLines.map((item) => (
-                  <li key={item.seq}>
-                    {item.text}
-                  </li>
-                ))}
-              </ol>
+              <StatusFeed lines={statusLines} turnId={turn.id} />
             )}
 
+          </div>
+
+          {turn.status === 'running' && turn.startedAt !== null && (
+            <WorkingIndicator startedAt={turn.startedAt} step={turn.currentStep} connection={connection} />
+          )}
+
+          <div aria-live="polite">
             {replyText && (
               <p className="agent-reply">
                 {replyText}

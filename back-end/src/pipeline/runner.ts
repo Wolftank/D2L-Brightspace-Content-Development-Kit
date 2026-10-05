@@ -183,7 +183,7 @@ export function createRunner(deps: RunnerDeps): Runner {
   }
 
   async function run(turn: Turn): Promise<FinishTurnInput> {
-    append(turn, 'turn.started', { turnId: turn.id });
+    append(turn, 'turn.started', { turnId: turn.id, startedAt: turn.startedAt });
     const startHash = await deps.workspaces.hashOutput(turn.projectId);
     const input = instructorInput(turn);
     const replyId = randomUUID();

@@ -35,7 +35,7 @@ const KEEPALIVE_MS = 15_000;
 
 const user: User = { id: 'stub-user', displayName: 'Stub Instructor', email: null, role: 'instructor' };
 
-type Scenario = 'ok' | 'qa-fail' | 'turn-fail';
+type Scenario = 'ok' | 'qa-fail' | 'turn-fail' | 'long-step' | 'long-feed';
 
 interface StoredEvent {
   seq: number;
@@ -112,6 +112,8 @@ function textOf(content: ContentBlock[]): string {
 }
 
 function scenarioFor(text: string): Scenario {
+  if (text.includes('[long-feed]')) return 'long-feed';
+  if (text.includes('[long-step]')) return 'long-step';
   if (text.includes('[turn-fail]')) return 'turn-fail';
   if (text.includes('[qa-fail]')) return 'qa-fail';
   return 'ok';
@@ -154,7 +156,7 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
       () => {
         turn.status = 'running';
         turn.startedAt = Date.now();
-        append(state, 'turn.started', { turnId: turn.id });
+        append(state, 'turn.started', { turnId: turn.id, startedAt: turn.startedAt });
       },
     ],
     [400, () => append(state, 'turn.status', { turnId: turn.id, text: 'Reading your request' })],
@@ -183,7 +185,7 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
       },
     ]);
   } else {
-    const passed = scenario === 'ok';
+    const passed = scenario === 'ok' || scenario === 'long-step' || scenario === 'long-feed';
     steps.push(
       [
         4800,
@@ -258,7 +260,19 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
     );
   }
 
-  for (const [delay, step] of steps) setTimeout(step, delay);
+  for (const [delay, step] of steps) {
+    const pause = scenario === 'long-step' && delay >= 2000 ? 20_000
+      : scenario === 'long-feed' && delay >= 4000 ? 8000 : 0;
+    setTimeout(step, delay + pause);
+  }
+  if (scenario === 'long-feed') {
+    for (let index = 0; index < 60; index++) {
+      setTimeout(() => append(state, 'turn.status', {
+        turnId: turn.id,
+        text: `Checking activity ${index + 1}: ${'long-content-file-name-'.repeat(8)}index.html`,
+      }), 1400 + index * 150);
+    }
+  }
 }
 
 function createProject(body: unknown): CreateProjectResponse {
@@ -343,6 +357,9 @@ function streamEvents(req: IncomingMessage, res: ServerResponse, state: ProjectS
   const write = (event: StoredEvent) => {
     res.write(`id: ${event.seq}\nevent: ${event.kind}\ndata: ${JSON.stringify(event.payload)}\n\n`);
   };
+
+  res.flushHeaders();
+  res.write(': connected\n\n');
 
   for (const event of state.events) {
     if (event.seq > after) write(event);

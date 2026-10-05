@@ -152,6 +152,7 @@ describe('runner', () => {
     );
 
     const replyId = replies[0]!.id;
+    expect(payloadsOf('turn.started')).toEqual([{ turnId: 'turn-1', startedAt: 2 }]);
     expect(payloadsOf('message.delta')).toEqual([{ turnId: 'turn-1', messageId: replyId, text: 'Reading the guide. ' }]);
     expect(payloadsOf('tool.started')).toEqual([{ turnId: 'turn-1', callId: 'call-1', name: 'Write', summary: 'Writing index.html' }]);
     expect(payloadsOf('tool.finished')).toEqual([{ turnId: 'turn-1', callId: 'call-1', ok: true, summary: 'Writing index.html' }]);

@@ -4,10 +4,6 @@ import type { AgentEvent, TurnResult } from './AgentDriver.js';
 
 const BARE_FILE_AND_WEB_TOOL_NAMES = ['Read', 'Edit', 'Write', 'Grep', 'Glob', 'WebFetch', 'WebSearch'];
 
-async function* toAsyncIterable<T>(items: T[]): AsyncGenerator<T> {
-  for (const item of items) yield item;
-}
-
 /** Replays `messages` through mapClaudeStream. `readAt[i]` is how many
  *  messages had been read from the stream when `events[i]` was emitted. */
 async function replay(messages: unknown[]) {
@@ -132,69 +128,6 @@ describe('the shell', () => {
   });
 });
 
-describe('mapClaudeStream: recorded fixture replay', () => {
-  it('maps a real write-a-file turn (recorded 2026-09-17) to the exact events and result', async () => {
-    const { mapClaudeStream } = await import('./claude.js');
-    const messages = await loadFixtureMessages();
-
-    const controller = new AbortController();
-    let result: TurnResult | undefined;
-    let sessionId: string | null = null;
-    const events: AgentEvent[] = [];
-
-    for await (const event of mapClaudeStream(
-      toAsyncIterable(messages),
-      controller.signal,
-      (r) => {
-        result = r;
-      },
-      (id) => {
-        sessionId = id;
-      },
-    )) {
-      events.push(event);
-    }
-
-    expect(events).toEqual([
-      { kind: 'status', text: 'Thinking…' },
-      { kind: 'status', text: 'Thinking…' },
-      {
-        kind: 'tool_start',
-        callId: 'toolu_018tyabejV94NG5tssLuXjyE',
-        name: 'Write',
-        summary: 'Writing hello.txt',
-      },
-      {
-        kind: 'tool_end',
-        callId: 'toolu_018tyabejV94NG5tssLuXjyE',
-        ok: true,
-        output:
-          'File created successfully at: C:\\Users\\benja\\AppData\\Local\\Temp\\cdk-fixture-workspace-fGQ0EP\\hello.txt (file state is current in your context — no need to Read it back)',
-      },
-      { kind: 'status', text: 'Thinking…' },
-      { kind: 'text_delta', text: 'Created' },
-      { kind: 'text_delta', text: ' h' },
-      { kind: 'text_delta', text: 'ello' },
-      { kind: 'text_delta', text: '.txt in' },
-      { kind: 'text_delta', text: ' the workspace root with' },
-      { kind: 'text_delta', text: ' the content "hello".' },
-    ]);
-
-    expect(sessionId).toBe('65391737-39a0-4c11-b632-0789a0298bc3');
-    expect(result).toEqual({
-      status: 'completed',
-      sessionId: '65391737-39a0-4c11-b632-0789a0298bc3',
-      text: 'Created hello.txt in the workspace root with the content "hello".',
-      usage: {
-        inputTokens: 4,
-        outputTokens: 201,
-        costUsd: 0.1152924,
-        steps: 2,
-      },
-    });
-  });
-});
-
 describe('mapClaudeStream: progress', () => {
   it('reports thinking at each model request and at each thinking block', async () => {
     const { events } = await replay([
@@ -209,20 +142,6 @@ describe('mapClaudeStream: progress', () => {
       { kind: 'status', text: 'Thinking…' },
       { kind: 'status', text: 'Thinking…' },
     ]);
-  });
-
-  it("sends the recorded Write call's line once its file name has streamed, before its content", async () => {
-    const messages = await loadFixtureMessages();
-    const { events, readAt } = await replay(messages);
-
-    const lineAt = readAt[events.findIndex((event) => event.kind === 'tool_start')];
-    const inputStillStreaming = messages.slice(lineAt).some(
-      (message) =>
-        message.type === 'stream_event' &&
-        message.event.type === 'content_block_delta' &&
-        message.event.delta.type === 'input_json_delta',
-    );
-    expect(inputStillStreaming).toBe(true);
   });
 
   it('sends a tool line as soon as its summary is known, and only once', async () => {

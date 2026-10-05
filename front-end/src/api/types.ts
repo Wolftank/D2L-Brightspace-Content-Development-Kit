@@ -123,7 +123,7 @@ export interface Deployment {
 }
 
 export interface EventPayloads {
-  'turn.started': { turnId: string };
+  'turn.started': { turnId: string; startedAt: number };
   'turn.status': { turnId: string; text: string };
   'message.delta': { turnId: string; messageId: string; text: string };
   'message.completed': { message: Message };
