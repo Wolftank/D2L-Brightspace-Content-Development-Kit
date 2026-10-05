@@ -42,7 +42,10 @@ Copy-Item .env.example .env
 
 - `npm start` — run the server from source
 - `npm run dev` — run the server from source, restarting on change
-- `npm test` — run the Vitest suite in `src/`
+- `npm test` — run all unit and integration tests in `src/` (excludes live tests)
+- `npm run test:unit` — run only unit tests (`*.test.ts`)
+- `npm run test:int` — run only integration tests (`*.int.test.ts`)
+- `npm run test:live` — run only live agent tests (`*.live.test.ts`); requires a signed-in Claude CLI
 - `npm run lint` — ESLint over `src/` (`kit/` is excluded; it's plain JS with its own conventions)
 - `npm run typecheck` — `tsc --noEmit`
 - `npm run db:generate` — generate a Drizzle migration from `src/db/schema.ts` into `src/db/migrations/`, after changing the schema
