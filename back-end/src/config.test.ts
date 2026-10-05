@@ -42,12 +42,16 @@ describe('loadConfig', () => {
   it.each([
     ['PORT', '0', 'must be a whole number from 1 to 65535'],
     ['PORT', '65536', 'must be a whole number from 1 to 65535'],
+    ['PORT', '70000', 'must be a whole number from 1 to 65535'],
+    ['PORT', 'notanumber', 'must be a whole number from 1 to 65535'],
+    ['PORT', '3000.5', 'must be a whole number from 1 to 65535'],
     ['PORT', '0x10', 'must be a whole number from 1 to 65535'],
     ['PORT', ' 42 ', 'must be a whole number from 1 to 65535'],
     ['PORT', '', 'must be a whole number from 1 to 65535'],
     ['AGENT_DRIVER', 'copilot', 'must be one of claude'],
     ['AGENT_EFFORT', 'huge', 'must be one of low, medium, high, xhigh, max'],
     ['AGENT_MODEL', '   ', 'must not be blank'],
+    ['DATA_DIR', '', 'must not be blank'],
     ['DATA_DIR', '   ', 'must not be blank'],
   ])('rejects %s=%j, naming the setting and the rule', (name, value, rule) => {
     expect(() => loadConfig({ [name]: value })).toThrow(ConfigError);
