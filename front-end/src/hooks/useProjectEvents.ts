@@ -8,6 +8,7 @@ import type {
 export interface StatusLine {
   seq: number;
   text: string;
+  callId?: string;
 }
 
 export interface ProjectEventState {
@@ -99,22 +100,30 @@ export function projectEventReducer(
   };
 
     case 'tool.started':
-      return {
-        ...state,
-        statusLines: [
-          ...state.statusLines,
-          { seq: event.seq, text: event.payload.summary },
-        ],
-      };
+  return {
+    ...state,
+    statusLines: [
+      ...state.statusLines,
+      {
+        seq: event.seq,
+        text: event.payload.summary,
+        callId: event.payload.callId,
+      },
+    ],
+  };
 
-    case 'tool.finished':
-      return {
-        ...state,
-        statusLines: [
-          ...state.statusLines,
-          { seq: event.seq, text: event.payload.summary },
-        ],
-      };
+case 'tool.finished':
+  return {
+    ...state,
+    statusLines: state.statusLines.map((line) =>
+      line.callId === event.payload.callId
+        ? {
+            ...line,
+            text: event.payload.summary,
+          }
+        : line
+    ),
+  };
 
     case 'build.created':
     case 'build.updated':

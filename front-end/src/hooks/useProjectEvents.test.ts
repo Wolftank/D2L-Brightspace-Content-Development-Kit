@@ -92,41 +92,112 @@ describe('projectEventReducer', () => {
     expect(result.replyText).toBe('Finished');
   });
 
-  it('handles tool.started', () => {
-    const result = projectEventReducer(initialProjectEventState, {
-      seq: 6,
-      kind: 'tool.started',
-      payload: {
-        turnId: 'turn-1',
-        callId: 'call-1',
-        name: 'builder',
-        summary: 'Generating activity',
-      },
-    });
-
-    expect(result.statusLines.at(-1)).toEqual({
-      seq: 6,
-      text: 'Generating activity',
-    });
+  it('keeps one status line for a successful tool call', () => {
+  const started = projectEventReducer(initialProjectEventState, {
+    seq: 6,
+    kind: 'tool.started',
+    payload: {
+      turnId: 'turn-1',
+      callId: 'call-1',
+      name: 'builder',
+      summary: 'Generating activity',
+    },
   });
 
-  it('handles tool.finished', () => {
-    const result = projectEventReducer(initialProjectEventState, {
-      seq: 7,
-      kind: 'tool.finished',
-      payload: {
-        turnId: 'turn-1',
-        callId: 'call-1',
-        ok: true,
-        summary: 'Activity generated',
-      },
-    });
-
-    expect(result.statusLines.at(-1)).toEqual({
-      seq: 7,
-      text: 'Activity generated',
-    });
+  const finished = projectEventReducer(started, {
+    seq: 7,
+    kind: 'tool.finished',
+    payload: {
+      turnId: 'turn-1',
+      callId: 'call-1',
+      ok: true,
+      summary: 'Activity generated',
+    },
   });
+
+  expect(finished.statusLines).toHaveLength(1);
+  expect(finished.statusLines[0]).toMatchObject({
+    text: 'Activity generated',
+    callId: 'call-1',
+  });
+});
+
+it('updates the existing status line when a tool call fails', () => {
+  const started = projectEventReducer(initialProjectEventState, {
+    seq: 8,
+    kind: 'tool.started',
+    payload: {
+      turnId: 'turn-1',
+      callId: 'call-2',
+      name: 'builder',
+      summary: 'Generating activity',
+    },
+  });
+
+  const finished = projectEventReducer(started, {
+    seq: 9,
+    kind: 'tool.finished',
+    payload: {
+      turnId: 'turn-1',
+      callId: 'call-2',
+      ok: false,
+      summary: 'Failed: activity generation failed',
+    },
+  });
+
+  expect(finished.statusLines).toHaveLength(1);
+  expect(finished.statusLines[0]).toMatchObject({
+    text: 'Failed: activity generation failed',
+    callId: 'call-2',
+  });
+});
+
+it('keeps simultaneous tool calls as separate status lines', () => {
+  const firstStarted = projectEventReducer(initialProjectEventState, {
+    seq: 10,
+    kind: 'tool.started',
+    payload: {
+      turnId: 'turn-1',
+      callId: 'call-1',
+      name: 'builder',
+      summary: 'Generating activity',
+    },
+  });
+
+  const secondStarted = projectEventReducer(firstStarted, {
+    seq: 11,
+    kind: 'tool.started',
+    payload: {
+      turnId: 'turn-1',
+      callId: 'call-2',
+      name: 'qa',
+      summary: 'Running QA',
+    },
+  });
+
+  const firstFinished = projectEventReducer(secondStarted, {
+    seq: 12,
+    kind: 'tool.finished',
+    payload: {
+      turnId: 'turn-1',
+      callId: 'call-1',
+      ok: true,
+      summary: 'Activity generated',
+    },
+  });
+
+  expect(firstFinished.statusLines).toHaveLength(2);
+
+  expect(firstFinished.statusLines[0]).toMatchObject({
+    text: 'Activity generated',
+    callId: 'call-1',
+  });
+
+  expect(firstFinished.statusLines[1]).toMatchObject({
+    text: 'Running QA',
+    callId: 'call-2',
+  });
+});
 
   it('handles build.created', () => {
   const result = projectEventReducer(initialProjectEventState, {
