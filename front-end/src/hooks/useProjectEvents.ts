@@ -68,6 +68,7 @@ export function projectEventReducer(
           id: event.payload.turnId,
           status: 'running',
         },
+        replyText: '',
         statusLines: [
           ...state.statusLines,
           { seq: event.seq, text: 'Starting your build' },
