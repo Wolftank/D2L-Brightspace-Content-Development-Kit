@@ -12,6 +12,8 @@ describe('loadConfig', () => {
       port: 3000,
       dataDir: resolve('/appdata', 'CDK'),
       agent: { driver: 'claude', model: undefined, effort: undefined },
+      appOrigin: 'http://127.0.0.1:5173',
+      previewOrigin: 'http://preview.localhost:3000',
     });
   });
 
@@ -26,13 +28,24 @@ describe('loadConfig', () => {
       AGENT_EFFORT: 'medium',
       PORT: '4000',
       DATA_DIR: resolve('/data/cdk'),
+      APP_ORIGIN: 'http://127.0.0.1:4000',
     });
 
     expect(config).toEqual({
       port: 4000,
       dataDir: resolve('/data/cdk'),
       agent: { driver: 'claude', model: 'claude-sonnet-5', effort: 'medium' },
+      appOrigin: 'http://127.0.0.1:4000',
+      previewOrigin: 'http://preview.localhost:4000',
     });
+  });
+
+  it.each([
+    ['http://127.0.0.1:5173/', 'http://127.0.0.1:5173'],
+    ['  http://LOCALHOST:5173  ', 'http://localhost:5173'],
+    ['https://cdk.example.edu', 'https://cdk.example.edu'],
+  ])('reads APP_ORIGIN=%j as the origin %j', (value, origin) => {
+    expect(loadConfig({ APP_ORIGIN: value }).appOrigin).toBe(origin);
   });
 
   it('resolves a relative DATA_DIR against back-end/', () => {
@@ -53,6 +66,12 @@ describe('loadConfig', () => {
     ['AGENT_MODEL', '   ', 'must not be blank'],
     ['DATA_DIR', '', 'must not be blank'],
     ['DATA_DIR', '   ', 'must not be blank'],
+    ['APP_ORIGIN', '127.0.0.1:5173', 'must be an http or https origin with no path'],
+    ['APP_ORIGIN', 'ftp://127.0.0.1:5173', 'must be an http or https origin with no path'],
+    ['APP_ORIGIN', 'http://127.0.0.1:5173/app', 'must be an http or https origin with no path'],
+    ['APP_ORIGIN', 'http://127.0.0.1:5173/?x=1', 'must be an http or https origin with no path'],
+    ['APP_ORIGIN', 'http://user:pass@127.0.0.1:5173', 'must be an http or https origin with no path'],
+    ['APP_ORIGIN', 'http://preview.localhost:3000', 'must not be the preview origin'],
   ])('rejects %s=%j, naming the setting and the rule', (name, value, rule) => {
     expect(() => loadConfig({ [name]: value })).toThrow(ConfigError);
     expect(() => loadConfig({ [name]: value })).toThrow(`${name}: ${rule}`);
