@@ -1,23 +1,74 @@
-import { readFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { AgentEvent, TurnResult } from './AgentDriver.js';
 
 const BARE_FILE_AND_WEB_TOOL_NAMES = ['Read', 'Edit', 'Write', 'Grep', 'Glob', 'WebFetch', 'WebSearch'];
 
-const FIXTURE_PATH = fileURLToPath(new URL('./__fixtures__/claude-write-file-turn.jsonl', import.meta.url));
-
-async function loadFixtureMessages(): Promise<SDKMessage[]> {
-  const raw = await readFile(FIXTURE_PATH, 'utf8');
-  return raw
-    .trim()
-    .split('\n')
-    .map((line) => JSON.parse(line) as SDKMessage);
-}
-
 async function* toAsyncIterable<T>(items: T[]): AsyncGenerator<T> {
   for (const item of items) yield item;
+}
+
+/** Replays `messages` through mapClaudeStream. `readAt[i]` is how many
+ *  messages had been read from the stream when `events[i]` was emitted. */
+async function replay(messages: unknown[]) {
+  const { mapClaudeStream } = await import('./claude.js');
+  let read = 0;
+  async function* source(): AsyncGenerator<SDKMessage> {
+    for (const message of messages) {
+      read++;
+      yield message as SDKMessage;
+    }
+  }
+
+  let result: TurnResult | undefined;
+  const events: AgentEvent[] = [];
+  const readAt: number[] = [];
+  for await (const event of mapClaudeStream(
+    source(),
+    new AbortController().signal,
+    (r) => {
+      result = r;
+    },
+    () => {},
+  )) {
+    events.push(event);
+    readAt.push(read);
+  }
+  return { events, readAt, result };
+}
+
+function streamEvent(event: unknown, parentToolUseId: string | null = null) {
+  return { type: 'stream_event', event, parent_tool_use_id: parentToolUseId };
+}
+
+function toolUseStart(index: number, id: string, name: string, parentToolUseId: string | null = null) {
+  return streamEvent(
+    { type: 'content_block_start', index, content_block: { type: 'tool_use', id, name, input: {} } },
+    parentToolUseId,
+  );
+}
+
+function inputDelta(index: number, partialJson: string, parentToolUseId: string | null = null) {
+  return streamEvent(
+    { type: 'content_block_delta', index, delta: { type: 'input_json_delta', partial_json: partialJson } },
+    parentToolUseId,
+  );
+}
+
+function assistantToolUse(id: string, name: string, input: unknown, parentToolUseId: string | null = null) {
+  return {
+    type: 'assistant',
+    parent_tool_use_id: parentToolUseId,
+    message: { content: [{ type: 'tool_use', id, name, input }] },
+  };
+}
+
+function toolResult(id: string, parentToolUseId: string | null = null) {
+  return {
+    type: 'user',
+    parent_tool_use_id: parentToolUseId,
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: 'ok' }] },
+  };
 }
 
 describe('buildAllowedTools', () => {
@@ -105,14 +156,12 @@ describe('mapClaudeStream: recorded fixture replay', () => {
     }
 
     expect(events).toEqual([
+      { kind: 'status', text: 'Thinking…' },
+      { kind: 'status', text: 'Thinking…' },
       {
         kind: 'tool_start',
         callId: 'toolu_018tyabejV94NG5tssLuXjyE',
         name: 'Write',
-        input: {
-          file_path: 'C:\\Users\\benja\\AppData\\Local\\Temp\\cdk-fixture-workspace-fGQ0EP\\hello.txt',
-          content: 'hello',
-        },
         summary: 'Writing hello.txt',
       },
       {
@@ -122,6 +171,7 @@ describe('mapClaudeStream: recorded fixture replay', () => {
         output:
           'File created successfully at: C:\\Users\\benja\\AppData\\Local\\Temp\\cdk-fixture-workspace-fGQ0EP\\hello.txt (file state is current in your context — no need to Read it back)',
       },
+      { kind: 'status', text: 'Thinking…' },
       { kind: 'text_delta', text: 'Created' },
       { kind: 'text_delta', text: ' h' },
       { kind: 'text_delta', text: 'ello' },
@@ -145,6 +195,129 @@ describe('mapClaudeStream: recorded fixture replay', () => {
   });
 });
 
+describe('mapClaudeStream: progress', () => {
+  it('reports thinking at each model request and at each thinking block', async () => {
+    const { events } = await replay([
+      { type: 'system', subtype: 'status', status: 'requesting' },
+      streamEvent({ type: 'message_start', message: {} }),
+      streamEvent({ type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '' } }),
+      streamEvent({ type: 'content_block_start', index: 1, content_block: { type: 'redacted_thinking', data: '' } }),
+    ]);
+
+    expect(events).toEqual([
+      { kind: 'status', text: 'Thinking…' },
+      { kind: 'status', text: 'Thinking…' },
+      { kind: 'status', text: 'Thinking…' },
+    ]);
+  });
+
+  it("sends the recorded Write call's line once its file name has streamed, before its content", async () => {
+    const messages = await loadFixtureMessages();
+    const { events, readAt } = await replay(messages);
+
+    const lineAt = readAt[events.findIndex((event) => event.kind === 'tool_start')];
+    const inputStillStreaming = messages.slice(lineAt).some(
+      (message) =>
+        message.type === 'stream_event' &&
+        message.event.type === 'content_block_delta' &&
+        message.event.delta.type === 'input_json_delta',
+    );
+    expect(inputStillStreaming).toBe(true);
+  });
+
+  it('sends a tool line as soon as its summary is known, and only once', async () => {
+    const { events, readAt } = await replay([
+      toolUseStart(0, 'call-1', 'Write'),
+      inputDelta(0, '{"file_path": "/ws/out/ind'),
+      inputDelta(0, 'ex.html"'),
+      inputDelta(0, ', "content": "<html>'),
+      inputDelta(0, '</html>"}'),
+      assistantToolUse('call-1', 'Write', { file_path: '/ws/out/index.html', content: '<html></html>' }),
+      toolResult('call-1'),
+    ]);
+
+    expect(events).toEqual([
+      { kind: 'tool_start', callId: 'call-1', name: 'Write', summary: 'Writing index.html' },
+      { kind: 'tool_end', callId: 'call-1', ok: true, output: 'ok' },
+    ]);
+    expect(readAt[0]).toBe(3);
+  });
+
+  it('sends a line that needs no input when the call starts', async () => {
+    const { events, readAt } = await replay([toolUseStart(0, 'call-1', 'Grep'), inputDelta(0, '{"pattern": "x"}')]);
+
+    expect(events).toEqual([{ kind: 'tool_start', callId: 'call-1', name: 'Grep', summary: 'Searching the files' }]);
+    expect(readAt[0]).toBe(1);
+  });
+
+  it('sends one line from the completed message when the summary is known only at the end', async () => {
+    const { events, readAt } = await replay([
+      toolUseStart(0, 'call-1', 'PowerShell'),
+      inputDelta(0, '{"command": "node lint.js out"'),
+      inputDelta(0, '}'),
+      assistantToolUse('call-1', 'PowerShell', { command: 'node lint.js out' }),
+    ]);
+
+    expect(events).toEqual([{ kind: 'tool_start', callId: 'call-1', name: 'PowerShell', summary: 'Running a command' }]);
+    expect(readAt[0]).toBe(4);
+  });
+
+  it('keeps streaming calls apart by block index', async () => {
+    const { events } = await replay([
+      toolUseStart(0, 'call-1', 'Read'),
+      toolUseStart(1, 'call-2', 'Edit'),
+      inputDelta(1, '{"file_path": "/ws/out/b.html"'),
+      inputDelta(0, '{"file_path": "/ws/out/a.html"'),
+    ]);
+
+    expect(events).toEqual([
+      { kind: 'tool_start', callId: 'call-2', name: 'Edit', summary: 'Editing b.html' },
+      { kind: 'tool_start', callId: 'call-1', name: 'Read', summary: 'Reading a.html' },
+    ]);
+  });
+
+  it('reports a retried request', async () => {
+    const { events } = await replay([
+      {
+        type: 'system',
+        subtype: 'api_retry',
+        attempt: 1,
+        max_retries: 10,
+        retry_delay_ms: 500,
+        error_status: 529,
+        error: 'overloaded',
+      },
+    ]);
+
+    expect(events).toEqual([{ kind: 'status', text: "The agent's service is busy. Trying again…" }]);
+  });
+
+  it('reports condensing when it starts and nothing when it ends', async () => {
+    const { events } = await replay([
+      { type: 'system', subtype: 'status', status: 'compacting' },
+      { type: 'system', subtype: 'compact_boundary', compact_metadata: { trigger: 'auto', pre_tokens: 180_000 } },
+      { type: 'system', subtype: 'status', status: null, compact_result: 'success' },
+    ]);
+
+    expect(events).toEqual([{ kind: 'status', text: 'Condensing the conversation…' }]);
+  });
+
+  it("reports nothing for a subagent's activity", async () => {
+    const agent = 'toolu_agent';
+    const { events } = await replay([
+      streamEvent({ type: 'message_start', message: {} }, agent),
+      streamEvent({ type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '' } }, agent),
+      streamEvent({ type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: 'Looking' } }, agent),
+      toolUseStart(2, 'call-sub', 'Read', agent),
+      inputDelta(2, '{"file_path": "/ws/out/a.html"}', agent),
+      assistantToolUse('call-sub', 'Read', { file_path: '/ws/out/a.html' }, agent),
+      toolResult('call-sub', agent),
+    ]);
+
+    expect(events).toEqual([]);
+  });
+});
+
 describe('summarizeTool', () => {
   it.each([
     ['PowerShell', { command: 'node lint.js out', description: 'Run the QA check' }, 'Run the QA check'],
@@ -162,23 +335,6 @@ describe('summarizeTool', () => {
 });
 
 describe('mapClaudeStream: provider failures', () => {
-  async function replay(messages: unknown[]) {
-    const { mapClaudeStream } = await import('./claude.js');
-    let result: TurnResult | undefined;
-    const events: AgentEvent[] = [];
-    for await (const event of mapClaudeStream(
-      toAsyncIterable(messages as SDKMessage[]),
-      new AbortController().signal,
-      (r) => {
-        result = r;
-      },
-      () => {},
-    )) {
-      events.push(event);
-    }
-    return { events, result };
-  }
-
   const errorResult = {
     type: 'result',
     subtype: 'success',

@@ -122,10 +122,15 @@ export type AgentEvent =
   /** Agent text as it is produced. A driver without streaming emits one
    *  delta with the whole message. */
   | { kind: 'text_delta'; text: string }
-  /** The agent called a tool, built-in or `cdk`. `summary` is a plain-language
-   *  line for the instructor, e.g. "Writing index.html". */
-  | { kind: 'tool_start'; callId: string; name: string; input: unknown; summary: string }
+  /** The agent is calling a tool, built-in or `cdk`. Emitted once per call,
+   *  as soon as `summary` is known, which can be before the call's input is
+   *  complete. `summary` is a plain-language line for the instructor, e.g.
+   *  "Writing index.html". */
+  | { kind: 'tool_start'; callId: string; name: string; summary: string }
   | { kind: 'tool_end'; callId: string; ok: boolean; output?: unknown }
+  /** The main agent started a new step, e.g. "Thinking…". Emitted when the
+   *  step changes, never on a timer. */
+  | { kind: 'status'; text: string }
   /** Something the instructor should see, e.g. "starting a fresh chat". */
   | { kind: 'notice'; text: string };
 

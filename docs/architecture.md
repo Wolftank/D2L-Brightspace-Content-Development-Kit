@@ -114,7 +114,6 @@ GET    /api/projects/:projectId/builds        → { items: Build[] }
 POST   /api/projects/:projectId/builds        { note? } → 202 { build }     instructor-triggered, no agent involved
 GET    /api/builds/:buildId                   → { build, deployments: [] }
 POST   /api/builds/:buildId/pedagogy          → 202 { build }               runs the pedagogy check on this build
-GET    /api/builds/:buildId/preview/*         the preview (iframe target)
 GET    /api/builds/:buildId/download          the build as a zip, for manual upload
 POST   /api/builds/:buildId/deploy            { targetCourse?, confirm: true } → 202 { deployment }
 GET    /api/deployments/:deploymentId         → { deployment }
@@ -125,6 +124,21 @@ The download is an attachment named `<title>-v<version>.zip`, with the project's
 A build always runs the QA gate. The pedagogy check is a separate step on a build, requested by the instructor here or by the agent through its tool, so an intermediate build costs nothing it does not need.
 
 `POST /builds/:id/deploy` is the **human gate**. The agent can propose a deployment; only this call, made by the instructor, executes one. The D2L write happens in `back-end/src/deploy/`, never inside the agent.
+
+### Preview origin
+
+Previews are served on their own origin, so an activity's scripts never run on the app's origin, where they could call the API or reach into the app's page. Locally the preview origin is `http://preview.localhost:<PORT>`: the back end's own port, under a hostname browsers resolve to this computer. The back end tells the two apart by the `Host` header. The preview origin serves only these routes, and the app origin serves none of them.
+
+```
+GET    /preview/player.html?buildId=&attempt=&parentOrigin=   the emulator player; 403 unless parentOrigin is the app origin
+GET    /preview/player.js, /preview/player.css                the player's script and style, from back-end/preview/
+GET    /preview/d2l-emulator.js, /preview/tenant-profile.json the kit's emulator and tenant profile, unchanged
+GET    /api/builds/:buildId/preview/*                         a file of a ready build; index.html is the launch page
+```
+
+Every response is `no-store` and `nosniff`, with a Content-Security-Policy whose `frame-ancestors` is the app origin (the `APP_ORIGIN` setting), so only the app can frame the player. Only GET and HEAD are answered. A build file is served only when the build is `ready` and the path names one of the files its download contains; the QA report, links, and anything outside the build get 404. The player and the activity share the preview origin, because the activity finds the SCORM API on its parent window.
+
+In local mode a build's id is what names its files: the back end listens on 127.0.0.1 only, the `Host` must be the preview origin's, and build ids are random. Hosted mode needs two more things before it serves previews: a separate preview domain, and short-lived signed preview links tied to the build and the instructor, because a build id can leak.
 
 ### Checks without the agent
 
@@ -147,11 +161,11 @@ Each event: `id` is the project-wide `seq`, `event` is the kind, `data` is JSON.
 | kind | payload | When |
 |---|---|---|
 | `turn.started` | `{ turnId }` | The runner picked the turn up |
-| `turn.status` | `{ turnId, text }` | Plain-language progress: "Reading your syllabus…", "Checking accessibility…" |
+| `turn.status` | `{ turnId, text }` | Plain-language progress, sent when the agent starts a new step: "Thinking…", "The agent's service is busy. Trying again…", "Condensing the conversation…", "Checking your build". Never sent on a timer, and never stored when its text repeats the turn's latest `turn.status`, `tool.started`, or `tool.finished` line. Only the main agent's steps are reported, not a subagent's |
 | `message.delta` | `{ turnId, messageId, text }` | Streamed agent text |
 | `message.completed` | `{ message }` | The agent's full message is stored |
-| `tool.started` | `{ turnId, callId, name, summary }` | The agent called a tool. `summary` is the driver's plain-language line, such as "Writing index.html" |
-| `tool.finished` | `{ turnId, callId, ok, summary, buildId? }` | The tool returned. `summary` repeats the started one, prefixed "Failed: " when `ok` is false |
+| `tool.started` | `{ turnId, callId, name, summary }` | The agent is calling a tool. Sent once per `callId`, as soon as the driver knows `summary`, its plain-language line such as "Writing index.html", which can be before the call's input is complete |
+| `tool.finished` | `{ turnId, callId, ok, summary, buildId? }` | The tool returned, or the turn ended before it did, which is `ok: false`. `summary` repeats the started one, prefixed "Failed: " when `ok` is false |
 | `build.created` | `{ build }` | A new build exists (status `checking`) |
 | `build.updated` | `{ build }` | QA gate report attached, pedagogy check report attached, or failed |
 | `deployment.updated` | `{ deployment }` | Any status change, including `requested` from the agent |
@@ -180,7 +194,7 @@ sequenceDiagram
   Runner->>Sessions: acquire(project)
   Sessions-->>Runner: the live session, or one reopened by session id
   Runner->>Agent: send(input)
-  Agent-->>Runner: text and tool events
+  Agent-->>Runner: text, tool, and status events
   Runner-->>UI: turn.status, message.delta
   Agent->>Tools: create_build()
   Tools->>Tools: copy out/, run the QA gate
@@ -197,7 +211,7 @@ sequenceDiagram
 Runner rules:
 
 1. One active turn per project. Per-instructor concurrency cap: 1 in local mode, configurable in hosted mode. Extra turns wait in `queued`. V1 enforces the per-project rule when a message is posted and has no per-instructor cap, so a turn stays `queued` only until the runner starts it.
-2. Every driver event becomes an Event row **and** a live push, in that order.
+2. Every driver event becomes an Event row **and** a live push, in that order, except a status or notice whose text repeats the turn's latest status line. When the driver's events end, every tool call without a `tool.finished` gets one with `ok: false`.
 3. When the driver's result arrives, the runner hands the session back to the session service: `release` after a completed result, `close` after anything else, so a failed or aborted agent process is never reused. On a completed result it then stores the agent's message (the driver's final message, or all the streamed text when that is empty), emits `message.completed`, builds per rule 6, and marks the turn.
 4. Every turn ends with exactly one of `turn.completed`, `turn.failed`, and `turn.cancelled`. A failed turn's `error` is `{ code, message }`: the code from the driver, or `workspace_missing`, `interrupted`, or `internal_error` from the runner, and a fixed plain-language message for that code. The technical detail goes to the server log.
 5. `POST /turns/:id/cancel` fires the turn's abort signal. The driver stops the agent; the runner records `cancelled` or `failed`. V1 has no cancel route and imposes no step, spending, or time limit on a turn, so a stuck turn holds its project until the back end restarts.
@@ -310,6 +324,7 @@ A mode is where the app runs and for whom. Local mode runs the whole app on one 
 | Agent sign-in | The instructor's own | A shared service account, or per instructor |
 | D2L credentials | One token | One token per instructor, stored server-side |
 | Concurrency | One turn at a time | Per-instructor cap, plus a cap on live sessions |
+| Preview | `http://preview.localhost:<PORT>`, framed only by `APP_ORIGIN` | Off until a separate preview domain and signed preview links exist |
 
 The launch token matters even in local mode: any website open in the instructor's browser can send requests to localhost. The app serves the page with the token embedded; every API call sends it back in a header; the server rejects anything else.
 
@@ -320,6 +335,7 @@ How `back-end/src` is laid out, so that each concern above has exactly one home.
 | Folder | Role |
 |---|---|
 | `src/routes/` | HTTP only: parse, validate (zod), call one service, shape the response |
+| `src/preview/` | The preview origin's routes, chosen by `Host`: the emulator player and the files of ready builds |
 | `src/services/` | Projects, turns, builds, deployments, and the workspace service. Receives plain arguments, never `req`/`res` |
 | `src/pipeline/` | The runner, the session service, and the event service |
 | `src/agent/` | `AgentDriver` and the drivers |
@@ -364,6 +380,8 @@ Every document in `docs/` and every comment in `back-end/src/` uses these words,
 | **avenue** | One of the ways content can live in D2L: `topic`, `scorm`, `widget`, `external`. |
 | **emulator** | The kit's local reproduction of the tenant's D2L behavior. |
 | **preview** | A build rendered through the emulator. |
+| **preview origin** | The origin previews are served from, separate from the app origin: `http://preview.localhost:<PORT>` locally. |
+| **app origin** | The origin the app is opened at, set by `APP_ORIGIN`; the only origin allowed to frame the preview. |
 | **tool** | A function the back end exposes to the agent. |
 | **event service** | The back-end component that persists events and notifies a project's live subscribers, backing the event stream. |
 | **event stream** | The per-project Server-Sent Events feed. |

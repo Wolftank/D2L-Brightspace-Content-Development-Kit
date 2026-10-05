@@ -1,13 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ApiError,
   buildDownloadUrl,
   createProject,
   sendMessage,
 } from './api/client';
-import type { Project } from './api/types';
+import type { Build, Project } from './api/types';
 import { useProjectEvents } from './hooks/useProjectEvents';
 import './App.css';
+import { PreviewPanel } from './preview/PreviewPanel';
 
 function InlineError({ error }: { error: ApiError | null }) {
   return error ? (
@@ -37,6 +38,15 @@ export function App() {
 
   const [error, setError] = useState<ApiError | null>(null);
   const [isBuilding, setIsBuilding] = useState(false);
+  const [preview, setPreview] = useState<Pick<Build, 'id' | 'version'> | null>(null);
+  const previewOpener = useRef<HTMLButtonElement | null>(null);
+
+  function closePreview() {
+    setPreview(null);
+    if (previewOpener.current?.isConnected) previewOpener.current.focus();
+    else document.getElementById('build-title')?.focus();
+  }
+
 
   const {
     statusLines,
@@ -221,7 +231,7 @@ export function App() {
         >
           <p className="eyebrow">02 / BUILD STATUS</p>
 
-          <h2 id="build-title">Build panel</h2>
+          <h2 id="build-title" tabIndex={-1}>Build panel</h2>
 
           <div aria-live="polite">
             {statusLines.length === 0 &&
@@ -293,17 +303,24 @@ export function App() {
               )}
 
               {build.status === 'ready' && (
-                <a
-                  className="download"
-                  href={buildDownloadUrl(build.id)}
-                >
-                  Download SCORM package
-                </a>
+                <div className="build-actions">
+                  <a
+                    className="download"
+                    href={buildDownloadUrl(build.id)}
+                  >
+                    Download SCORM package
+                  </a>
+                  <button type="button" onClick={(event) => {
+                    previewOpener.current = event.currentTarget;
+                    setPreview({ id: build.id, version: build.version });
+                  }}>Preview</button>
+                </div>
               )}
             </article>
           )}
         </section>
       </div>
+      {preview && <PreviewPanel key={`${preview.id}:${preview.version}`} build={preview} onClose={closePreview} />}
     </main>
   );
 }
