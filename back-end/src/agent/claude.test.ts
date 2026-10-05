@@ -1,20 +1,8 @@
-import { readFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { AgentEvent, TurnResult } from './AgentDriver.js';
 
 const BARE_FILE_AND_WEB_TOOL_NAMES = ['Read', 'Edit', 'Write', 'Grep', 'Glob', 'WebFetch', 'WebSearch'];
-
-const FIXTURE_PATH = fileURLToPath(new URL('./__fixtures__/claude-write-file-turn.jsonl', import.meta.url));
-
-async function loadFixtureMessages(): Promise<SDKMessage[]> {
-  const raw = await readFile(FIXTURE_PATH, 'utf8');
-  return raw
-    .trim()
-    .split('\n')
-    .map((line) => JSON.parse(line) as SDKMessage);
-}
 
 async function* toAsyncIterable<T>(items: T[]): AsyncGenerator<T> {
   for (const item of items) yield item;

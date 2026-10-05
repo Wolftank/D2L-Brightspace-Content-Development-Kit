@@ -11,6 +11,9 @@
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
     "test": "vitest run",
+    "test:unit": "vitest run -c vitest.unit.config.ts",
+    "test:int": "vitest run -c vitest.int.config.ts",
+    "test:live": "vitest run -c vitest.live.config.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate"
