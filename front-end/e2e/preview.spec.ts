@@ -26,7 +26,7 @@ test('saved starter runs in Student mode, restarts, keeps its version and return
   await preview.focus();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('heading', { name: 'Preview — Build 1' })).toBeFocused();
-  await expect(page.getByRole('status')).toHaveText('Preview ready.');
+  await expect(page.getByRole('region', { name: 'Preview — Build 1' }).getByRole('status')).toHaveText('Preview ready.');
   const wrapper = page.frameLocator('iframe[title="Interactive preview of build 1"]');
   const activity = wrapper.frameLocator('#activity');
   await expect(activity.getByRole('heading', { name: 'Sample SCORM activity' })).toBeVisible();
@@ -85,5 +85,5 @@ test('unavailable builds and launch failures offer retry', async ({ page }) => {
   await expect(page.getByRole('alert')).toContainText('activity could not be opened');
   await page.unroute('**:3002/preview/tenant-profile.json');
   await page.getByRole('button', { name: 'Retry preview' }).click();
-  await expect(page.getByRole('status')).toHaveText('Preview ready.');
+  await expect(page.getByRole('region', { name: /^Preview — Build/ }).getByRole('status')).toHaveText('Preview ready.');
 });
