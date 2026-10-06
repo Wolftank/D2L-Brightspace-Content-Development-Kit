@@ -316,6 +316,74 @@ describe('build service', () => {
       await expect(builds.download('someone-else', build.id)).rejects.toThrow(NotFound);
     });
   });
+
+  describe('previewFile', () => {
+    it('gives the path of a file in a ready build, including one in a subfolder', async () => {
+      const build = await builds.create(projectId);
+      const buildDir = workspaces.buildPathFor(projectId, '1');
+      await fs.mkdir(join(buildDir, 'css'));
+      await fs.writeFile(join(buildDir, 'css', 'site.css'), 'body {}');
+
+      await expect(builds.previewFile(ownerId, build.id, ['index.html'])).resolves.toBe(join(buildDir, 'index.html'));
+      await expect(builds.previewFile(ownerId, build.id, ['css', 'site.css'])).resolves.toBe(join(buildDir, 'css', 'site.css'));
+    });
+
+    it.each([
+      ['the QA report', ['qa.json']],
+      ['the QA report in another case', ['QA.JSON']],
+      ['a name with a trailing dot', ['index.html.']],
+      ['a file that does not exist', ['missing.html']],
+      ['a folder', ['css']],
+      ['a parent folder', ['..', '..', 'project.json']],
+      ['a parent folder inside one segment', ['../../index.html']],
+      ['a backslash path', ['..\..\index.html']],
+      ['an absolute path', ['C:', 'Windows', 'win.ini']],
+    ])('refuses %s', async (_case, path) => {
+      const build = await builds.create(projectId);
+      await fs.mkdir(join(workspaces.buildPathFor(projectId, '1'), 'css'));
+
+      await expect(builds.previewFile(ownerId, build.id, path)).rejects.toThrow(NotFound);
+    });
+
+    it('refuses a file reached through a link out of the build', async () => {
+      const build = await builds.create(projectId);
+      const outside = join(dataDir, 'outside');
+      await fs.mkdir(outside);
+      await fs.writeFile(join(outside, 'secret.txt'), 'not part of the build');
+      await fs.symlink(outside, join(workspaces.buildPathFor(projectId, '1'), 'linked'), 'junction');
+
+      await expect(builds.previewFile(ownerId, build.id, ['linked', 'secret.txt'])).rejects.toThrow(NotFound);
+    });
+
+    it('refuses a link to a file outside the build', async (ctx) => {
+      const build = await builds.create(projectId);
+      const secret = join(dataDir, 'secret.txt');
+      await fs.writeFile(secret, 'not part of the build');
+      try {
+        await fs.symlink(secret, join(workspaces.buildPathFor(projectId, '1'), 'secret.txt'), 'file');
+      } catch (err) {
+        // Windows allows file symlinks only with Developer Mode or admin rights.
+        if ((err as NodeJS.ErrnoException).code === 'EPERM') ctx.skip();
+        throw err;
+      }
+
+      await expect(builds.previewFile(ownerId, build.id, ['secret.txt'])).rejects.toThrow(NotFound);
+    });
+
+    it('refuses a build that is not ready', async () => {
+      await replaceOutput(BAD_SCORM);
+      const build = await builds.create(projectId);
+
+      await expect(builds.previewFile(ownerId, build.id, ['index.html'])).rejects.toThrow(NotFound);
+    });
+
+    it('throws NotFound for another owner’s build and for an unknown id', async () => {
+      const build = await builds.create(projectId);
+
+      await expect(builds.previewFile('someone-else', build.id, ['index.html'])).rejects.toThrow(NotFound);
+      await expect(builds.previewFile(ownerId, 'no-such-build', ['index.html'])).rejects.toThrow(NotFound);
+    });
+  });
 });
 
 async function zipEntryNames(stream: Readable): Promise<string[]> {

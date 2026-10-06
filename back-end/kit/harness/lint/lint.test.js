@@ -55,6 +55,14 @@ const ws = lint(path.join(__dirname, '..', '..', 'skills', 'd2l-homepage-widget'
 check('no findings at all', ws.findings.length === 0,
       JSON.stringify(ws.findings.map(f => f.rule + '@' + f.line)));
 
+console.log('\n== the SCORM starter is clean ==');
+const ss = lint(path.join(__dirname, '..', '..', 'skills', 'd2l-scorm-package', 'assets', 'starter'),
+                'scorm', profile);
+const ssWarnings = ss.findings.filter(f => f.severity === 'warn').length;
+check('SCORM starter passes the QA gate (pass, 0 errors, 0 warnings)',
+      errs(ss) === 0 && ssWarnings === 0,
+      JSON.stringify(ss.findings.map(f => f.severity + ' ' + f.rule + '@' + f.file + ':' + f.line)));
+
 console.log('\n== good-topic is clean ==');
 const gt = lint(fx('good-topic'), 'topic', profile);
 check('no findings at all', gt.findings.length === 0,

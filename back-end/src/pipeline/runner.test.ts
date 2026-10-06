@@ -125,7 +125,7 @@ describe('runner', () => {
     const { session } = scriptedSession(
       [
         { kind: 'text_delta', text: 'Reading the guide. ' },
-        { kind: 'tool_start', callId: 'call-1', name: 'Write', input: {}, summary: 'Writing index.html' },
+        { kind: 'tool_start', callId: 'call-1', name: 'Write', summary: 'Writing index.html' },
         { kind: 'tool_end', callId: 'call-1', ok: true },
         { kind: 'notice', text: 'The agent was denied permission to use WebFetch.' },
       ],
@@ -152,6 +152,7 @@ describe('runner', () => {
     );
 
     const replyId = replies[0]!.id;
+    expect(payloadsOf('turn.started')).toEqual([{ turnId: 'turn-1', startedAt: 2 }]);
     expect(payloadsOf('message.delta')).toEqual([{ turnId: 'turn-1', messageId: replyId, text: 'Reading the guide. ' }]);
     expect(payloadsOf('tool.started')).toEqual([{ turnId: 'turn-1', callId: 'call-1', name: 'Write', summary: 'Writing index.html' }]);
     expect(payloadsOf('tool.finished')).toEqual([{ turnId: 'turn-1', callId: 'call-1', ok: true, summary: 'Writing index.html' }]);
@@ -171,7 +172,7 @@ describe('runner', () => {
   it('marks a failed tool call in its finished summary', async () => {
     const { session } = scriptedSession(
       [
-        { kind: 'tool_start', callId: 'call-1', name: 'PowerShell', input: {}, summary: 'Run the QA check' },
+        { kind: 'tool_start', callId: 'call-1', name: 'PowerShell', summary: 'Run the QA check' },
         { kind: 'tool_end', callId: 'call-1', ok: false },
       ],
       COMPLETED,
@@ -183,6 +184,63 @@ describe('runner', () => {
     expect(payloadsOf('tool.finished')).toEqual([
       { turnId: 'turn-1', callId: 'call-1', ok: false, summary: 'Failed: Run the QA check' },
     ]);
+  });
+
+  it("reports the agent's steps as status lines, never storing one that repeats the latest line", async () => {
+    const { session } = scriptedSession(
+      [
+        { kind: 'status', text: 'Thinking…' },
+        { kind: 'status', text: 'Thinking…' },
+        { kind: 'tool_start', callId: 'call-1', name: 'Write', summary: 'Writing index.html' },
+        { kind: 'status', text: 'Writing index.html' },
+        { kind: 'tool_end', callId: 'call-1', ok: true },
+        { kind: 'status', text: 'Thinking…' },
+        { kind: 'notice', text: 'The agent was denied permission to use WebFetch.' },
+        { kind: 'notice', text: 'The agent was denied permission to use WebFetch.' },
+      ],
+      COMPLETED,
+    );
+    const { runner, appended } = setup({ session });
+
+    await runner.executeTurn('turn-1');
+
+    const feed = appended.flatMap(({ kind, payload }) => {
+      const { text, summary } = payload as { text?: string; summary?: string };
+      return kind === 'turn.status' || kind.startsWith('tool.') ? [`${kind}: ${text ?? summary}`] : [];
+    });
+    expect(feed).toEqual([
+      'turn.status: Thinking…',
+      'tool.started: Writing index.html',
+      'tool.finished: Writing index.html',
+      'turn.status: Thinking…',
+      'turn.status: The agent was denied permission to use WebFetch.',
+      'turn.status: Checking your build',
+    ]);
+  });
+
+  it.each([
+    ['completed', COMPLETED, 'turn.completed'],
+    ['failed', { status: 'failed', sessionId: null, text: '', error: { code: 'agent_error', message: 'm' } }, 'turn.failed'],
+    ['cancelled', { status: 'cancelled', sessionId: null, text: '' }, 'turn.cancelled'],
+  ] as const)('fails a tool call that never finishes when a %s turn ends', async (_status, result, endKind) => {
+    const { session } = scriptedSession(
+      [
+        { kind: 'tool_start', callId: 'call-1', name: 'Write', summary: 'Writing index.html' },
+        { kind: 'tool_start', callId: 'call-2', name: 'Read', summary: 'Reading SKILL.md' },
+        { kind: 'tool_end', callId: 'call-2', ok: true },
+      ],
+      result,
+    );
+    const { runner, kinds, payloadsOf } = setup({ session, hashes: ['same', 'same'] });
+
+    await runner.executeTurn('turn-1');
+
+    expect(payloadsOf('tool.started')).toHaveLength(2);
+    expect(payloadsOf('tool.finished')).toEqual([
+      { turnId: 'turn-1', callId: 'call-2', ok: true, summary: 'Reading SKILL.md' },
+      { turnId: 'turn-1', callId: 'call-1', ok: false, summary: 'Failed: Writing index.html' },
+    ]);
+    expect(kinds().at(-1)).toBe(endKind);
   });
 
   it('creates no build when the output is unchanged since the turn started', async () => {

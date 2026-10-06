@@ -126,6 +126,9 @@ describe('GET /api/projects/:projectId/events', () => {
         download: async () => {
           throw new Error('not used by these tests');
         },
+        previewFile: async () => {
+          throw new Error('not used by these tests');
+        },
       },
       events: service,
       turns: {
@@ -134,6 +137,7 @@ describe('GET /api/projects/:projectId/events', () => {
         },
       },
       driver: { name: 'claude', probe: async () => ({ ok: true }) },
+      preview: { origin: 'http://preview.localhost:3000', appOrigin: 'http://127.0.0.1:5173' },
       ...overrides,
     };
   }

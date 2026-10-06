@@ -44,6 +44,7 @@ function buildDeps(cfg: Config): { deps: Deps; runner: Runner; builds: BuildServ
     builds,
     events,
     driver,
+    preview: { origin: cfg.previewOrigin, appOrigin: cfg.appOrigin },
   };
   return { deps, runner, builds };
 }
@@ -80,7 +81,7 @@ function start(): void {
     }
     runner.failInterrupted();
     builds.failInterrupted();
-    console.log(`back-end listening on http://127.0.0.1:${cfg.port} (data in ${cfg.dataDir})`);
+    console.log(`back-end listening on http://127.0.0.1:${cfg.port}, previews on ${cfg.previewOrigin} (data in ${cfg.dataDir})`);
   });
 }
 
