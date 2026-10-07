@@ -1,3 +1,4 @@
+import type { ApiErrorBody } from '@cdk/contract';
 import type { ErrorRequestHandler } from 'express';
 import { ZodError } from 'zod';
 
@@ -49,46 +50,46 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   if (err instanceof ZodError) {
     res.status(400).json({
       error: { code: 'invalid_request', message: 'Invalid request', details: { issues: err.issues } },
-    });
+    } satisfies ApiErrorBody);
     return;
   }
 
   if (err instanceof SyntaxError && (err as { type?: string }).type === 'entity.parse.failed') {
-    res.status(400).json({ error: { code: 'invalid_json', message: 'Invalid JSON body' } });
+    res.status(400).json({ error: { code: 'invalid_json', message: 'Invalid JSON body' } } satisfies ApiErrorBody);
     return;
   }
 
   if ((err as { type?: string }).type === 'entity.too.large') {
-    res.status(413).json({ error: { code: 'payload_too_large', message: 'The request is too large.' } });
+    res.status(413).json({ error: { code: 'payload_too_large', message: 'The request is too large.' } } satisfies ApiErrorBody);
     return;
   }
 
   if (err instanceof NotFound) {
-    res.status(404).json({ error: { code: 'not_found', message: err.message } });
+    res.status(404).json({ error: { code: 'not_found', message: err.message } } satisfies ApiErrorBody);
     return;
   }
 
   if (err instanceof TurnActive) {
     res.status(409).json({
       error: { code: 'turn_active', message: err.message, details: { turnId: err.turnId } },
-    });
+    } satisfies ApiErrorBody);
     return;
   }
 
   if (err instanceof BuildNotReady) {
     res.status(409).json({
       error: { code: 'build_not_ready', message: err.message, details: { status: err.status } },
-    });
+    } satisfies ApiErrorBody);
     return;
   }
 
   if (err instanceof BuildIncomplete) {
     res.status(409).json({
       error: { code: 'build_incomplete', message: err.message, details: { missing: err.missing } },
-    });
+    } satisfies ApiErrorBody);
     return;
   }
 
   console.error(err);
-  res.status(500).json({ error: { code: 'internal_error', message: 'Internal server error' } });
+  res.status(500).json({ error: { code: 'internal_error', message: 'Internal server error' } } satisfies ApiErrorBody);
 };

@@ -6,7 +6,7 @@ import type {
   ProjectResponse,
   SendMessageRequest,
   SendMessageResponse,
-} from './types';
+} from '@cdk/contract';
 
 export class ApiError extends Error {
   constructor(

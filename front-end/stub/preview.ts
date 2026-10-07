@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { createServer, type ServerResponse } from 'node:http';
-import type { Build } from '../src/api/types';
+import type { Build } from '@cdk/contract';
 
 const fixture = new URL('./fixtures/preview/', import.meta.url);
 const files = new Map(['index.html', 'imsmanifest.xml', 'sample.css'].map((name) => [name, readFileSync(new URL(name, fixture))]));

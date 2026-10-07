@@ -1,26 +1,13 @@
+import type { EventKind, EventPayloads } from '@cdk/contract';
 import type { EventsRepo } from '../db/events.js';
 import type { Event } from '../db/schema.js';
 
-/** The event kinds in docs/architecture.md's "Event stream" table. No others are valid. */
-export type AppEventKind =
-  | 'turn.started'
-  | 'turn.status'
-  | 'message.delta'
-  | 'message.completed'
-  | 'tool.started'
-  | 'tool.finished'
-  | 'build.created'
-  | 'build.updated'
-  | 'deployment.updated'
-  | 'turn.completed'
-  | 'turn.failed'
-  | 'turn.cancelled';
-
-export interface AppendEventInput {
+/** An event to store and push. Its `payload` is the contract's payload for its `kind`. */
+export interface AppendEventInput<K extends EventKind = EventKind> {
   projectId: string;
   turnId?: string;
-  kind: AppEventKind;
-  payload: unknown;
+  kind: K;
+  payload: EventPayloads[K];
 }
 
 export type EventListener = (event: Event) => void;
@@ -33,7 +20,7 @@ export type EventListener = (event: Event) => void;
  */
 export interface EventService {
   /** Persists the event, then notifies `projectId`'s live subscribers with the stored, seq-assigned row. */
-  append(input: AppendEventInput): Event;
+  append<K extends EventKind>(input: AppendEventInput<K>): Event;
   /** Stored events for `projectId` after `seq`, ascending — for replay. */
   after(projectId: string, seq: number): Event[];
   /** Registers `listener` for `projectId`'s live events. Returns a function that unregisters it. */

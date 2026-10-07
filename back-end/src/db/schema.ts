@@ -1,6 +1,5 @@
 import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
-import type { ContentBlock } from '../types/content.js';
-import type { QaReport } from '../types/qa.js';
+import type { ContentBlock, QaReport } from '@cdk/contract';
 
 export const users = sqliteTable('users', {
   id: text('id').primaryKey(),

@@ -6,8 +6,15 @@ The browser app: chat, configurator, build panel, preview. It displays the plain
 
 Requires Node 20.19+, Node 22.13+, or Node 24+.
 
+Install from the repository root, which installs the back end, the front end, and the shared contract together:
+
 ```
 npm install
+```
+
+Then, in `front-end/`:
+
+```
 npm run dev
 ```
 
@@ -59,7 +66,7 @@ The `e2e` job in `.github/workflows/ci.yml` runs this suite in both browsers on 
 ## Inside this folder
 
 - `index.html`, `src/main.tsx`, `src/App.tsx` — the app entry
-- `src/api/types.ts` — the HTTP API and event stream shapes, transcribed from [`docs/architecture.md`](../docs/architecture.md)
+- `src/api/client.ts` — the HTTP API client; its request and response types come from [`@cdk/contract`](../packages/contract/)
 - `src/test/setup.ts` — Testing Library matchers and cleanup for Vitest
 - `stub/server.ts` — the stub back end, until the real routes land
 - `vite.config.ts` — the dev server proxy and the Vitest configuration

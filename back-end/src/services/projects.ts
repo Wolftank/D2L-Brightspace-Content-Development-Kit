@@ -1,23 +1,11 @@
 import { randomUUID } from 'node:crypto';
+import type { Project as ApiProject, ProjectResponse } from '@cdk/contract';
 import type { BuildsRepo } from '../db/builds.js';
 import type { ProjectsRepo } from '../db/projects.js';
-import type { Build, Project, Turn } from '../db/schema.js';
+import type { Project } from '../db/schema.js';
 import type { TurnsRepo } from '../db/turns.js';
 import { NotFound } from '../errors.js';
 import type { WorkspaceService } from './workspaces.js';
-
-/** A project as the API sends it: the stored row plus `targetCourse`, which is null until course selection exists. */
-export type ApiProject = Project & { targetCourse: null };
-
-export type BuildSummary = Pick<Build, 'id' | 'version' | 'status' | 'createdAt'>;
-
-export interface ProjectDetails {
-  project: ApiProject;
-  /** Oldest version first. */
-  builds: BuildSummary[];
-  /** Present only while the project has a `queued` or `running` turn. */
-  activeTurn?: Turn;
-}
 
 export interface CreateProjectInput {
   title: string;
@@ -38,8 +26,8 @@ export interface ProjectService {
    * removed and the error rethrown.
    */
   create(ownerId: string, input: CreateProjectInput): Promise<ApiProject>;
-  /** The project with its build summaries and active turn, if it is `ownerId`'s; otherwise throws `NotFound`. */
-  get(ownerId: string, id: string): ProjectDetails;
+  /** The project with its build summaries (oldest first) and active turn, if it is `ownerId`'s; otherwise throws `NotFound`. */
+  get(ownerId: string, id: string): ProjectResponse;
 }
 
 export function createProjectService(deps: ProjectServiceDeps): ProjectService {

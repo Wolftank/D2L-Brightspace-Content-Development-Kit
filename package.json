@@ -1,0 +1,17 @@
+{
+  "name": "cdk",
+  "private": true,
+  "workspaces": [
+    "packages/contract",
+    "back-end",
+    "front-end"
+  ],
+  "scripts": {
+    "test": "npm test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": "^20.19.0 || ^22.13.0 || >=24.0.0"
+  }
+}

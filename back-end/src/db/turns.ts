@@ -10,14 +10,21 @@ export interface QueueTurnInput {
   content: Message['content'];
 }
 
+/** A turn the runner has started: `running`, with its start time set. */
+export type RunningTurn = Turn & { status: 'running'; startedAt: number };
+
 export type QueueTurnResult = { message: Message; turn: Turn } | { active: Turn };
 
-export interface FinishTurnInput {
-  status: 'completed' | 'failed' | 'cancelled';
-  error?: Turn['error'];
+/** What a finished turn stores besides its status. */
+export interface FinishedTurnDetails {
   usage?: Turn['usage'];
   replyId?: string;
 }
+
+/** A turn's final status. A failed turn always carries its error. */
+export type FinishTurnInput =
+  | (FinishedTurnDetails & { status: 'completed' | 'cancelled' })
+  | (FinishedTurnDetails & { status: 'failed'; error: NonNullable<Turn['error']> });
 
 export interface TurnsRepo {
   /** The project's `queued` or `running` turn, if it has one. */
@@ -29,7 +36,7 @@ export interface TurnsRepo {
    */
   queue(input: QueueTurnInput): QueueTurnResult;
   /** Marks a `queued` turn `running` with its start time. Undefined when the turn is missing or not `queued`. */
-  start(id: string): Turn | undefined;
+  start(id: string): RunningTurn | undefined;
   /** Stores a turn's final status, finish time, error, usage, and reply, returning the updated row. */
   finish(id: string, input: FinishTurnInput): Turn;
   /** Fails every `queued` or `running` turn with `error`, returning the failed turns. */
@@ -67,12 +74,14 @@ export function createTurnsRepo(db: Db): TurnsRepo {
         .set({ status: 'running', startedAt: Date.now() })
         .where(and(eq(turns.id, id), eq(turns.status, 'queued')))
         .returning()
-        .get();
+        .get() as RunningTurn | undefined;
     },
-    finish(id, { status, error, usage, replyId }) {
+    finish(id, input) {
+      const { status, usage, replyId } = input;
+      const error = input.status === 'failed' ? input.error : null;
       return db
         .update(turns)
-        .set({ status, error: error ?? null, usage: usage ?? null, replyId: replyId ?? null, finishedAt: Date.now() })
+        .set({ status, error, usage: usage ?? null, replyId: replyId ?? null, finishedAt: Date.now() })
         .where(eq(turns.id, id))
         .returning()
         .get()!;

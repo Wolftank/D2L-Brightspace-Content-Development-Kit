@@ -1,6 +1,8 @@
 /**
- * The HTTP API and event stream contract, transcribed from docs/architecture.md.
- * Shared by the app and by the stub server.
+ * The HTTP API and event stream contract from docs/architecture.md: the
+ * resources, request and response bodies, and event payloads that the back
+ * end sends and the front end reads. Types only; both apps import it with
+ * `import type`.
  */
 
 export type Avenue = 'topic' | 'scorm' | 'widget' | 'external';
