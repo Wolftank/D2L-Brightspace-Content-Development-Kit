@@ -44,6 +44,8 @@ npm run test:e2e
 
 This starts the stub and `dev:stub` automatically, or reuses them if they are already running. If a test fails, `npx playwright show-report` opens the HTML report.
 
+The `e2e` job in `.github/workflows/ci.yml` runs this suite in both browsers on every pull request. When it fails, the run keeps a `playwright-report` artifact for 7 days; download and unzip it, then run `npx playwright show-report <unzipped folder>/playwright-report` to open the report and the failing test's trace.
+
 ## Scripts
 
 - `npm run dev` — serve the app, proxying `/api` to the back end
