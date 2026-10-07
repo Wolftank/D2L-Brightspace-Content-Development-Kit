@@ -91,10 +91,10 @@ In V1, `POST /api/projects` takes `{ title, avenue? }`. `title` is trimmed and m
 
 ### Chat
 
-Sending a message, and controlling the turn it starts.
+Reading the conversation, sending a message, and controlling the turn it starts.
 
 ```
-GET    /api/projects/:projectId/messages    ?cursor=&limit= → { items: Message[], nextCursor? }
+GET    /api/projects/:projectId/messages    ?cursor=&limit= → { items: (Message & { turn? })[], nextCursor? }
 POST   /api/projects/:projectId/messages    { content: ContentBlock[] }
                                             → 202 { message, turn }
                                             → 409 { error.code: 'turn_active', details: { turnId } }
@@ -103,7 +103,9 @@ POST   /api/turns/:turnId/cancel            → 202
 
 Posting a message never blocks on the agent. It stores the message, creates a queued turn, and returns. Progress arrives on the event stream. One turn runs per project at a time; the client disables send while `activeTurn` exists.
 
-In V1, `POST /api/projects/:projectId/messages` takes `content` holding at least one `{ type: 'text', text }` block and nothing else. Each `text` is trimmed and must not be blank; a `file` block or any other shape gets `400 invalid_request`, and any other field is ignored. A body over 100 KB of JSON gets `413 payload_too_large`. The message and its turn are stored together, or not at all when the project already has a `queued` or `running` turn, which the `409 turn_active` names. V1 has no route to list messages and no cancel route.
+In V1, `POST /api/projects/:projectId/messages` takes `content` holding at least one `{ type: 'text', text }` block and nothing else. Each `text` is trimmed and must not be blank; a `file` block or any other shape gets `400 invalid_request`, and any other field is ignored. A body over 100 KB of JSON gets `413 payload_too_large`. The message and its turn are stored together, or not at all when the project already has a `queued` or `running` turn, which the `409 turn_active` names. V1 has no cancel route.
+
+`GET /api/projects/:projectId/messages` lists the project's instructor and agent messages, oldest first. Each instructor message carries `turn: { id, status, error }`, the turn it started: `status` is the turn's status as stored, `queued` included, and `error` is the failed turn's `{ code, message }`, otherwise null. A failed or cancelled turn has no agent reply. Agent messages carry no `turn`. `limit` is 1 to 200 and defaults to 100, so one page covers a normal conversation. `nextCursor` is present only when more messages follow; passing it back as `cursor` returns the next page. Any other `limit` or `cursor` gets `400 invalid_request`.
 
 ### Builds and deployments
 

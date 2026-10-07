@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { Db } from './index.js';
 import { createMessagesRepo, type MessagesRepo } from './messages.js';
 import { createProjectsRepo } from './projects.js';
+import { turns } from './schema.js';
 import { testDb } from './test-db.js';
 import { createUsersRepo } from './users.js';
 
@@ -37,5 +38,21 @@ describe('messages repo', () => {
     expect([create('a', projectId), create('b', projectId), create('c', otherProjectId), create('d', projectId)]).toEqual([
       1, 2, 1, 3,
     ]);
+  });
+
+  it("lists a project's messages after a seq, oldest first, each with the turn it started", () => {
+    const create = (id: string, project: string, role: 'instructor' | 'agent') =>
+      messages.create({ id, projectId: project, role, content: [], turnId: null });
+    const first = create('a', projectId, 'instructor');
+    const second = create('b', projectId, 'agent');
+    create('c', otherProjectId, 'agent');
+    const third = create('d', projectId, 'agent');
+    db.insert(turns).values({ id: 'turn-1', projectId, messageId: 'a', status: 'running' }).run();
+
+    const listed = messages.listByProject(projectId, { after: 0, limit: 10 });
+
+    expect(listed.map(({ message }) => message)).toEqual([first, second, third]);
+    expect(listed.map(({ turn }) => turn?.id ?? null)).toEqual(['turn-1', null, null]);
+    expect(messages.listByProject(projectId, { after: 1, limit: 1 }).map(({ message }) => message.id)).toEqual(['b']);
   });
 });

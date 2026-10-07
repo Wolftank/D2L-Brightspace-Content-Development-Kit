@@ -1,6 +1,6 @@
-import { eq, max } from 'drizzle-orm';
+import { and, asc, eq, gt, max } from 'drizzle-orm';
 import type { Db } from './index.js';
-import { messages, type Message } from './schema.js';
+import { messages, turns, type Message, type Turn } from './schema.js';
 
 export interface CreateMessageInput {
   id: string;
@@ -10,10 +10,24 @@ export interface CreateMessageInput {
   turnId: string | null;
 }
 
+export interface ListMessagesInput {
+  /** Only messages with a `seq` above this are listed. */
+  after: number;
+  limit: number;
+}
+
+/** A message with the turn it started: set for instructor messages, null for agent messages. */
+export interface MessageWithTurn {
+  message: Message;
+  turn: Turn | null;
+}
+
 export interface MessagesRepo {
   get(id: string): Message | undefined;
   /** Inserts a message with the project's next `seq`, starting at 1. */
   create(input: CreateMessageInput): Message;
+  /** Up to `limit` of the project's messages after `after`, in `seq` order, each with the turn it started. */
+  listByProject(projectId: string, input: ListMessagesInput): MessageWithTurn[];
 }
 
 export function createMessagesRepo(db: Db): MessagesRepo {
@@ -40,6 +54,16 @@ export function createMessagesRepo(db: Db): MessagesRepo {
       };
       db.insert(messages).values(message).run();
       return message;
+    },
+    listByProject(projectId, { after, limit }) {
+      return db
+        .select({ message: messages, turn: turns })
+        .from(messages)
+        .leftJoin(turns, eq(turns.messageId, messages.id))
+        .where(and(eq(messages.projectId, projectId), gt(messages.seq, after)))
+        .orderBy(asc(messages.seq))
+        .limit(limit)
+        .all();
     },
   };
 }
