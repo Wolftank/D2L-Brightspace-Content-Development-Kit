@@ -1,9 +1,16 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { promisify } from 'node:util';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { SCORM_SKILLS } from '../kit.js';
+import { createWorkspaceService } from '../services/workspaces.js';
 import { createClaudeAgentDriver } from './claude.js';
+import { renderProjectInstructions } from './instructions.js';
 import type { AgentEvent, SessionRequest } from './AgentDriver.js';
+
+const execFileAsync = promisify(execFile);
 
 const driver = createClaudeAgentDriver();
 
@@ -24,6 +31,7 @@ function baseRequest(workspaceDir: string, skillsDir: string, sessionId: string 
     sessionId,
     instructions: 'You are helping build D2L course content. Follow instructions exactly and briefly.',
     skillsDir,
+    skills: [],
     tools: { name: 'cdk', tools: [] },
     allowedTools: [],
   };
@@ -35,6 +43,14 @@ async function drain(events: AsyncIterable<AgentEvent>): Promise<AgentEvent[]> {
     collected.push(event);
   }
   return collected;
+}
+
+/** The `tool_end` events of every call to the tool `name`. */
+function toolEnds(events: AgentEvent[], name: string): Array<Extract<AgentEvent, { kind: 'tool_end' }>> {
+  const callIds = new Set(events.flatMap((event) => (event.kind === 'tool_start' && event.name === name ? [event.callId] : [])));
+  return events.filter(
+    (event): event is Extract<AgentEvent, { kind: 'tool_end' }> => event.kind === 'tool_end' && callIds.has(event.callId),
+  );
 }
 
 describe('ClaudeAgentDriver, live SDK', () => {
@@ -86,7 +102,7 @@ describe('ClaudeAgentDriver, live SDK', () => {
     expect(result2.text.toLowerCase()).toContain('hello.txt');
   }, 60_000);
 
-  it('denies a Write outside the workspace and surfaces it as a notice event', async () => {
+  it('refuses a Write outside the workspace', async () => {
     // `Write(/**)`/`Edit(/**)` are workspace-relative (docs/drivers.md:
     // "`/` is workspace-relative"), so a path outside workspaceDir matches
     // no allow rule under `dontAsk` and must be denied.
@@ -108,10 +124,114 @@ describe('ClaudeAgentDriver, live SDK', () => {
       const events = await drain(turn.events);
       await turn.result;
 
-      const notices = events.filter((event) => event.kind === 'notice').map((event) => event.text);
-      expect(notices.some((text) => /write/i.test(text) && /denied/i.test(text))).toBe(true);
+      const writeEnds = toolEnds(events, 'Write');
+      expect(writeEnds.length).toBeGreaterThan(0);
+      expect(writeEnds.every((event) => !event.ok)).toBe(true);
+      await expect(access(outsidePath)).rejects.toThrow();
     } finally {
       await rm(outsideDir, { recursive: true, force: true });
     }
   }, 60_000);
+
+  it('refuses a read outside the workspace through the file tools', async () => {
+    const outsideDir = await mkdtemp(join(tmpdir(), 'cdk-claude-live-outside-'));
+    const outsidePath = join(outsideDir, 'secret.txt');
+    await writeFile(outsidePath, 'cdk-outside-marker');
+
+    try {
+      const session = await driver.open(baseRequest(workspaceDir, skillsDir));
+      const turn = session.send(
+        {
+          text: `Use the Read tool, and only the Read tool, to read the file at the absolute path ${outsidePath}. Do not use the shell. If the read is refused, just report that.`,
+          attachments: [],
+        },
+        { maxSteps: 4, maxBudgetUsd: 1 },
+        new AbortController().signal,
+      );
+
+      const events = await drain(turn.events);
+      const result = await turn.result;
+      expect(result.status).toBe('completed');
+
+      const readEnds = toolEnds(events, 'Read');
+      expect(readEnds.length).toBeGreaterThan(0);
+      expect(readEnds.every((event) => !event.ok)).toBe(true);
+    } finally {
+      await rm(outsideDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+});
+
+describe('ClaudeAgentDriver, live SDK, in a provisioned SCORM workspace', () => {
+  let dataDir: string;
+
+  beforeEach(async () => {
+    dataDir = await mkdtemp(join(tmpdir(), 'cdk-claude-live-data-'));
+  });
+
+  afterEach(async () => {
+    await rm(dataDir, { recursive: true, force: true });
+  });
+
+  async function openProject() {
+    const project = { id: 'live-project', title: 'Photosynthesis check' };
+    const workspaces = createWorkspaceService({ dataDir });
+    await workspaces.create(project.id);
+    const workspaceDir = workspaces.pathFor(project.id);
+    const session = await driver.open({
+      workspaceDir,
+      sessionId: null,
+      instructions: renderProjectInstructions({
+        project,
+        workspaceDir,
+        shell: process.platform === 'win32' ? 'powershell' : 'bash',
+      }),
+      skillsDir: join(workspaceDir, 'kit', 'skills'),
+      skills: SCORM_SKILLS,
+      tools: { name: 'cdk', tools: [] },
+      allowedTools: [],
+    });
+    return { project, workspaces, workspaceDir, session };
+  }
+
+  it('loads exactly the allowed tools and the SCORM skills, or the turn would fail with agent_unrestricted', async () => {
+    const { session } = await openProject();
+
+    const turn = session.send(
+      { text: 'Reply with the single word: ready', attachments: [] },
+      { maxSteps: 2, maxBudgetUsd: 1 },
+      new AbortController().signal,
+    );
+    await drain(turn.events);
+    const result = await turn.result;
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe('completed');
+  }, 60_000);
+
+  it('still builds an activity that passes the QA gate', async () => {
+    const { project, workspaces, workspaceDir, session } = await openProject();
+    const startingHash = await workspaces.hashOutput(project.id);
+
+    const turn = session.send(
+      {
+        text: 'Build a three-question multiple-choice practice quiz on photosynthesis for first-year biology students, graded automatically.',
+        attachments: [],
+      },
+      { maxSteps: 60, maxBudgetUsd: 5 },
+      new AbortController().signal,
+    );
+    await drain(turn.events);
+    const result = await turn.result;
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe('completed');
+    expect(await workspaces.hashOutput(project.id)).not.toBe(startingHash);
+
+    const { stdout } = await execFileAsync(
+      process.execPath,
+      [join(workspaceDir, 'kit', 'harness', 'lint', 'lint.js'), join(workspaceDir, 'out'), '--avenue', 'scorm', '--json'],
+      { timeout: 60_000 },
+    );
+    expect(JSON.parse(stdout)).toMatchObject({ pass: true });
+  }, 900_000);
 });

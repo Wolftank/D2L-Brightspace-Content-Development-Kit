@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { AgentEvent, TurnResult } from './AgentDriver.js';
 
@@ -110,21 +111,209 @@ describe('the shell', () => {
     vi.resetModules();
   });
 
-  it('allows every PowerShell command on Windows and withholds Bash, keeping the inherited environment', async () => {
-    const { buildAllowedTools, shellOptions } = await importOnPlatform('win32');
+  it('loads PowerShell, not Bash, on Windows and allows every PowerShell command', async () => {
+    const { BUILT_IN_TOOLS, agentEnv, buildAllowedTools } = await importOnPlatform('win32');
 
+    expect(BUILT_IN_TOOLS).toContain('PowerShell');
+    expect(BUILT_IN_TOOLS).not.toContain('Bash');
     expect(buildAllowedTools([])).toContain('PowerShell');
-    expect(shellOptions()).toEqual({
-      env: { ...process.env, CLAUDE_CODE_USE_POWERSHELL_TOOL: '1' },
-      disallowedTools: ['Bash'],
-    });
+    expect(agentEnv()).toMatchObject({ CLAUDE_CODE_USE_POWERSHELL_TOOL: '1' });
   });
 
-  it('allows every Bash command elsewhere and leaves the environment to the SDK', async () => {
-    const { buildAllowedTools, shellOptions } = await importOnPlatform('linux');
+  it('loads Bash, not PowerShell, elsewhere and allows every Bash command', async () => {
+    const { BUILT_IN_TOOLS, agentEnv, buildAllowedTools } = await importOnPlatform('linux');
 
+    expect(BUILT_IN_TOOLS).toContain('Bash');
+    expect(BUILT_IN_TOOLS).not.toContain('PowerShell');
     expect(buildAllowedTools([])).toContain('Bash');
-    expect(shellOptions()).toEqual({});
+    expect(agentEnv()).not.toHaveProperty('CLAUDE_CODE_USE_POWERSHELL_TOOL');
+  });
+});
+
+describe('the agent environment', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("passes the agent's sign-in and leaves out every other variable from the back end", async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', 'sk-ant-test');
+    vi.stubEnv('CDK_TEST_SECRET', 'back-end-secret');
+    vi.stubEnv('GITHUB_TOKEN', 'ghp-back-end-token');
+    const { agentEnv } = await import('./claude.js');
+
+    const env = agentEnv();
+
+    expect(env.ANTHROPIC_API_KEY).toBe('sk-ant-test');
+    expect(env).not.toHaveProperty('CDK_TEST_SECRET');
+    expect(env).not.toHaveProperty('GITHUB_TOKEN');
+    expect(Object.values(env)).not.toContain('back-end-secret');
+  });
+
+  it("holds only the inherited variables and the driver's own settings", async () => {
+    const { AGENT_SETTINGS_ENV, INHERITED_ENV, agentEnv } = await import('./claude.js');
+    const known = [...INHERITED_ENV, ...Object.keys(AGENT_SETTINGS_ENV)];
+
+    for (const name of Object.keys(agentEnv())) {
+      expect(known).toContain(name);
+    }
+  });
+
+  it('turns off bundled skills, built-in subagents, and auto memory', async () => {
+    const { agentEnv } = await import('./claude.js');
+
+    expect(agentEnv()).toMatchObject({
+      CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: '1',
+      CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS: '1',
+      CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1',
+    });
+  });
+});
+
+const SKILLS = ['d2l-scorm-package', 'd2l-tenant-qa'];
+
+/** An `init` message reporting exactly what a session with `SKILLS` and no `cdk` tools may load. */
+async function initMessage() {
+  const { BUILT_IN_TOOLS } = await import('./claude.js');
+  return {
+    type: 'system',
+    subtype: 'init',
+    session_id: 'session-1',
+    tools: BUILT_IN_TOOLS,
+    mcp_servers: [] as Array<{ name: string; status: string }>,
+    skills: SKILLS,
+    agents: [] as string[],
+    plugins: [] as Array<{ name: string; path: string }>,
+  };
+}
+
+type InitMessage = Awaited<ReturnType<typeof initMessage>>;
+
+describe('allowedCapabilities', () => {
+  it("allows the built-in tools, each cdk tool by its qualified name, the request's skills, and the cdk server", async () => {
+    const { BUILT_IN_TOOLS, allowedCapabilities } = await import('./claude.js');
+    const createBuild = {
+      name: 'create_build',
+      description: 'Copies out/ and runs the QA gate',
+      inputSchema: z.object({}),
+      handler: async () => ({ content: '' }),
+    };
+
+    expect(allowedCapabilities({ tools: { name: 'cdk', tools: [createBuild] }, skills: SKILLS })).toEqual({
+      tools: [...BUILT_IN_TOOLS, 'mcp__cdk__create_build'],
+      skills: SKILLS,
+      mcpServers: ['cdk'],
+    });
+  });
+});
+
+describe('capabilityDifferences', () => {
+  async function differences(change: (init: InitMessage) => Partial<InitMessage>) {
+    const { allowedCapabilities, capabilityDifferences } = await import('./claude.js');
+    const allowed = allowedCapabilities({ tools: { name: 'cdk', tools: [] }, skills: SKILLS });
+    const init = await initMessage();
+    return capabilityDifferences({ ...init, ...change(init) }, allowed);
+  }
+
+  it('finds none when the session loaded exactly what it may', async () => {
+    expect(await differences(() => ({}))).toEqual([]);
+  });
+
+  const cases: Array<[string, (init: InitMessage) => Partial<InitMessage>, string]> = [
+    ['an extra tool', (init) => ({ tools: [...init.tools, 'WebFetch'] }), 'unexpected tools: WebFetch'],
+    ['a missing tool', (init) => ({ tools: init.tools.filter((tool) => tool !== 'Skill') }), 'missing tools: Skill'],
+    ['an extra skill', () => ({ skills: [...SKILLS, 'code-review'] }), 'unexpected skills: code-review'],
+    ['a missing skill', () => ({ skills: ['d2l-scorm-package'] }), 'missing skills: d2l-tenant-qa'],
+    [
+      'an outside connector',
+      () => ({ mcp_servers: [{ name: 'claude.ai Notion', status: 'needs-auth' }] }),
+      'unexpected MCP servers: claude.ai Notion',
+    ],
+    ['a subagent', () => ({ agents: ['general-purpose'] }), 'unexpected subagents: general-purpose'],
+    ['a plugin', () => ({ plugins: [{ name: 'helper', path: '/plugins/helper' }] }), 'unexpected plugins: helper'],
+  ];
+
+  it.each(cases)('names %s', async (_case, change, expected) => {
+    expect(await differences(change)).toEqual([expected]);
+  });
+});
+
+describe('enforceCapabilities', () => {
+  const RESULT = {
+    type: 'result',
+    subtype: 'success',
+    is_error: false,
+    result: 'Done.',
+    session_id: 'session-1',
+    usage: { input_tokens: 1, output_tokens: 1 },
+    total_cost_usd: 0,
+    num_turns: 1,
+  };
+
+  async function runChecked(messages: unknown[]) {
+    const { allowedCapabilities, enforceCapabilities, mapClaudeStream } = await import('./claude.js');
+    const allowed = allowedCapabilities({ tools: { name: 'cdk', tools: [] }, skills: SKILLS });
+    const controller = new AbortController();
+    let read = 0;
+    async function* source(): AsyncGenerator<SDKMessage> {
+      for (const message of messages) {
+        read++;
+        yield message as SDKMessage;
+      }
+    }
+
+    let result: TurnResult | undefined;
+    const events: AgentEvent[] = [];
+    const checked = enforceCapabilities(source(), allowed, controller);
+    for await (const event of mapClaudeStream(
+      checked,
+      new AbortController().signal,
+      (r) => {
+        result = r;
+      },
+      () => {},
+    )) {
+      events.push(event);
+    }
+    return { result, events, read, aborted: controller.signal.aborted };
+  }
+
+  it('runs a turn whose session loaded exactly what it may', async () => {
+    const { result, aborted } = await runChecked([await initMessage(), RESULT]);
+
+    expect(result).toMatchObject({ status: 'completed', text: 'Done.' });
+    expect(aborted).toBe(false);
+  });
+
+  it('stops the agent and fails the turn with a clear error when the session loaded an extra tool', async () => {
+    const init = await initMessage();
+    const { result, events, read, aborted } = await runChecked([
+      { ...init, tools: [...init.tools, 'WebSearch'] },
+      { type: 'system', subtype: 'status', status: 'requesting' },
+      RESULT,
+    ]);
+
+    expect(result).toEqual({
+      status: 'failed',
+      sessionId: null,
+      text: '',
+      error: {
+        code: 'agent_unrestricted',
+        message: 'The agent session did not load exactly its allowed tools and skills: unexpected tools: WebSearch',
+      },
+    });
+    expect(events).toEqual([]);
+    expect(read).toBe(1);
+    expect(aborted).toBe(true);
+  });
+
+  it('stops the agent and fails the turn when the session loaded an extra skill', async () => {
+    const { result, aborted } = await runChecked([{ ...(await initMessage()), skills: [...SKILLS, 'debug'] }, RESULT]);
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: { code: 'agent_unrestricted', message: expect.stringContaining('unexpected skills: debug') },
+    });
+    expect(aborted).toBe(true);
   });
 });
 
@@ -413,7 +602,7 @@ describe('createClaudeAgentDriver().probe()', () => {
   it.each([
     ['the configured model', { model: 'claude-sonnet-5' }, { model: 'claude-sonnet-5' }],
     ['no model when none is configured', {}, {}],
-  ])('probes with %s and saves no transcript', async (_case, settings, expected) => {
+  ])('probes with %s, saves no transcript, and loads no outside connectors', async (_case, settings, expected) => {
     vi.resetModules();
     const calls: Array<{ options: Record<string, unknown> }> = [];
     vi.doMock('@anthropic-ai/claude-agent-sdk', () => ({
@@ -426,7 +615,8 @@ describe('createClaudeAgentDriver().probe()', () => {
     const { createClaudeAgentDriver } = await import('./claude.js');
     await createClaudeAgentDriver(settings).probe();
 
-    expect(calls[0]!.options).toMatchObject({ persistSession: false, ...expected });
+    const { agentEnv } = await import('./claude.js');
+    expect(calls[0]!.options).toMatchObject({ persistSession: false, strictMcpConfig: true, env: agentEnv(), ...expected });
     if (!('model' in expected)) expect(calls[0]!.options).not.toHaveProperty('model');
 
     vi.doUnmock('@anthropic-ai/claude-agent-sdk');

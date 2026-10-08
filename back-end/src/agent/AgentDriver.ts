@@ -25,6 +25,11 @@ export interface ProbeResult {
   detail?: string;
 }
 
+/**
+ * What a session needs. The agent can use only its file tools inside
+ * `workspaceDir`, its shell, `skills`, and `tools`. A session whose agent
+ * loads anything else fails its turn with `agent_unrestricted`.
+ */
 export interface SessionRequest {
   /** The project's workspace. The agent runs inside it. */
   workspaceDir: string;
@@ -38,9 +43,13 @@ export interface SessionRequest {
    *  takes them. */
   instructions: string;
 
-  /** The kit's skills directory, delivered to the agent the way it takes
-   *  them. */
+  /** The kit's skills directory. */
   skillsDir: string;
+
+  /** The skills in `skillsDir` the agent may use, by name: those for the
+   *  project's output format. The driver delivers only these, the way its
+   *  agent takes them. */
+  skills: string[];
 
   /** Tools exposed to the agent, bound to this project and instructor. */
   tools: ToolServerSpec;
@@ -136,15 +145,18 @@ export type AgentEvent =
 
 /**
  * Why a turn failed. `agent_signed_out`, `agent_billing` and `agent_busy`
- * are the provider refusing the agent's account; `max_steps_exceeded` and
- * `max_budget_exceeded` are the turn's limits; `no_result` and
- * `driver_error` are the agent process ending or failing unexpectedly.
+ * are the provider refusing the agent's account; `agent_unrestricted` is a
+ * session that loaded tools or skills other than those `SessionRequest`
+ * allows; `max_steps_exceeded` and `max_budget_exceeded` are the turn's
+ * limits; `no_result` and `driver_error` are the agent process ending or
+ * failing unexpectedly.
  */
 export type TurnErrorCode =
   | 'agent_error'
   | 'agent_signed_out'
   | 'agent_billing'
   | 'agent_busy'
+  | 'agent_unrestricted'
   | 'max_steps_exceeded'
   | 'max_budget_exceeded'
   | 'no_result'
