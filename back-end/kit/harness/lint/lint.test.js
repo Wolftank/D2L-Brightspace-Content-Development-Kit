@@ -24,7 +24,8 @@ const bsRules = rulesIn(bs);
   'scorm/no-api-calls', 'scorm/no-terminate-on-load', 'scorm/no-completed-on-load',
   'scorm/credit-guard', 'scorm/commit-before-terminate', 'scorm/suspend-data-cap',
   'scorm/storage-key-learner-id', 'scorm/root-height', 'scorm/manifest',
-  'shared/no-viewport-units', 'shared/external-cdn', 'shared/missing-assets'
+  'shared/no-viewport-units', 'shared/external-cdn', 'shared/missing-assets',
+  'a11y/alt', 'a11y/lang', 'a11y/heading-order'
 ].forEach(id => check(id, bsRules.has(id)));
 check('bad-scorm fails the gate', errs(bs) > 0);
 
@@ -34,7 +35,8 @@ const btRules = rulesIn(bt);
 [
   'topic/no-static-script-src', 'topic/unwrapped-storage', 'topic/namespaced-storage',
   'topic/no-storage-for-grades', 'topic/no-grade-writes', 'topic/generic-sibling-filename',
-  'shared/no-viewport-units', 'shared/external-cdn', 'shared/missing-assets'
+  'shared/no-viewport-units', 'shared/external-cdn', 'shared/missing-assets',
+  'a11y/alt', 'a11y/lang', 'a11y/heading-order'
 ].forEach(id => check(id, btRules.has(id)));
 check('bad-topic fails the gate', errs(bt) > 0);
 
@@ -45,7 +47,8 @@ const bwRules = rulesIn(bw);
   'widget/unscoped-css', 'widget/global-scope-leak', 'widget/unnamespaced-id',
   'widget/role-as-boundary', 'widget/keep-it-short',
   'topic/unwrapped-storage', 'topic/namespaced-storage', 'topic/no-storage-for-grades',
-  'shared/external-cdn', 'shared/missing-assets'
+  'shared/external-cdn', 'shared/missing-assets',
+  'a11y/alt', 'a11y/heading-order'
 ].forEach(id => check(id, bwRules.has(id)));
 check('bad-widget fails the gate', errs(bw) > 0);
 
