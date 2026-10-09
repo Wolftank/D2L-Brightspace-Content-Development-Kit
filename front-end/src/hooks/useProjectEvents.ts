@@ -1,8 +1,10 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
 import type { ConnectionStatus } from '../WorkingIndicator';
-import { projectEventsUrl } from '../api/client';
+import { getMessages, projectEventsUrl } from '../api/client';
 import type {
   Build,
+  Message,
+  Turn,
   ProjectEvent,
 } from '../api/types';
 
@@ -22,12 +24,17 @@ export interface ProjectEventState {
   statusLines: StatusLine[];
   replyText: string;
   builds: Build[];
+  messages: Message[];
+  outcomes: Record<string, { status: string; message?: string }>;
 }
 
 type ProjectEventReducerAction =
   | ProjectEvent
+  | { type: 'message'; message: Message }
+  | { type: 'history'; messages: (Message & { turn?: Turn })[] }
   | {
       type: 'restore';
+      projectId: string | null;
       state: ProjectEventState;
     };
 
@@ -41,8 +48,16 @@ export const initialProjectEventState: ProjectEventState = {
   statusLines: [],
   replyText: '',
   builds: [],
+  messages: [],
+  outcomes: {},
 };
 
+
+function mergeMessages(current: Message[], incoming: Message[]): Message[] {
+  const messages = new Map(current.map(message => [message.id, message]));
+  for (const message of incoming) messages.set(message.id, message);
+  return [...messages.values()].sort((a, b) => a.seq - b.seq);
+}
 
 function updateBuilds(builds: Build[], updatedBuild: Build): Build[] {
   const exists = builds.some((build) => build.id === updatedBuild.id);
@@ -61,7 +76,17 @@ export function projectEventReducer(
   action: ProjectEventReducerAction,
 ): ProjectEventState {
   if (!('kind' in action)) {
-    return action.state;
+    if (action.type === 'message') return { ...state, messages: mergeMessages(state.messages, [action.message]) };
+    if (action.type === 'history') {
+      const outcomes = { ...state.outcomes };
+      for (const message of action.messages) {
+        if (message.turn && !outcomes[message.turn.id]) outcomes[message.turn.id] = {
+          status: message.turn.status, message: message.turn.error?.message,
+        };
+      }
+      return { ...state, messages: mergeMessages(state.messages, action.messages), outcomes };
+    }
+    return { ...action.state, messages: mergeMessages(action.state.messages, state.messages.filter(message => message.projectId === action.projectId)) };
   }
 
   const event = action;
@@ -78,7 +103,6 @@ export function projectEventReducer(
         },
         replyText: '',
         statusLines: [
-          ...state.statusLines,
           { seq: event.seq, text: 'Starting your build' },
         ],
       };
@@ -102,6 +126,7 @@ export function projectEventReducer(
     case 'message.completed':
   return {
     ...state,
+    messages: mergeMessages(state.messages, [event.payload.message]),
     replyText: event.payload.message.content
       .filter((block) => block.type === 'text')
       .map((block) => block.text)
@@ -142,6 +167,7 @@ export function projectEventReducer(
     case 'turn.completed':
       return {
         ...state,
+        outcomes: { ...state.outcomes, [event.payload.turnId]: { status: 'completed' } },
         turn: {
           ...state.turn,
           status: 'completed',
@@ -155,6 +181,7 @@ export function projectEventReducer(
     case 'turn.failed':
       return {
         ...state,
+        outcomes: { ...state.outcomes, [event.payload.turnId]: { status: 'failed', message: event.payload.error.message } },
         turn: {
           id: event.payload.turnId,
           status: 'failed',
@@ -170,6 +197,7 @@ export function projectEventReducer(
     case 'turn.cancelled':
   return {
     ...state,
+    outcomes: { ...state.outcomes, [event.payload.turnId]: { status: 'cancelled', message: 'This request was cancelled.' } },
     turn: {
       id: event.payload.turnId,
       status: 'cancelled',
@@ -189,9 +217,10 @@ default:
 
 
 export function useProjectEvents(projectId: string | null) {
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const [connection, setConnection] = useState<ConnectionStatus>('reconnecting');
   const storageStateKey = projectId
-  ? `project-${projectId}-event-state`
+  ? `chat-${projectId}-event-state`
   : null;
 
 const [state, dispatch] = useReducer(
@@ -230,6 +259,7 @@ useEffect(() => {
   if (!storageStateKey) {
     dispatch({
       type: 'restore',
+      projectId,
       state: initialProjectEventState,
     });
     return;
@@ -240,6 +270,7 @@ useEffect(() => {
   if (!saved) {
     dispatch({
       type: 'restore',
+      projectId,
       state: initialProjectEventState,
     });
     return;
@@ -248,15 +279,17 @@ useEffect(() => {
   try {
     dispatch({
       type: 'restore',
+      projectId,
       state: JSON.parse(saved) as ProjectEventState,
     });
   } catch {
     dispatch({
       type: 'restore',
+      projectId,
       state: initialProjectEventState,
     });
   }
-}, [storageStateKey]);
+}, [storageStateKey, projectId]);
 
 useEffect(() => {
   if (!storageStateKey) {
@@ -277,7 +310,7 @@ useEffect(() => {
   useEffect(() => {
     if (!projectId) return;
 
-    const storageKey = `project-${projectId}-last-seq`;
+    const storageKey = `chat-${projectId}-last-seq`;
     const lastSeq = sessionStorage.getItem(storageKey);
 
     let url = projectEventsUrl(projectId);
@@ -355,5 +388,21 @@ dispatch(projectEvent);
     };
   }, [projectId]);
 
-  return { ...state, connection };
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    async function loadHistory() {
+      let cursor: string | undefined;
+      do {
+        const page = await getMessages(projectId!, cursor);
+        if (cancelled) return;
+        dispatch({ type: 'history', messages: page.items });
+        cursor = page.nextCursor;
+      } while (cursor);
+    }
+    void loadHistory().catch(() => { if (!cancelled) setHistoryError('Unable to load the conversation. Reload to try again.'); });
+    return () => { cancelled = true; };
+  }, [projectId]);
+
+  return { ...state, connection, historyError, addMessage: (message: Message) => dispatch({ type: 'message', message }) };
 }

@@ -1,70 +1,50 @@
-# front-end
+# Front end
 
-The browser app: chat, configurator, build panel, preview. It displays the plain-language turn status, QA gate findings, and pedagogy check findings the back end produces; the checks themselves live in `back-end/src`, not here. It has no server of its own: the Vite dev server serves it in development, and the back end serves the built files when the app is bundled.
+The browser app provides a project conversation, the latest build and QA findings, and a local activity preview. Checks run in the back end.
 
-## Setup
+## Local preview
 
-Requires Node 20.19+, Node 22.13+, or Node 24+.
-
-```
-npm install
-npm run dev
-```
-
-`npm run dev` serves the app on `http://127.0.0.1:5173` and proxies `/api` to the back end on `http://127.0.0.1:3000`. To develop against the stub instead, run these in two terminals:
+Requires Node 20.19+, Node 22.13+, or Node 24+. Install dependencies with `npm install`, then run these commands in separate terminals:
 
 ```
 npm run stub
 npm run dev:stub
 ```
 
-`dev:stub` starts Vite in the `stub` mode, whose `.env.stub` points the proxy at the stub on port 3001.
+Open http://127.0.0.1:5173. Name your project and send a request. After the reply, send a change to produce version 2. The stub uses scripted replies and a sample cell-division activity; its preview runs through the kit's D2L emulator. The stub download is an empty ZIP fixture.
 
-## Browser tests
+A project can be reopened at `/?project=<projectId>`. Reload restores its history, builds and any running turn. Drafts stay in the current browser session. Stub projects live in memory and disappear when the stub server restarts.
 
-Include `[long-feed]` in a stub request to emit 60 progress lines. The feed scrolls within a responsive maximum height, follows while at the bottom, pauses when scrolled up, and resumes through Jump to latest, returning to the bottom, or a new turn. Tab reaches the named Build progress log; Home/End and arrow keys scroll it. The working indicator and reply remain outside its scroll area. New lines and failed tool updates use one live region; following and scrolling do not alter its contents.
+`npm run dev` proxies to the real back end at port 3000. F10 requires B17's message-history endpoint and F6's preview endpoint for real-agent integration; those routes are absent from this checkout. The stub implements the expected routes:
 
-Manual NVDA check: run `[long-feed]`, scroll back and jump to latest; verify each new line is announced once, successful tool completion is silent, failed calls are announced once when updated, scrolling is silent, and the reply is announced.
+- `GET /api/projects/:id/messages` returns `{ items, nextCursor? }`, oldest first. Instructor messages include a `turn` with its status and plain-language error, when present. The app follows every page and merges messages by ID.
+- `GET /api/builds/:id/preview/` renders a build through the emulator with a fresh attempt on each load.
 
-Include `[long-step]` in a stub request to pause for 20 seconds after the current step. The working indicator counts from the recorded turn start, including after reload or event replay in another tab. A disconnected stream shows reconnecting status; after 30 seconds without recovery it closes and asks the instructor to reload. A permanently closed stream shows that message immediately. The elapsed time is outside live regions, and the animation stops under reduced motion.
+The B17 `turn` shape needs to be confirmed when its contract lands.
 
-Manual accessibility check: with NVDA running, submit `[long-step]`, keep focus on the Build button, and verify that the step is announced but timer ticks are silent and focus stays put. This check requires NVDA and remains manual.
+## Conversation behavior
 
-The Playwright tests in `e2e/` run the app in Chromium and Firefox against the stub. Install the browsers once per machine:
+Live progress sits in the chat with the working indicator. At turn end it collapses to a single outcome line. The instructor and agent messages stay in order. Send stays disabled while the request runs, and the message box remains editable so the next request can be drafted. Failed sends retain the draft.
+
+The build panel shows the newest build. The preview shows the newest ready build, so a checking or failed build keeps the previous ready preview and its version label. Restart reloads the emulator with a fresh attempt. The desktop layout places chat and build side by side with preview below; narrow windows stack the three regions.
+
+## Stub scenarios
+
+- `[qa-fail]`: failed QA build; an ordinary follow-up produces the next ready version.
+- `[turn-fail]`: agent failure; an ordinary follow-up continues the same project.
+- `[long-step]`: 20-second pause for checking the timer, reload and drafts.
+- `[long-feed]`: 60 progress lines for checking scrolling. The feed follows at the bottom, pauses when scrolled up, and resumes with Jump to latest or a new turn.
+
+## Validation
 
 ```
+npm test
+npm run lint
+npm run typecheck
 npx playwright install chromium firefox
-```
-
-Then run:
-
-```
 npm run test:e2e
 ```
 
-This starts the stub and `dev:stub` automatically, or reuses them if they are already running. If a test fails, `npx playwright show-report` opens the HTML report.
+Browser tests cover follow-ups on ready and failed builds, message order, reload, reopening with empty session storage, preview replacement and restart, retained ready previews, mobile stacking, focus and automated WCAG checks.
 
-## Scripts
-
-- `npm run dev` — serve the app, proxying `/api` to the back end
-- `npm run dev:stub` — serve the app, proxying `/api` to the stub
-- `npm run stub` — run the stub back end (`stub/server.ts`) on port 3001
-- `npm test` — run the Vitest suite in `src/`
-- `npm runt test:e2e` - run the Playwright browser tests in `e2e/` against the stub
-- `npm run lint` — ESLint over the project
-- `npm run typecheck` — `tsc --noEmit`
-
-## Inside this folder
-
-- `index.html`, `src/main.tsx`, `src/App.tsx` — the app entry
-- `src/api/types.ts` — the HTTP API and event stream shapes, transcribed from [`docs/architecture.md`](../docs/architecture.md)
-- `src/test/setup.ts` — Testing Library matchers and cleanup for Vitest
-- `stub/server.ts` — the stub back end, until the real routes land
-- `vite.config.ts` — the dev server proxy and the Vitest configuration
-- `.env.stub` — the proxy target used by `dev:stub`
-- `e2e/` - Playwright browser tests
-- `Playwright.config.ts` - the Playwright configuration: which browsers to test, and the stub and dev server it starts
-
-## V1 configurator
-
-The V1 screen follows [`docs/v1.md`](../docs/v1.md): it collects a project title and one instructor request, creates a SCORM project, submits the request, displays Server-Sent Event progress, and renders the returned build and QA findings. The build card provides the download endpoint when the QA gate passes.
+Manual keyboard and NVDA check: send `[long-step]`, confirm focus returns to the message box and Send is disabled with an explanation. Draft a follow-up, reload, and confirm it stays. Confirm timer ticks are silent, progress updates are announced, and the completed agent reply is announced once. Tab through Conversation, history, the message box, Build panel, download, Preview, Restart preview, and the activity controls. At desktop and narrow widths, verify visible focus and no horizontal page scrolling. NVDA verification remains manual.

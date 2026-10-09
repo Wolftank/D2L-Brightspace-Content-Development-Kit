@@ -48,3 +48,26 @@ h3 { margin-bottom: 10px; font: 400 25px Georgia, serif; }
 .findings strong { font-size: 11px; }
 .download { display: inline-block; padding: 10px 13px; border-radius: 5px; color: #fff; background: #315947; font-size: 13px; font-weight: 700; text-decoration: none; }
 @media (max-width: 760px) { .intro { padding-top: 42px; } .workspace { grid-template-columns: 1fr; } .card { min-height: auto; } }
+.workspace { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: start; }
+.chat-panel { padding: 28px; }
+.chat-history { max-height: 420px; overflow-y: auto; padding: 4px; }
+.chat-message { padding: 16px 18px; margin-bottom: 16px; border-radius: 8px; line-height: 1.65; font-size: 14px; overflow-wrap: anywhere; }
+.chat-message p:last-child { margin-bottom: 0; white-space: pre-wrap; }
+.message-instructor { margin-left: 32px; background: #f2f0ed; }
+.message-agent { margin-right: 32px; background: #f0f5f1; }
+.speaker { font-size: 12px; font-weight: 750; color: #7b2338; margin-bottom: 6px; }
+.message-agent .speaker { color: #315947; }
+.composer { border-top: 1px solid #deded8; margin-top: 20px; }
+.composer textarea { min-height: 96px; }
+.composer-footer { display: flex; align-items: center; gap: 20px; justify-content: space-between; }
+.composer-footer .hint { margin: 12px 0 0; }
+.turn-summary { color: #4e5e58; font-size: 13px; margin: 16px 0 0; }
+.preview-panel { grid-column: 1 / -1; min-height: auto; }
+.preview-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.preview-heading h2 { margin-bottom: 8px; }
+.preview-heading button { margin-top: 0; }
+.preview-panel iframe { width: 100%; height: 460px; border: 1px solid #deded8; border-radius: 8px; background: #fff; }
+.preview-placeholder { min-height: 200px; display: grid; place-items: center; background: #f7f8f5; color: #626d6a; text-align: center; padding: 24px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+section:focus-visible, .chat-history:focus-visible { outline: 3px solid #a65169; outline-offset: 3px; }
+@media (max-width: 760px) { .workspace { grid-template-columns: 1fr; padding: 0 16px 32px; gap: 16px; } .card { padding: 22px; } .topbar { padding: 0 16px; } .brand { font-size: 13px; } .message-instructor { margin-left: 12px; } .message-agent { margin-right: 12px; } .preview-panel iframe { height: 400px; } }
