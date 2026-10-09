@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import type { Deps } from '../deps.js';
 
-/** V1 accepts text blocks only. Fields later layers add are dropped. */
+/** Accepts text blocks only. Any other field is dropped. */
 const sendMessageBody = z.object({
   content: z
     .array(z.object({ type: z.literal('text'), text: z.string().trim().min(1, 'must not be blank') }))
