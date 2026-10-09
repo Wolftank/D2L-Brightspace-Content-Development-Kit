@@ -10,7 +10,11 @@
 <script src="https://cdn.example.com/chart.min.js"></script> <!-- shared/external-cdn -->
 </head>
 <body>
-<div id="root"><img src="img/missing-logo.png"></div> <!-- shared/missing-assets -->
+<div id="root">
+<h1>Quiz</h1>
+<h3>Questions</h3>                                     <!-- a11y/heading-order -->
+<img src="img/missing-logo.png">                       <!-- shared/missing-assets + a11y/alt -->
+</div>
 <script>
 var API = window.parent.API;
 API.LMSInitialize('');

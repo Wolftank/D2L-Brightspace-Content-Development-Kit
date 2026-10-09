@@ -26,6 +26,12 @@ describe('renderProjectInstructions', () => {
     expect(markdown).toContain('do not claim a passing package');
     expect(markdown).toContain('independently validates the saved output');
     expect(markdown).toContain('in place of the guides\' standalone packaging and deployment steps');
+    expect(markdown).toContain('alt text');
+    expect(markdown).toContain('lang="en"');
+    expect(markdown).toContain('headings follow a sequential order');
+    expect(markdown).toContain('plain text only');
+    expect(markdown).toContain('no markdown headings');
+    expect(markdown).toContain('Leave out file names');
     expect(markdown).not.toContain('build-scorm.ps1');
   });
 

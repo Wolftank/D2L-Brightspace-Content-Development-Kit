@@ -1,0 +1,221 @@
+diff --git a/back-end/kit/harness/lint/fixtures/bad-scorm/index.html b/back-end/kit/harness/lint/fixtures/bad-scorm/index.html
+index 47ed09b..e23b849 100644
+--- a/back-end/kit/harness/lint/fixtures/bad-scorm/index.html
++++ b/back-end/kit/harness/lint/fixtures/bad-scorm/index.html
+@@ -10,7 +10,11 @@
+ <script src="https://cdn.example.com/chart.min.js"></script> <!-- shared/external-cdn -->
+ </head>
+ <body>
+-<div id="root"><img src="img/missing-logo.png"></div> <!-- shared/missing-assets -->
++<div id="root">
++<h1>Quiz</h1>
++<h3>Questions</h3>                                     <!-- a11y/heading-order -->
++<img src="img/missing-logo.png">                       <!-- shared/missing-assets + a11y/alt -->
++</div>
+ <script>
+ var API = window.parent.API;
+ API.LMSInitialize('');
+diff --git a/back-end/kit/harness/lint/fixtures/bad-topic/index.html b/back-end/kit/harness/lint/fixtures/bad-topic/index.html
+index fb0ca39..e3a60d2 100644
+--- a/back-end/kit/harness/lint/fixtures/bad-topic/index.html
++++ b/back-end/kit/harness/lint/fixtures/bad-topic/index.html
+@@ -10,7 +10,11 @@
+ <script src="https://cdn.example.com/lib.js"></script>       <!-- shared/external-cdn -->
+ </head>
+ <body>
+-<div id="root"><img src="img/gone.png"></div>                <!-- shared/missing-assets -->
++<div id="root">
++<h1>Activity</h1>
++<h3>Data</h3>                                               <!-- a11y/heading-order -->
++<img src="img/gone.png">                                    <!-- shared/missing-assets + a11y/alt -->
++</div>
+ <script>
+ // topic/unwrapped-storage : no try/catch, throws in private mode
+ var seen = localStorage.getItem('visited');
+diff --git a/back-end/kit/harness/lint/fixtures/bad-widget/widget.html b/back-end/kit/harness/lint/fixtures/bad-widget/widget.html
+index f174627..0722a1b 100644
+--- a/back-end/kit/harness/lint/fixtures/bad-widget/widget.html
++++ b/back-end/kit/harness/lint/fixtures/bad-widget/widget.html
+@@ -15,7 +15,9 @@
+   </style>
+ 
+   <div id="header">Standings</div>                  <!-- widget/unnamespaced-id -->
+-  <img src="img/trophy.png">                        <!-- shared/missing-assets -->
++  <h2>Results</h2>
++  <h4>Details</h4>                                  <!-- a11y/heading-order -->
++  <img src="img/trophy.png">                        <!-- shared/missing-assets + a11y/alt -->
+   <div id="secretPanel">Marking notes and the answer key.</div>
+ </div>
+ 
+diff --git a/back-end/kit/harness/lint/fixtures/good-topic/index.html b/back-end/kit/harness/lint/fixtures/good-topic/index.html
+index 39abe24..30bd8c9 100644
+--- a/back-end/kit/harness/lint/fixtures/good-topic/index.html
++++ b/back-end/kit/harness/lint/fixtures/good-topic/index.html
+@@ -1,7 +1,7 @@
+ <!DOCTYPE html>
+ <!-- A content-topic build that should lint clean. Reference implementation
+      for the patterns the rules are trying to enforce. -->
+-<html>
++<html lang="en">
+ <head>
+ <style>
+   /* Fixed pixel height, never viewport units: the iframe auto-sizes. */
+diff --git a/back-end/kit/harness/lint/lint.test.js b/back-end/kit/harness/lint/lint.test.js
+index caeb188..0e18474 100644
+--- a/back-end/kit/harness/lint/lint.test.js
++++ b/back-end/kit/harness/lint/lint.test.js
+@@ -24,7 +24,8 @@ const bsRules = rulesIn(bs);
+   'scorm/no-api-calls', 'scorm/no-terminate-on-load', 'scorm/no-completed-on-load',
+   'scorm/credit-guard', 'scorm/commit-before-terminate', 'scorm/suspend-data-cap',
+   'scorm/storage-key-learner-id', 'scorm/root-height', 'scorm/manifest',
+-  'shared/no-viewport-units', 'shared/external-cdn', 'shared/missing-assets'
++  'shared/no-viewport-units', 'shared/external-cdn', 'shared/missing-assets',
++  'a11y/alt', 'a11y/lang', 'a11y/heading-order'
+ ].forEach(id => check(id, bsRules.has(id)));
+ check('bad-scorm fails the gate', errs(bs) > 0);
+ 
+@@ -34,7 +35,8 @@ const btRules = rulesIn(bt);
+ [
+   'topic/no-static-script-src', 'topic/unwrapped-storage', 'topic/namespaced-storage',
+   'topic/no-storage-for-grades', 'topic/no-grade-writes', 'topic/generic-sibling-filename',
+-  'shared/no-viewport-units', 'shared/external-cdn', 'shared/missing-assets'
++  'shared/no-viewport-units', 'shared/external-cdn', 'shared/missing-assets',
++  'a11y/alt', 'a11y/lang', 'a11y/heading-order'
+ ].forEach(id => check(id, btRules.has(id)));
+ check('bad-topic fails the gate', errs(bt) > 0);
+ 
+@@ -45,7 +47,8 @@ const bwRules = rulesIn(bw);
+   'widget/unscoped-css', 'widget/global-scope-leak', 'widget/unnamespaced-id',
+   'widget/role-as-boundary', 'widget/keep-it-short',
+   'topic/unwrapped-storage', 'topic/namespaced-storage', 'topic/no-storage-for-grades',
+-  'shared/external-cdn', 'shared/missing-assets'
++  'shared/external-cdn', 'shared/missing-assets',
++  'a11y/alt', 'a11y/heading-order'
+ ].forEach(id => check(id, bwRules.has(id)));
+ check('bad-widget fails the gate', errs(bw) > 0);
+ 
+diff --git a/back-end/kit/harness/lint/rules.js b/back-end/kit/harness/lint/rules.js
+index 1d3ef8b..6949cdd 100644
+--- a/back-end/kit/harness/lint/rules.js
++++ b/back-end/kit/harness/lint/rules.js
+@@ -621,6 +621,79 @@ const RULES = [
+     }
+   },
+ 
++  /* ------------------------------------------------------ accessibility */
++
++  {
++    id: 'a11y/alt',
++    avenues: ['scorm', 'topic', 'widget'],
++    severity: 'error',
++    because: 'WCAG 2.2 SC 1.1.1 (Non-text Content): every image must have a text alternative ' +
++             'so screen-reader users know what it shows. Add alt="..." describing the image, or ' +
++             'alt="" for decorative images.',
++    test(ctx) {
++      const out = [];
++      const re = /<img\b([^>]*)>/gi;
++      for (const f of ctx.files.filter(isMarkup)) {
++        for (const m of matches(f.text, re)) {
++          const attrs = m.groups[0];
++          if (/\balt\s*=/i.test(attrs)) continue;
++          if (/\brole\s*=\s*['"](?:presentation|none)['"]/i.test(attrs)) continue;
++          if (/\baria-hidden\s*=\s*['"]true['"]/i.test(attrs)) continue;
++          out.push(finding(this, f.rel, m.line,
++            'Image has no alt text. Add alt="..." describing what it shows, or alt="" for decorative images.'));
++        }
++      }
++      return out;
++    }
++  },
++
++  {
++    id: 'a11y/lang',
++    avenues: ['scorm', 'topic'],
++    severity: 'error',
++    because: 'WCAG 2.2 SC 3.1.1 (Language of Page): the page must declare its language so ' +
++             'screen readers use the correct pronunciation. Add lang="en" (or the correct ' +
++             'language code) to the <html> tag.',
++    test(ctx) {
++      const out = [];
++      for (const f of ctx.files.filter(isMarkup)) {
++        const m = /<html\b([^>]*)>/i.exec(f.text);
++        if (!m) continue;
++        if (/\blang\s*=/i.test(m[1])) continue;
++        out.push(finding(this, f.rel, lineOf(f.text, m.index),
++          'The page does not declare its language. Add lang="en" to the <html> tag.'));
++      }
++      return out;
++    }
++  },
++
++  {
++    id: 'a11y/heading-order',
++    avenues: ['scorm', 'topic', 'widget'],
++    severity: 'warn',
++    because: 'WCAG 2.2 SC 1.3.1 (Info and Relationships): skipping heading levels (e.g. jumping ' +
++             'from h1 to h3) confuses screen-reader users who navigate by headings and rely on ' +
++             'the level sequence to understand the page structure.',
++    test(ctx) {
++      const out = [];
++      for (const f of ctx.files.filter(isMarkup)) {
++        const headings = matches(f.text, /<h([1-6])\b/gi);
++        let prev = 0;
++        for (const h of headings) {
++          const level = parseInt(h.groups[0], 10);
++          if (prev > 0 && level > prev + 1) {
++            out.push(finding(this, f.rel, h.line,
++              `Heading level jumps from h${prev} to h${level}, skipping h${prev + 1}.`));
++          }
++          prev = level;
++        }
++      }
++      return out;
++    }
++  },
++
++  /* --------------------------------------------------------- shared */
++
+   {
+     id: 'shared/missing-assets',
+     avenues: ['scorm', 'topic', 'widget'],
+diff --git a/back-end/src/agent/instructions.test.ts b/back-end/src/agent/instructions.test.ts
+index 945511b..08a67d1 100644
+--- a/back-end/src/agent/instructions.test.ts
++++ b/back-end/src/agent/instructions.test.ts
+@@ -26,6 +26,12 @@ describe('renderProjectInstructions', () => {
+     expect(markdown).toContain('do not claim a passing package');
+     expect(markdown).toContain('independently validates the saved output');
+     expect(markdown).toContain('in place of the guides\' standalone packaging and deployment steps');
++    expect(markdown).toContain('alt text');
++    expect(markdown).toContain('lang="en"');
++    expect(markdown).toContain('headings follow a sequential order');
++    expect(markdown).toContain('plain text only');
++    expect(markdown).toContain('no markdown headings');
++    expect(markdown).toContain('Leave out file names');
+     expect(markdown).not.toContain('build-scorm.ps1');
+   });
+ 
+diff --git a/back-end/src/agent/instructions.ts b/back-end/src/agent/instructions.ts
+index 7a128d4..f3ed25e 100644
+--- a/back-end/src/agent/instructions.ts
++++ b/back-end/src/agent/instructions.ts
+@@ -43,7 +43,7 @@ Resolve harness paths in the guides from the prepared kit directory and skill-re
+ 
+ ## Build, check, and fix within this request
+ 
+-1. Build the requested SCORM activity in out/ using the guides and source material.
++1. Build the requested SCORM activity in out/ using the guides and source material. Ensure all images have alt text, the page declares lang="en", and headings follow a sequential order without skipping levels. The checker enforces these accessibility rules.
+ 2. Run this check in ${shell} from the workspace:
+ 
+ \`\`\`${shell}
+@@ -52,6 +52,10 @@ ${command}
+ 
+ 3. Inspect the findings and their explanations. Fix errors you can address in out/ and rerun the same checker during this request. Review warnings and report any remaining limitations. If the checker cannot run or errors remain, clearly describe the failure and unresolved findings; do not claim a passing package.
+ 4. Return a concise description of the activity, the check result, and any unresolved issues. Leave the output for the backend build/download step, which saves a version, independently validates the saved output, and packages passing builds with the manifest at the ZIP root. That backend step owns final packaging and download eligibility; the agent's check is preliminary. In this V1 flow, hand off out/ in place of the guides' standalone packaging and deployment steps.
++
++## How to reply
++
++Write a short summary of what was built, in a few plain sentences. Describe what students will do, what the activity covers, and what changed from the last version. Leave out file names, tool names, command output, code, and QA rule IDs. Use plain text only: no markdown headings, bold, bullet lists, tables, backticks, or code blocks. If the checker found a problem you could not fix, say plainly what is wrong and what the instructor should do next. Clarifying questions to the instructor follow the same style: short and plain.
+ `;
+ }
+ 

@@ -621,6 +621,79 @@ const RULES = [
     }
   },
 
+  /* ------------------------------------------------------ accessibility */
+
+  {
+    id: 'a11y/alt',
+    avenues: ['scorm', 'topic', 'widget'],
+    severity: 'error',
+    because: 'WCAG 2.2 SC 1.1.1 (Non-text Content): every image must have a text alternative ' +
+             'so screen-reader users know what it shows. Add alt="..." describing the image, or ' +
+             'alt="" for decorative images.',
+    test(ctx) {
+      const out = [];
+      const re = /<img\b([^>]*)>/gi;
+      for (const f of ctx.files.filter(isMarkup)) {
+        for (const m of matches(f.text, re)) {
+          const attrs = m.groups[0];
+          if (/\balt\s*=/i.test(attrs)) continue;
+          if (/\brole\s*=\s*['"](?:presentation|none)['"]/i.test(attrs)) continue;
+          if (/\baria-hidden\s*=\s*['"]true['"]/i.test(attrs)) continue;
+          out.push(finding(this, f.rel, m.line,
+            'Image has no alt text. Add alt="..." describing what it shows, or alt="" for decorative images.'));
+        }
+      }
+      return out;
+    }
+  },
+
+  {
+    id: 'a11y/lang',
+    avenues: ['scorm', 'topic'],
+    severity: 'error',
+    because: 'WCAG 2.2 SC 3.1.1 (Language of Page): the page must declare its language so ' +
+             'screen readers use the correct pronunciation. Add lang="en" (or the correct ' +
+             'language code) to the <html> tag.',
+    test(ctx) {
+      const out = [];
+      for (const f of ctx.files.filter(isMarkup)) {
+        const m = /<html\b([^>]*)>/i.exec(f.text);
+        if (!m) continue;
+        if (/\blang\s*=/i.test(m[1])) continue;
+        out.push(finding(this, f.rel, lineOf(f.text, m.index),
+          'The page does not declare its language. Add lang="en" to the <html> tag.'));
+      }
+      return out;
+    }
+  },
+
+  {
+    id: 'a11y/heading-order',
+    avenues: ['scorm', 'topic', 'widget'],
+    severity: 'warn',
+    because: 'WCAG 2.2 SC 1.3.1 (Info and Relationships): skipping heading levels (e.g. jumping ' +
+             'from h1 to h3) confuses screen-reader users who navigate by headings and rely on ' +
+             'the level sequence to understand the page structure.',
+    test(ctx) {
+      const out = [];
+      for (const f of ctx.files.filter(isMarkup)) {
+        const headings = matches(f.text, /<h([1-6])\b/gi);
+        let prev = 0;
+        for (const h of headings) {
+          const level = parseInt(h.groups[0], 10);
+          if (prev > 0 && level > prev + 1) {
+            out.push(finding(this, f.rel, h.line,
+              `Heading level jumps from h${prev} to h${level}, skipping h${prev + 1}.`));
+          }
+          prev = level;
+        }
+      }
+      return out;
+    }
+  },
+
+  /* --------------------------------------------------------- shared */
+
   {
     id: 'shared/missing-assets',
     avenues: ['scorm', 'topic', 'widget'],
