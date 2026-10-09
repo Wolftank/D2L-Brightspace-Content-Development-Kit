@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { App } from '../App';
-import type { BuildStatus } from '../api/types';
+import type { BuildStatus } from '@cdk/contract';
 
 beforeEach(() => sessionStorage.clear());
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });

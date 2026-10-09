@@ -4,7 +4,7 @@
 
 ## The split
 
-The app is two programs, built by two tracks, that meet only at the HTTP API and the event stream defined in this document.
+The app is two programs, built by two tracks, that meet only at the HTTP API and the event stream defined in this document. Both import the same contract as TypeScript types from `packages/contract/` (`@cdk/contract`); a change to the contract updates this document and that package in the same PR.
 
 - **Front end** — the browser app. Per project it shows the chat, a small configurator (title, target course, source files), a build panel (preview, QA gate findings, pedagogy check findings), and a deployment confirmation. It renders what the back end returns and runs no checks itself. V1 ships one text box; the full chat uses the same API, so nothing below changes when the UI grows.
 - **Back end** — an Express service. Owns identity, projects, chats, turns, builds, deployments, the QA gate, the pedagogy check, and the D2L client. It drives the agent (Claude first, Copilot later) through a driver in `back-end/src/agent/`, and exposes its own capabilities to the agent as tools. The agent decides, per message, whether to edit the output, run a check, create a build, or just answer. The same code runs in local mode and in hosted mode (see [Modes](#modes)).

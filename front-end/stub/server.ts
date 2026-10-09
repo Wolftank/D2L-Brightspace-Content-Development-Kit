@@ -26,7 +26,7 @@ import type {
   SendMessageResponse,
   Turn,
   User,
-} from '../src/api/types';
+} from '@cdk/contract';
 
 const HOST = '127.0.0.1';
 const PORT = Number(process.env.STUB_PORT ?? 3001);

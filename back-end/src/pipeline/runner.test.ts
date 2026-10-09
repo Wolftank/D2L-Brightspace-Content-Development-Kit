@@ -4,7 +4,7 @@ import type { CreateMessageInput } from '../db/messages.js';
 import type { Event, Message, Turn } from '../db/schema.js';
 import type { FinishTurnInput } from '../db/turns.js';
 import { WorkspaceMissing } from '../errors.js';
-import type { ApiBuild } from '../services/builds.js';
+import type { Build as ApiBuild } from '@cdk/contract';
 import type { AppendEventInput } from './events.js';
 import { createRunner, type RunnerDeps } from './runner.js';
 
@@ -328,7 +328,7 @@ describe('runner', () => {
 
     await runner.executeTurn('turn-1');
 
-    expect(finished[0]!.input.error?.code).toBe('workspace_missing');
+    expect(finished[0]!.input).toMatchObject({ status: 'failed', error: { code: 'workspace_missing' } });
     expect(kinds()).toEqual(['turn.started', 'turn.failed']);
     expect(deps.sessions.acquire).not.toHaveBeenCalled();
   });
@@ -353,7 +353,7 @@ describe('runner', () => {
 
     await runner.executeTurn('turn-1');
 
-    expect(finished[0]!.input.error?.code).toBe('internal_error');
+    expect(finished[0]!.input).toMatchObject({ status: 'failed', error: { code: 'internal_error' } });
     expect(deps.sessions.release).not.toHaveBeenCalled();
     expect(deps.sessions.close).not.toHaveBeenCalled();
   });
@@ -367,7 +367,7 @@ describe('runner', () => {
 
     await runner.executeTurn('turn-1');
 
-    expect(finished[0]!.input.error?.code).toBe('internal_error');
+    expect(finished[0]!.input).toMatchObject({ status: 'failed', error: { code: 'internal_error' } });
     expect(deps.sessions.close).toHaveBeenCalledOnce();
   });
 

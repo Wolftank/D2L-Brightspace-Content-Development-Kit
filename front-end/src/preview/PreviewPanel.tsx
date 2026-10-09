@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Build } from '../api/types';
+import type { Build } from '@cdk/contract';
 import { previewSession } from './session';
 import './preview.css';
 

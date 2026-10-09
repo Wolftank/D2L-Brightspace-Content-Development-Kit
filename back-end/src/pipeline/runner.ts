@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
+import type { EventKind, EventPayloads } from '@cdk/contract';
 import type { AgentEvent, AgentSession, TurnErrorCode, TurnInput, TurnResult } from '../agent/AgentDriver.js';
 import type { MessagesRepo } from '../db/messages.js';
 import type { Turn } from '../db/schema.js';
-import type { FinishTurnInput, TurnsRepo } from '../db/turns.js';
+import type { FinishedTurnDetails, FinishTurnInput, RunningTurn, TurnsRepo } from '../db/turns.js';
 import { WorkspaceMissing } from '../errors.js';
 import type { BuildService } from '../services/builds.js';
 import type { WorkspaceService } from '../services/workspaces.js';
-import type { AppEventKind, EventService } from './events.js';
+import type { EventService } from './events.js';
 import type { SessionService } from './sessions.js';
 
 type RunnerErrorCode = TurnErrorCode | 'workspace_missing' | 'interrupted' | 'internal_error';
@@ -67,11 +68,11 @@ interface Conversation {
 }
 
 export function createRunner(deps: RunnerDeps): Runner {
-  function append(turn: Turn, kind: AppEventKind, payload: unknown): void {
+  function append<K extends EventKind>(turn: Turn, kind: K, payload: EventPayloads[K]): void {
     deps.events.append({ projectId: turn.projectId, turnId: turn.id, kind, payload });
   }
 
-  function failure(turn: Turn, code: RunnerErrorCode, detail: unknown, rest: Omit<FinishTurnInput, 'status'> = {}): FinishTurnInput {
+  function failure(turn: Turn, code: RunnerErrorCode, detail: unknown, rest: FinishedTurnDetails = {}): FinishTurnInput {
     console.error(`Turn ${turn.id} failed (${code}):`, detail);
     return { ...rest, status: 'failed', error: { code, message: ERROR_MESSAGES[code] } };
   }
@@ -92,7 +93,7 @@ export function createRunner(deps: RunnerDeps): Runner {
     const unfinishedCalls = new Map<string, string>();
     let latestLine: string | undefined;
 
-    function line(kind: AppEventKind, payload: unknown, text: string): void {
+    function line<K extends 'turn.status' | 'tool.started' | 'tool.finished'>(kind: K, payload: EventPayloads[K], text: string): void {
       append(turn, kind, payload);
       latestLine = text;
     }
@@ -182,7 +183,7 @@ export function createRunner(deps: RunnerDeps): Runner {
     await deps.builds.create(turn.projectId, turn.id);
   }
 
-  async function run(turn: Turn): Promise<FinishTurnInput> {
+  async function run(turn: RunningTurn): Promise<FinishTurnInput> {
     append(turn, 'turn.started', { turnId: turn.id, startedAt: turn.startedAt });
     const startHash = await deps.workspaces.hashOutput(turn.projectId);
     const input = instructorInput(turn);
@@ -217,7 +218,7 @@ export function createRunner(deps: RunnerDeps): Runner {
     deps.turns.finish(turn.id, outcome);
     switch (outcome.status) {
       case 'completed':
-        append(turn, 'turn.completed', { turnId: turn.id, usage: outcome.usage });
+        append(turn, 'turn.completed', { turnId: turn.id, ...(outcome.usage ? { usage: outcome.usage } : {}) });
         return;
       case 'failed':
         append(turn, 'turn.failed', { turnId: turn.id, error: outcome.error });

@@ -4,7 +4,7 @@ import { projectEventsUrl } from '../api/client';
 import type {
   Build,
   ProjectEvent,
-} from '../api/types';
+} from '@cdk/contract';
 
 export interface StatusLine {
   seq: number;

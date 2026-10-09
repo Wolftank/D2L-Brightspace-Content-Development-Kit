@@ -30,7 +30,7 @@ describe('event service', () => {
       storedAtNotifyTime = eventsRepo.listAfter(projectId, 0);
     });
 
-    const appended = service.append({ projectId, kind: 'turn.started', payload: { turnId: 't1' } });
+    const appended = service.append({ projectId, kind: 'turn.started', payload: { turnId: 't1', startedAt: 1 } });
 
     expect(storedAtNotifyTime).toEqual([appended]);
   });
@@ -41,7 +41,7 @@ describe('event service', () => {
       received = event;
     });
 
-    const appended = service.append({ projectId, kind: 'turn.started', payload: { turnId: 't1' } });
+    const appended = service.append({ projectId, kind: 'turn.started', payload: { turnId: 't1', startedAt: 1 } });
 
     expect(received).toEqual(appended);
     expect(received?.seq).toBeGreaterThan(0);
@@ -53,7 +53,7 @@ describe('event service', () => {
     service.subscribe(projectId, (event) => receivedA.push(event));
     service.subscribe(otherProjectId, (event) => receivedB.push(event));
 
-    service.append({ projectId, kind: 'turn.started', payload: {} });
+    service.append({ projectId, kind: 'turn.started', payload: { turnId: 't1', startedAt: 1 } });
 
     expect(receivedA).toHaveLength(1);
     expect(receivedB).toHaveLength(0);
@@ -63,16 +63,16 @@ describe('event service', () => {
     const received: Event[] = [];
     const unsubscribe = service.subscribe(projectId, (event) => received.push(event));
 
-    service.append({ projectId, kind: 'turn.started', payload: {} });
+    service.append({ projectId, kind: 'turn.started', payload: { turnId: 't1', startedAt: 1 } });
     unsubscribe();
-    service.append({ projectId, kind: 'turn.completed', payload: {} });
+    service.append({ projectId, kind: 'turn.completed', payload: { turnId: 't1' } });
 
     expect(received).toHaveLength(1);
   });
 
   it('after() delegates to the repo, scoped to the project and cursor', () => {
-    const first = service.append({ projectId, kind: 'turn.started', payload: {} });
-    const second = service.append({ projectId, kind: 'turn.completed', payload: {} });
+    const first = service.append({ projectId, kind: 'turn.started', payload: { turnId: 't1', startedAt: 1 } });
+    const second = service.append({ projectId, kind: 'turn.completed', payload: { turnId: 't1' } });
 
     expect(service.after(projectId, first.seq)).toEqual([second]);
     expect(service.after(projectId, 0)).toEqual([first, second]);

@@ -28,6 +28,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@cdk/contract": "*",
     "@types/archiver": "^8.0.0",
     "@types/better-sqlite3": "^9.6.0",
     "@types/express": "^5.0.6",

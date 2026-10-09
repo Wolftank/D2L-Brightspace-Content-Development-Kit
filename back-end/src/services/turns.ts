@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import type { SendMessageResponse } from '@cdk/contract';
 import type { ProjectsRepo } from '../db/projects.js';
-import type { Message, Turn } from '../db/schema.js';
+import type { Message } from '../db/schema.js';
 import type { TurnsRepo } from '../db/turns.js';
 import { NotFound, TurnActive } from '../errors.js';
 import type { Runner } from '../pipeline/runner.js';
@@ -11,11 +12,6 @@ export interface TurnServiceDeps {
   runner: Pick<Runner, 'executeTurn'>;
 }
 
-export interface StartedTurn {
-  message: Message;
-  turn: Turn;
-}
-
 export interface TurnService {
   /**
    * Stores `content` as the instructor's message on `ownerId`'s project with a
@@ -23,7 +19,7 @@ export interface TurnService {
    * it. Throws `NotFound` for an unknown or another owner's project, and
    * `TurnActive` while the project has a `queued` or `running` turn.
    */
-  start(ownerId: string, projectId: string, content: Message['content']): StartedTurn;
+  start(ownerId: string, projectId: string, content: Message['content']): SendMessageResponse;
 }
 
 export function createTurnService(deps: TurnServiceDeps): TurnService {

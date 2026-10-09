@@ -5,7 +5,7 @@ import {
   createProject,
   sendMessage,
 } from './api/client';
-import type { Build, Project } from './api/types';
+import type { Build, Project } from '@cdk/contract';
 import { useProjectEvents } from './hooks/useProjectEvents';
 import './App.css';
 import { WorkingIndicator } from './WorkingIndicator';
