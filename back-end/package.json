@@ -11,6 +11,9 @@
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
     "test": "vitest run",
+    "test:unit": "vitest run -c vitest.unit.config.ts",
+    "test:int": "vitest run -c vitest.int.config.ts",
+    "test:live": "vitest run -c vitest.live.config.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate"
@@ -21,6 +24,7 @@
     "better-sqlite3": "^12.11.1",
     "drizzle-orm": "^0.45.2",
     "express": "^5.2.1",
+    "partial-json": "^0.1.7",
     "zod": "^4.6.5"
   },
   "devDependencies": {

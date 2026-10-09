@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { ApiError, buildDownloadUrl, buildPreviewUrl, createProject, getProject, sendMessage } from './api/client';
+import { ApiError, buildDownloadUrl, createProject, getProject, sendMessage } from './api/client';
 import type { Build, Project } from './api/types';
 import { useProjectEvents } from './hooks/useProjectEvents';
 import { WorkingIndicator } from './WorkingIndicator';
 import { StatusFeed } from './StatusFeed';
 import './App.css';
+import { PreviewPanel } from './preview/PreviewPanel';
 
 function BuildPanel({ build }: { build: Build | null }) {
   return <section className="card build-panel" aria-labelledby="build-title" tabIndex={0}>
@@ -19,18 +20,6 @@ function BuildPanel({ build }: { build: Build | null }) {
           <li key={index}><strong>{finding.severity === 'warn' ? 'WARNING' : 'ERROR'}</strong> {finding.message}{finding.because && <p>{finding.because}</p>}</li>)}</ul>}
         {build.status === 'ready' && <a className="download" href={buildDownloadUrl(build.id)}>Download SCORM package</a>}
       </article>}
-  </section>;
-}
-
-function Preview({ build }: { build: Build | null }) {
-  const [attempt, setAttempt] = useState(0);
-  return <section className="card preview-panel" aria-labelledby="preview-title" tabIndex={0}>
-    <div className="preview-heading"><div><p className="eyebrow">03 / PREVIEW</p>
-      <h2 id="preview-title">{build ? `Preview · Version ${build.version}` : 'Preview'}</h2></div>
-      {build && <button onClick={() => setAttempt(value => value + 1)}>Restart preview</button>}</div>
-    <p className="hint">Local preview, results are not sent to D2L.</p>
-    {build ? <iframe key={`${build.id}-${attempt}`} title={`Activity preview, version ${build.version}`} src={buildPreviewUrl(build.id)} sandbox="allow-scripts allow-same-origin" /> :
-      <p className="preview-placeholder">Your activity will appear here when the first build is ready.</p>}
   </section>;
 }
 
@@ -122,7 +111,7 @@ export function App() {
         </form>
       </section>
       <BuildPanel build={latestBuild} />
-      <Preview build={readyBuild} />
+      <PreviewPanel build={readyBuild} />
     </div>
   </main>;
 }

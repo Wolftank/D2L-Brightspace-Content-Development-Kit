@@ -64,6 +64,3 @@ export function getMessages(projectId: string, cursor?: string): Promise<import(
   return json('/api/projects/' + projectId + '/messages' + query);
 }
 
-export function buildPreviewUrl(buildId: string): string {
-  return '/api/builds/' + buildId + '/preview/';
-}

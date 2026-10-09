@@ -31,7 +31,7 @@ export interface ProjectEventState {
 type ProjectEventReducerAction =
   | ProjectEvent
   | { type: 'message'; message: Message }
-  | { type: 'history'; messages: (Message & { turn?: Turn })[] }
+  | { type: 'history'; messages: (Message & { turn?: Pick<Turn, 'id' | 'status' | 'error'> })[] }
   | {
       type: 'restore';
       projectId: string | null;

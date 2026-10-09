@@ -19,6 +19,7 @@ let history: Message[];
 let sent: number;
 let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
+  vi.stubEnv('VITE_PREVIEW_ORIGIN', 'http://127.0.0.1:3002');
   sessionStorage.clear(); history = []; sent = 0; Stream.latest = undefined;
   vi.stubGlobal('EventSource', Stream);
   fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
@@ -30,7 +31,7 @@ beforeEach(() => {
   });
   vi.stubGlobal('fetch', fetchMock);
 });
-afterEach(() => { sessionStorage.clear(); vi.unstubAllGlobals(); });
+afterEach(() => { sessionStorage.clear(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 function emit(event: ProjectEvent) { act(() => Stream.latest!.emit(event)); }
 async function firstRequest() {
   fireEvent.change(screen.getByLabelText('Project title'), { target: { value: 'Cell division' } });
@@ -69,7 +70,7 @@ describe('F10 conversation', () => {
     const thread = screen.getByLabelText('Conversation history');
     expect(within(thread).getAllByRole('article').map(node => node.textContent)).toEqual(['YouCreate a quiz.', 'CDKYour quiz is ready.', 'YouMake buttons larger.', 'CDKButtons are larger.']);
     expect(fetchMock.mock.calls.filter(([url]) => url === '/api/projects')).toHaveLength(1);
-    expect(screen.getByRole('status')).toHaveTextContent('CDK: Buttons are larger.');
+    expect(screen.getByText('CDK: Buttons are larger.')).toHaveAttribute('role', 'status');
   });
   it('loads server history on reopening and deduplicates replayed replies', async () => {
     history = [message('u1', 1, 'instructor', 'First request'), message('a1', 2, 'agent', 'First reply')];
@@ -101,17 +102,17 @@ describe('F10 conversation', () => {
   it('replaces the latest build while retaining the last ready preview after QA failure', async () => {
     render(<App />); await firstRequest();
     emit({ seq: 2, kind: 'build.updated', payload: { build: build(1) } });
-    expect(screen.getByTitle('Activity preview, version 1')).toHaveAttribute('src', '/api/builds/b1/preview/');
+    expect(screen.getByTitle('Interactive preview of build 1')).toHaveAttribute('src', expect.stringContaining('buildId=b1'));
     emit({ seq: 3, kind: 'build.updated', payload: { build: build(2, 'failed') } });
     expect(screen.getByText('BUILD 2')).toBeVisible();
     expect(screen.queryByRole('link', { name: 'Download SCORM package' })).not.toBeInTheDocument();
-    expect(screen.getByTitle('Activity preview, version 1')).toBeVisible();
+    expect(screen.getByTitle('Interactive preview of build 1')).toBeInTheDocument();
     emit({ seq: 4, kind: 'build.updated', payload: { build: build(3) } });
-    expect(screen.getByTitle('Activity preview, version 3')).toBeVisible();
-    expect(screen.queryByTitle('Activity preview, version 1')).not.toBeInTheDocument();
-    const frame = screen.getByTitle('Activity preview, version 3');
+    expect(screen.getByTitle('Interactive preview of build 3')).toBeInTheDocument();
+    expect(screen.queryByTitle('Interactive preview of build 1')).not.toBeInTheDocument();
+    const frame = screen.getByTitle('Interactive preview of build 3');
     fireEvent.click(screen.getByRole('button', { name: 'Restart preview' }));
-    expect(screen.getByTitle('Activity preview, version 3')).not.toBe(frame);
+    expect(screen.getByTitle('Interactive preview of build 3')).not.toBe(frame);
   });
   it('shows a failed request and allows a follow-up with the draft kept on send failure', async () => {
     render(<App />); await firstRequest();

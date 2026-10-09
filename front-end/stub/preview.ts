@@ -1,18 +1,49 @@
-export function previewHtml(): string {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Local activity preview</title>
-  <style>html,body,iframe{width:100%;height:100%;margin:0;border:0}body{font-family:system-ui}</style></head><body>
-  <p id="loading" role="status">Loading activity…</p><script src="d2l-emulator.js"></script><script>
-  fetch('tenant-profile.json').then(r=>r.json()).then(profile=>{
-    window.__emu = D2LEmulator.install({profile,learner:{id:'local-student',name:'Local learner',role:'Student'},attempt:1});
-    const frame=document.createElement('iframe');frame.title='Cell division practice';frame.src='activity.html';
-    document.getElementById('loading').remove();document.body.append(frame);
-  }).catch(()=>document.getElementById('loading').textContent='Unable to load the local preview. Restart to try again.');
-  </script></body></html>`;
+import { readFileSync } from 'node:fs';
+import { createServer, type ServerResponse } from 'node:http';
+import type { Build } from '../src/api/types';
+
+const fixture = new URL('./fixtures/preview/', import.meta.url);
+const files = new Map(['index.html', 'imsmanifest.xml', 'sample.css'].map((name) => [name, readFileSync(new URL(name, fixture))]));
+export const previewZip = readFileSync(new URL('./fixtures/preview.zip', import.meta.url));
+const player = new URL('../../back-end/preview/', import.meta.url);
+const harness = new URL('../../back-end/kit/harness/', import.meta.url);
+const playerFiles = new Map([
+  ...['player.html', 'player.js', 'player.css'].map((name) => [name, readFileSync(new URL(name, player))] as const),
+  ...['d2l-emulator.js', 'tenant-profile.json'].map((name) => [name, readFileSync(new URL(name, harness))] as const),
+]);
+const contentTypes: Record<string, string> = { html: 'text/html', js: 'text/javascript', css: 'text/css', json: 'application/json', xml: 'application/xml' };
+
+/** Serves only the saved starter fixture and player on a separate loopback origin. */
+export function startPreviewServer(findBuild: (id: string) => Build | undefined) {
+  const appOrigin = new URL(process.env.STUB_APP_ORIGIN ?? 'http://127.0.0.1:5173').origin;
+  const server = createServer((req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors ${appOrigin} 'self'; form-action 'none'; base-uri 'none'`);
+    const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+    if (req.method !== 'GET') { res.writeHead(405).end(); return; }
+    const wrapper = /^\/preview\/([^/]+)$/.exec(url.pathname);
+    if (wrapper) {
+      if (wrapper[1] === 'player.html' && url.searchParams.get('parentOrigin') !== appOrigin) {
+        res.writeHead(403).end(); return;
+      }
+      sendFile(res, wrapper[1]!, playerFiles.get(wrapper[1]!));
+      return;
+    }
+    const asset = /^\/api\/builds\/([^/]+)\/preview\/([^/]+)$/.exec(url.pathname);
+    if (asset) {
+      let id: string;
+      try { id = decodeURIComponent(asset[1]!); } catch { res.writeHead(400).end(); return; }
+      if (findBuild(id)?.status === 'ready') { sendFile(res, asset[2]!, files.get(asset[2]!)); return; }
+    }
+    res.writeHead(404).end('Saved build unavailable');
+  });
+  server.listen(Number(process.env.STUB_PREVIEW_PORT ?? 3002), '127.0.0.1');
+  return server;
 }
 
-export function activityHtml(version: number): string {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cell division practice</title>
-  <style>body{font:16px/1.6 system-ui;color:#273239;background:#f7f8f5;margin:0;padding:28px}main{max-width:600px;margin:auto}h1{font:32px Georgia,serif}button{display:block;width:100%;margin:10px 0;padding:${version > 1 ? '18px' : '10px'};background:white;border:1px solid #74877a;border-radius:8px;text-align:left;color:#273239;font:inherit;cursor:pointer}button:focus-visible{outline:3px solid #7b2338}small{color:#4e5e58}</style></head>
-  <body><main><small>PRACTICE · VERSION ${version}</small><h1>Cell division practice</h1><p>Question 1 of 10</p><h2>What is the main purpose of mitosis?</h2><button data-correct="true">Produce two genetically identical cells</button><button>Produce cells with half the chromosomes</button><button>Combine genetic material from two parents</button><p id="feedback" role="status"></p></main>
-  <script>const api=parent.API;api.LMSInitialize('');document.querySelectorAll('button').forEach(button=>button.onclick=()=>{document.getElementById('feedback').textContent=button.dataset.correct?'Correct! Mitosis helps organisms grow and repair tissues.':'Try again. Think about how organisms grow and repair tissues.';api.LMSSetValue('cmi.core.score.raw',button.dataset.correct?'100':'0');api.LMSCommit('');});</script></body></html>`;
+function sendFile(res: ServerResponse, name: string, data: Buffer | undefined) {
+  if (!data) { res.writeHead(404).end('File unavailable'); return; }
+  res.writeHead(200, { 'Content-Type': `${contentTypes[name.split('.').pop()!] ?? 'application/octet-stream'}; charset=utf-8` });
+  res.end(data);
 }

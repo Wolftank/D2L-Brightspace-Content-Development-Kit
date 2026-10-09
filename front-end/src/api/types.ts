@@ -40,7 +40,7 @@ export interface Message {
 }
 
 export interface MessageHistoryResponse {
-  items: (Message & { turn?: Turn })[];
+  items: (Message & { turn?: Pick<Turn, 'id' | 'status' | 'error'> })[];
   nextCursor?: string;
 }
 

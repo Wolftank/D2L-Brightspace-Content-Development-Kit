@@ -11,16 +11,16 @@ npm run stub
 npm run dev:stub
 ```
 
-Open http://127.0.0.1:5173. Name your project and send a request. After the reply, send a change to produce version 2. The stub uses scripted replies and a sample cell-division activity; its preview runs through the kit's D2L emulator. The stub download is an empty ZIP fixture.
+Open http://127.0.0.1:5173. Name your project and send a request. After the reply, send a change to produce version 2. The stub uses scripted replies and a sample cell-division activity; its preview runs through the kit's D2L emulator. The stub download is the saved SCORM starter fixture.
 
 A project can be reopened at `/?project=<projectId>`. Reload restores its history, builds and any running turn. Drafts stay in the current browser session. Stub projects live in memory and disappear when the stub server restarts.
 
-`npm run dev` proxies to the real back end at port 3000. F10 requires B17's message-history endpoint and F6's preview endpoint for real-agent integration; those routes are absent from this checkout. The stub implements the expected routes:
+`npm run dev` proxies to the real back end at port 3000. F10 requires B17's message-history endpoint for real-agent integration; that route is absent from this checkout. The stub implements the expected routes:
 
 - `GET /api/projects/:id/messages` returns `{ items, nextCursor? }`, oldest first. Instructor messages include a `turn` with its status and plain-language error, when present. The app follows every page and merges messages by ID.
-- `GET /api/builds/:id/preview/` renders a build through the emulator with a fresh attempt on each load.
+- F6 renders ready builds through the emulator on a separate preview origin. Set `VITE_PREVIEW_ORIGIN` for the app; stub mode uses port 3002.
 
-The B17 `turn` shape needs to be confirmed when its contract lands.
+The history shape matches B17 branch `feature/110-list-messages`: instructor `turn` contains `{ id, status, error }`.
 
 ## Conversation behavior
 

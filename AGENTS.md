@@ -20,3 +20,17 @@ capability without checking its documentation and types.
 * Make architectural decisions for the long term. Do not accept a stopgap
 that only works for now and is meant to be replaced later.
 
+## Back-end test conventions
+
+Tests in `back-end/src/` use three file suffixes:
+
+| Suffix | Layer | What it may use |
+|---|---|---|
+| `*.test.ts` | Unit | Pure logic only. No disk, database (`testDb()`), network (`supertest`, `http`), child processes, or real timers. `vi.mock()`/`vi.fn()` stubs and `vi.useFakeTimers()` are fine. |
+| `*.int.test.ts` | Integration | Everything that doesn't call a real agent — `testDb()`, `supertest`, temp directories, child processes. |
+| `*.live.test.ts` | Live | Makes real, billed agent calls. Never runs unless explicitly asked for. |
+
+A unit test file that imports a banned module (`node:fs`, `better-sqlite3`,
+`supertest`, `node:child_process`, etc.) fails lint with a message pointing
+to the `.int.test.ts` suffix.
+
