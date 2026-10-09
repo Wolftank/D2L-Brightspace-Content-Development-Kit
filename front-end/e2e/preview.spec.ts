@@ -9,7 +9,7 @@ async function buildActivity(page: Page) {
   await expect(page.getByTitle('Interactive preview of build 1')).toBeVisible({ timeout: 15_000 });
 }
 
-test('saved starter runs in Student mode, restarts, keeps its version and returns focus', async ({ page, request }, testInfo) => {
+test('saved starter runs in Student mode, restarts, switches versions and stays isolated', async ({ page, request }, testInfo) => {
   test.setTimeout(60_000);
   await page.setViewportSize({ width: 1024, height: 900 });
   await buildActivity(page);

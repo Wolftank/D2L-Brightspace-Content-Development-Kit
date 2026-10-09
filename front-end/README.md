@@ -11,7 +11,7 @@ npm run stub
 npm run dev:stub
 ```
 
-Open http://127.0.0.1:5173. Name your project and send a request. After the reply, send a change to produce version 2. The stub uses scripted replies and a sample cell-division activity; its preview runs through the kit's D2L emulator. The stub download is the saved SCORM starter fixture.
+Open http://127.0.0.1:5173. Name your project and send a request. After the reply, send a change to produce version 2. The stub uses scripted replies and the saved SCORM starter activity; its preview runs through the kit's D2L emulator. The stub download is the saved SCORM starter fixture.
 
 A project can be reopened at `/?project=<projectId>`. Reload restores its history, builds and any running turn. Drafts stay in the current browser session. Stub projects live in memory and disappear when the stub server restarts.
 
