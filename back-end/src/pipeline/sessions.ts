@@ -3,6 +3,7 @@ import type { AgentDriver, AgentSession } from '../agent/AgentDriver.js';
 import { renderProjectInstructions } from '../agent/instructions.js';
 import type { ProjectsRepo } from '../db/projects.js';
 import { NotFound } from '../errors.js';
+import { SCORM_SKILLS } from '../kit.js';
 import type { WorkspaceService } from '../services/workspaces.js';
 
 /** How long a session stays open after its last turn before the service closes it. */
@@ -62,6 +63,7 @@ export function createSessionService(deps: SessionServiceDeps): SessionService {
       sessionId: project.sessionId,
       instructions: renderProjectInstructions({ project, workspaceDir, shell: SHELL }),
       skillsDir: join(workspaceDir, 'kit', 'skills'),
+      skills: SCORM_SKILLS,
       tools: { name: 'cdk', tools: [] },
       allowedTools: [],
     });

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentDriver, AgentSession, SessionRequest } from '../agent/AgentDriver.js';
 import type { Project } from '../db/schema.js';
 import { NotFound, WorkspaceMissing } from '../errors.js';
+import { SCORM_SKILLS } from '../kit.js';
 import { createSessionService, SESSION_IDLE_MS, type SessionService } from './sessions.js';
 
 type FakeSession = AgentSession & { sessionId: string | null; close: ReturnType<typeof vi.fn> };
@@ -73,7 +74,7 @@ describe('session service', () => {
     vi.restoreAllMocks();
   });
 
-  it('opens a new session in the project workspace with its skills and instructions, and no tools or shell rules', async () => {
+  it('opens a new session in the project workspace with the SCORM skills and its instructions, and no tools or shell rules', async () => {
     await service.acquire('p1');
 
     expect(opened).toHaveLength(1);
@@ -81,6 +82,7 @@ describe('session service', () => {
       workspaceDir: workspaceDirOf('p1'),
       sessionId: null,
       skillsDir: join(workspaceDirOf('p1'), 'kit', 'skills'),
+      skills: SCORM_SKILLS,
       tools: { name: 'cdk', tools: [] },
       allowedTools: [],
     });

@@ -1,9 +1,11 @@
-import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { cp, lstat, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { platform } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import {
   query,
   type EffortLevel,
+  type HookCallback,
+  type HookJSONOutput,
   type Options,
   type SDKAssistantMessageError,
   type SDKMessage,
@@ -38,6 +40,58 @@ export const MUTATING_TOOL_RULES = ['Edit(/**)', 'Write(/**)'];
  *  Windows, and Bash elsewhere. */
 const SHELL_TOOL = platform() === 'win32' ? 'PowerShell' : 'Bash';
 
+/**
+ * Claude's built-in tools the agent loads: the file tools, the shell, and the
+ * Skill tool for the kit's skills. Passed as `options.tools`, which sets the
+ * whole built-in tool set.
+ */
+export const BUILT_IN_TOOLS = ['Read', 'Write', 'Edit', 'Glob', 'Grep', SHELL_TOOL, 'Skill'];
+
+/**
+ * Variables the agent's process takes from the back end's environment: what
+ * the OS, the shell, the network, and the agent's own sign-in need.
+ */
+export const INHERITED_ENV = [
+  'PATH',
+  'HOME',
+  'USER',
+  'LOGNAME',
+  'SHELL',
+  'LANG',
+  'TMPDIR',
+  'USERPROFILE',
+  'USERNAME',
+  'APPDATA',
+  'LOCALAPPDATA',
+  'TEMP',
+  'TMP',
+  'SystemRoot',
+  'SystemDrive',
+  'windir',
+  'ComSpec',
+  'PATHEXT',
+  'PSModulePath',
+  'HTTPS_PROXY',
+  'HTTP_PROXY',
+  'NO_PROXY',
+  'NODE_EXTRA_CA_CERTS',
+  'ANTHROPIC_API_KEY',
+  'CLAUDE_CODE_OAUTH_TOKEN',
+  'CLAUDE_CONFIG_DIR',
+];
+
+/**
+ * Variables the driver sets for the agent: no bundled skills, no built-in
+ * subagents, no auto memory, and PowerShell as the shell on Windows
+ * (docs/drivers.md, "What the agent can use").
+ */
+export const AGENT_SETTINGS_ENV: Record<string, string> = {
+  CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: '1',
+  CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS: '1',
+  CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1',
+  ...(SHELL_TOOL === 'PowerShell' ? { CLAUDE_CODE_USE_POWERSHELL_TOOL: '1' } : {}),
+};
+
 export const WORKSPACE_SETTINGS = {
   permissions: {
     allow: ['Read(/**)', ...MUTATING_TOOL_RULES],
@@ -69,16 +123,189 @@ export function buildAllowedTools(mcpToolNames: string[]): string[] {
 }
 
 /**
- * Query options that leave `SHELL_TOOL` as the agent's only shell. On
- * Windows the CLI offers Bash whenever Git for Windows is installed, and
- * PowerShell only when `CLAUDE_CODE_USE_POWERSHELL_TOOL`, a missing Git, or
- * an account flag enables it (docs/drivers.md, "Shell").
+ * The agent process's whole environment: the `INHERITED_ENV` variables the
+ * back end has, plus `AGENT_SETTINGS_ENV`. `options.env` replaces the
+ * process's environment rather than adding to it.
  */
-export function shellOptions(): Pick<Options, 'env' | 'disallowedTools'> {
-  if (SHELL_TOOL === 'Bash') return {};
+export function agentEnv(): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const name of INHERITED_ENV) {
+    const value = process.env[name];
+    if (value !== undefined) env[name] = value;
+  }
+  return { ...env, ...AGENT_SETTINGS_ENV };
+}
+
+/** What a session may load. */
+export interface AllowedCapabilities {
+  /** Every tool, built-in and `cdk`, by the name Claude reports it under. */
+  tools: string[];
+  skills: string[];
+  mcpServers: string[];
+}
+
+/** The tools, skills, and MCP servers a session for `req` may load. */
+export function allowedCapabilities(req: Pick<SessionRequest, 'tools' | 'skills'>): AllowedCapabilities {
   return {
-    env: { ...process.env, CLAUDE_CODE_USE_POWERSHELL_TOOL: '1' },
-    disallowedTools: ['Bash'],
+    tools: [...BUILT_IN_TOOLS, ...req.tools.tools.map((tool) => `mcp__${req.tools.name}__${tool.name}`)],
+    skills: req.skills,
+    mcpServers: [req.tools.name],
+  };
+}
+
+/** What a session reports loading, in the fields of its `init` message. */
+export interface LoadedCapabilities {
+  tools: string[];
+  skills: string[];
+  mcp_servers: Array<{ name: string }>;
+  agents?: string[];
+  plugins: Array<{ name: string }>;
+}
+
+/**
+ * Compares what a session loaded with what it may load.
+ *
+ * Returns:
+ *   One line per kind of difference, such as "unexpected tools: WebFetch";
+ *   empty when the session loaded exactly its allowed tools and skills, no
+ *   other MCP server, no subagent, and no plugin.
+ */
+export function capabilityDifferences(loaded: LoadedCapabilities, allowed: AllowedCapabilities): string[] {
+  return [
+    listing('unexpected tools', without(loaded.tools, allowed.tools)),
+    listing('missing tools', without(allowed.tools, loaded.tools)),
+    listing('unexpected skills', without(loaded.skills, allowed.skills)),
+    listing('missing skills', without(allowed.skills, loaded.skills)),
+    listing('unexpected MCP servers', without(loaded.mcp_servers.map((server) => server.name), allowed.mcpServers)),
+    listing('unexpected subagents', loaded.agents ?? []),
+    listing('unexpected plugins', loaded.plugins.map((plugin) => plugin.name)),
+  ].filter((line) => line !== '');
+}
+
+function without(items: string[], excluded: string[]): string[] {
+  return items.filter((item) => !excluded.includes(item));
+}
+
+function listing(label: string, items: string[]): string {
+  return items.length > 0 ? `${label}: ${items.join(', ')}` : '';
+}
+
+/** A session loaded something other than exactly its allowed tools and skills. */
+export class UnapprovedCapabilities extends Error {
+  constructor(differences: string[]) {
+    super(`The agent session did not load exactly its allowed tools and skills: ${differences.join('; ')}`);
+    this.name = 'UnapprovedCapabilities';
+  }
+}
+
+/**
+ * Passes a turn's messages through, and stops the turn when a session's
+ * `init` message shows it loaded anything other than `allowed`.
+ *
+ * Raises:
+ *   UnapprovedCapabilities: after aborting `controller`, on the first `init`
+ *   message that differs from `allowed`.
+ */
+export async function* enforceCapabilities(
+  messages: AsyncIterable<SDKMessage>,
+  allowed: AllowedCapabilities,
+  controller: AbortController,
+): AsyncGenerator<SDKMessage> {
+  for await (const message of messages) {
+    if (message.type === 'system' && message.subtype === 'init') {
+      const differences = capabilityDifferences(message, allowed);
+      if (differences.length > 0) {
+        controller.abort();
+        throw new UnapprovedCapabilities(differences);
+      }
+    }
+    yield message;
+  }
+}
+
+/**
+ * The paths a file tool call names, resolved against the workspace. Glob's
+ * pattern is resolved against its search directory, so an absolute or `..`
+ * pattern counts as the path it reaches.
+ */
+function pathsInFileToolCall(toolName: string, input: unknown, workspaceDir: string): string[] {
+  const fields = (typeof input === 'object' && input !== null ? input : {}) as Record<string, unknown>;
+  const field = (name: string) => {
+    const value = fields[name];
+    return typeof value === 'string' ? value : undefined;
+  };
+  const searchDir = resolve(workspaceDir, field('path') ?? '.');
+  switch (toolName) {
+    case 'Read':
+    case 'Write':
+    case 'Edit': {
+      const filePath = field('file_path');
+      return filePath === undefined ? [] : [resolve(workspaceDir, filePath)];
+    }
+    case 'Glob': {
+      const pattern = field('pattern');
+      return pattern === undefined ? [searchDir] : [searchDir, resolve(searchDir, pattern)];
+    }
+    case 'Grep':
+      return [searchDir];
+    default:
+      return [];
+  }
+}
+
+/**
+ * The real path of `path`, or, for a path that does not exist yet, the real
+ * path of its nearest existing ancestor joined with the rest.
+ *
+ * Returns:
+ *   The path, or `undefined` when an entry exists but has no real path, such
+ *   as a link to a missing target or a link loop.
+ */
+async function realPathOf(path: string): Promise<string | undefined> {
+  try {
+    return await realpath(path);
+  } catch {
+    if (await lstat(path).then(() => true, () => false)) return undefined;
+    const parent = dirname(path);
+    if (parent === path) return path;
+    const realParent = await realPathOf(parent);
+    return realParent === undefined ? undefined : join(realParent, basename(path));
+  }
+}
+
+function isInside(root: string, path: string): boolean {
+  const rel = relative(root, path);
+  return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+}
+
+function denyToolCall(reason: string): HookJSONOutput {
+  return {
+    hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason },
+  };
+}
+
+/**
+ * A pre-tool hook that denies any file tool call naming a path outside
+ * `workspaceDir`, compared by real path so `..` and links cannot leave it.
+ * Calls to other tools pass through.
+ */
+export function confineToWorkspace(workspaceDir: string): HookCallback {
+  return async (input) => {
+    if (input.hook_event_name !== 'PreToolUse') return {};
+    const paths = pathsInFileToolCall(input.tool_name, input.tool_input, workspaceDir);
+    if (paths.length === 0) return {};
+    try {
+      const root = await realpath(workspaceDir);
+      for (const path of paths) {
+        const real = await realPathOf(path);
+        if (real === undefined || !isInside(root, real)) {
+          return denyToolCall(`${path} is outside the project workspace. Use files inside ${workspaceDir}.`);
+        }
+      }
+      return {};
+    } catch (err) {
+      return denyToolCall(`The path could not be checked: ${err instanceof Error ? err.message : String(err)}`);
+    }
   };
 }
 
@@ -320,6 +547,15 @@ export async function* mapClaudeStream(
       error: { code: 'no_result', message: 'Claude ended the turn without a result message' },
     });
   } catch (err) {
+    if (err instanceof UnapprovedCapabilities) {
+      resolveResult({
+        status: 'failed',
+        sessionId: null,
+        text: textBuf,
+        error: { code: 'agent_unrestricted', message: err.message },
+      });
+      return;
+    }
     if (isAbortedError(err, signal)) {
       resolveResult({ status: 'cancelled', sessionId: null, text: textBuf });
       return;
@@ -362,11 +598,15 @@ function createClaudeSession(req: SessionRequest, settings: ClaudeSettings): Age
         ...(sessionId ? { resume: sessionId } : {}),
         permissionMode: 'dontAsk',
         settingSources: ['project'],
+        tools: BUILT_IN_TOOLS,
+        skills: req.skills,
+        strictMcpConfig: true,
+        env: agentEnv(),
+        hooks: { PreToolUse: [{ hooks: [confineToWorkspace(req.workspaceDir)] }] },
         maxTurns: limits.maxSteps,
         maxBudgetUsd: limits.maxBudgetUsd,
         includePartialMessages: true,
         allowedTools: buildAllowedTools(req.allowedTools),
-        ...shellOptions(),
         ...modelOptions(settings),
         abortController: controller,
       };
@@ -379,7 +619,8 @@ function createClaudeSession(req: SessionRequest, settings: ClaudeSettings): Age
       // query() itself never throws synchronously (it returns an async
       // generator); a spawn failure surfaces from the first `for await` step.
       const stream = query({ prompt: buildPrompt(input), options });
-      const events = mapClaudeStream(stream, signal, resolveResult, (id) => {
+      const checked = enforceCapabilities(stream, allowedCapabilities(req), controller);
+      const events = mapClaudeStream(checked, signal, resolveResult, (id) => {
         sessionId = id;
       });
 
@@ -407,8 +648,10 @@ async function writeWorkspaceFiles(req: SessionRequest): Promise<void> {
 
   const skillsDest = join(req.workspaceDir, '.claude', 'skills');
   await rm(skillsDest, { recursive: true, force: true });
-  await mkdir(join(req.workspaceDir, '.claude'), { recursive: true });
-  await cp(req.skillsDir, skillsDest, { recursive: true });
+  await mkdir(skillsDest, { recursive: true });
+  for (const skill of req.skills) {
+    await cp(join(req.skillsDir, skill), join(skillsDest, skill), { recursive: true });
+  }
 
   const settingsPath = join(req.workspaceDir, '.claude', 'settings.json');
   await writeFile(settingsPath, JSON.stringify(WORKSPACE_SETTINGS, null, 2), 'utf8');
@@ -445,6 +688,8 @@ async function probeClaude(model: string | undefined): Promise<ProbeResult> {
         maxBudgetUsd: 0.01,
         settingSources: [],
         permissionMode: 'dontAsk',
+        strictMcpConfig: true,
+        env: agentEnv(),
         persistSession: false,
         ...modelOptions({ model }),
         abortController: controller,
@@ -517,5 +762,5 @@ export function createClaudeAgentDriver(settings: ClaudeSettings = {}): AgentDri
   };
 }
 
-// The tools layer (back-end/src/tools/) adds `options.mcpServers` in a
-// later phase; `req.tools` is unused here in V1.
+// The tools layer (back-end/src/tools/) adds `options.mcpServers` from
+// `req.tools` in a later phase; `allowedCapabilities` already expects them.
