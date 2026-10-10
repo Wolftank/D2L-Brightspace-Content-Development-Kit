@@ -249,7 +249,6 @@ describe('the session check against a recorded unrestricted session', () => {
 
     expect(differences).toEqual([
       expect.stringMatching(/^unexpected tools: .*\bTask\b.*\bWebFetch\b.*\bWebSearch\b/),
-      expect.stringMatching(/^unexpected skills: .*\bcode-review\b/),
       'missing skills: d2l-scorm-package, d2l-tenant-qa',
       expect.stringMatching(/^unexpected MCP servers: .*claude\.ai Notion/),
       expect.stringMatching(/^unexpected subagents: .*\bgeneral-purpose\b/),

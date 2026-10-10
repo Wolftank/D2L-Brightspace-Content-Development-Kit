@@ -165,16 +165,19 @@ export interface LoadedCapabilities {
 /**
  * Compares what a session loaded with what it may load.
  *
+ * Extra skills are not a difference: `init` also lists the CLI's built-in
+ * commands, some of them depending on the signed-in account, and the CLI
+ * keeps the model from invoking any skill outside `options.skills`.
+ *
  * Returns:
  *   One line per kind of difference, such as "unexpected tools: WebFetch";
- *   empty when the session loaded exactly its allowed tools and skills, no
- *   other MCP server, no subagent, and no plugin.
+ *   empty when the session loaded exactly its allowed tools, every allowed
+ *   skill, no other MCP server, no subagent, and no plugin.
  */
 export function capabilityDifferences(loaded: LoadedCapabilities, allowed: AllowedCapabilities): string[] {
   return [
     listing('unexpected tools', without(loaded.tools, allowed.tools)),
     listing('missing tools', without(allowed.tools, loaded.tools)),
-    listing('unexpected skills', without(loaded.skills, allowed.skills)),
     listing('missing skills', without(allowed.skills, loaded.skills)),
     listing('unexpected MCP servers', without(loaded.mcp_servers.map((server) => server.name), allowed.mcpServers)),
     listing('unexpected subagents', loaded.agents ?? []),
@@ -190,7 +193,7 @@ function listing(label: string, items: string[]): string {
   return items.length > 0 ? `${label}: ${items.join(', ')}` : '';
 }
 
-/** A session loaded something other than exactly its allowed tools and skills. */
+/** A session loaded a tool, MCP server, subagent, or plugin it may not, or lacks an allowed tool or skill. */
 export class UnapprovedCapabilities extends Error {
   constructor(differences: string[]) {
     super(`The agent session did not load exactly its allowed tools and skills: ${differences.join('; ')}`);
@@ -200,7 +203,7 @@ export class UnapprovedCapabilities extends Error {
 
 /**
  * Passes a turn's messages through, and stops the turn when a session's
- * `init` message shows it loaded anything other than `allowed`.
+ * `init` message differs from `allowed` (see `capabilityDifferences`).
  *
  * Raises:
  *   UnapprovedCapabilities: after aborting `controller`, on the first `init`

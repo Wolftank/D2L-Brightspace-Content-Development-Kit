@@ -218,10 +218,13 @@ describe('capabilityDifferences', () => {
     expect(await differences(() => ({}))).toEqual([]);
   });
 
+  it('finds none when the session also lists skills beyond the allowed ones', async () => {
+    expect(await differences(() => ({ skills: [...SKILLS, 'design', 'doctor'] }))).toEqual([]);
+  });
+
   const cases: Array<[string, (init: InitMessage) => Partial<InitMessage>, string]> = [
     ['an extra tool', (init) => ({ tools: [...init.tools, 'WebFetch'] }), 'unexpected tools: WebFetch'],
     ['a missing tool', (init) => ({ tools: init.tools.filter((tool) => tool !== 'Skill') }), 'missing tools: Skill'],
-    ['an extra skill', () => ({ skills: [...SKILLS, 'code-review'] }), 'unexpected skills: code-review'],
     ['a missing skill', () => ({ skills: ['d2l-scorm-package'] }), 'missing skills: d2l-tenant-qa'],
     [
       'an outside connector',
@@ -306,14 +309,11 @@ describe('enforceCapabilities', () => {
     expect(aborted).toBe(true);
   });
 
-  it('stops the agent and fails the turn when the session loaded an extra skill', async () => {
-    const { result, aborted } = await runChecked([{ ...(await initMessage()), skills: [...SKILLS, 'debug'] }, RESULT]);
+  it('runs a turn whose session also lists the CLI\'s built-in skills', async () => {
+    const { result, aborted } = await runChecked([{ ...(await initMessage()), skills: [...SKILLS, 'design', 'doctor'] }, RESULT]);
 
-    expect(result).toMatchObject({
-      status: 'failed',
-      error: { code: 'agent_unrestricted', message: expect.stringContaining('unexpected skills: debug') },
-    });
-    expect(aborted).toBe(true);
+    expect(result).toMatchObject({ status: 'completed', text: 'Done.' });
+    expect(aborted).toBe(false);
   });
 });
 

@@ -194,7 +194,7 @@ describe('ClaudeAgentDriver, live SDK, in a provisioned SCORM workspace', () => 
     return { project, workspaces, workspaceDir, session };
   }
 
-  it('loads exactly the allowed tools and the SCORM skills, or the turn would fail with agent_unrestricted', async () => {
+  it('passes the session check with the allowed tools and the SCORM skills, or the turn would fail with agent_unrestricted', async () => {
     const { session } = await openProject();
 
     const turn = session.send(
