@@ -18,9 +18,9 @@ function report(status: string, overrides: MessageEventInit = {}, reason?: strin
 }
 
 describe('PreviewPanel', () => {
-  it('loads the selected version in an isolated, titled frame and focuses the heading', () => {
-    render(<PreviewPanel build={{ id: 'saved-3', version: 3 }} onClose={vi.fn()} />);
-    expect(screen.getByRole('heading')).toHaveFocus();
+  it('loads the latest ready version in an isolated, titled frame', () => {
+    render(<PreviewPanel build={{ id: 'saved-3', version: 3 }} />);
+    expect(screen.getByRole('heading')).not.toHaveFocus();
     expect(screen.getByText('Local preview — results are not sent to Brightspace.')).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Loading preview');
     expect(new URL(frame().src).searchParams.get('buildId')).toBe('saved-3');
@@ -32,7 +32,7 @@ describe('PreviewPanel', () => {
   });
 
   it('ignores messages from another origin, window, build or attempt', () => {
-    render(<PreviewPanel build={{ id: 'saved-3', version: 3 }} onClose={vi.fn()} />);
+    render(<PreviewPanel build={{ id: 'saved-3', version: 3 }} />);
     report('ready', { origin: window.location.origin });
     report('ready', { source: window });
     report('ready', { data: { type: 'cdk-preview', status: 'ready', buildId: 'other' } });
@@ -41,7 +41,7 @@ describe('PreviewPanel', () => {
   });
 
   it('restarts with a new frame and attempt, preserving the selected build', () => {
-    render(<PreviewPanel build={{ id: 'saved-3', version: 3 }} onClose={vi.fn()} />);
+    render(<PreviewPanel build={{ id: 'saved-3', version: 3 }} />);
     const previous = frame();
     const url = previous.src;
     report('ready');
@@ -53,7 +53,7 @@ describe('PreviewPanel', () => {
   });
 
   it.each(['unavailable', 'launch'])('offers retry after %s failure', (reason) => {
-    render(<PreviewPanel build={{ id: 'saved-3', version: 3 }} onClose={vi.fn()} />);
+    render(<PreviewPanel build={{ id: 'saved-3', version: 3 }} />);
     const previous = frame();
     report('error', {}, reason);
     expect(screen.getByRole('alert')).toHaveTextContent(reason === 'unavailable' ? 'saved build is unavailable' : 'could not be opened');
@@ -64,20 +64,17 @@ describe('PreviewPanel', () => {
 
   it('times out an unreachable service and cleans up on unmount', () => {
     vi.useFakeTimers();
-    const { unmount } = render(<PreviewPanel build={{ id: 'saved-3', version: 3 }} onClose={vi.fn()} />);
+    const { unmount } = render(<PreviewPanel build={{ id: 'saved-3', version: 3 }} />);
     act(() => vi.advanceTimersByTime(20_000));
     expect(screen.getByRole('alert')).toHaveTextContent('could not be opened');
     unmount();
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('calls close and handles missing configuration', () => {
+  it('handles missing configuration', () => {
     vi.stubEnv('VITE_PREVIEW_ORIGIN', '');
-    const close = vi.fn();
-    render(<PreviewPanel build={{ id: 'saved-3', version: 3 }} onClose={close} />);
+    render(<PreviewPanel build={{ id: 'saved-3', version: 3 }} />);
     expect(screen.getByRole('alert')).toHaveTextContent('has not been configured');
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-    expect(close).toHaveBeenCalledOnce();
   });
 
   it('refuses a player hosted on the application origin', () => {

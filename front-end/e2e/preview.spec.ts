@@ -5,11 +5,11 @@ async function buildActivity(page: Page) {
   await page.goto('/');
   await page.getByLabel('Project title').fill('Preview fixture');
   await page.getByLabel('What should students learn or do?').fill('Create a sample activity.');
-  await page.getByRole('button', { name: 'Build activity' }).click();
-  await expect(page.getByRole('button', { name: 'Preview', exact: true })).toBeVisible({ timeout: 15_000 });
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect(page.getByTitle('Interactive preview of build 1')).toBeVisible({ timeout: 15_000 });
 }
 
-test('saved starter runs in Student mode, restarts, keeps its version and returns focus', async ({ page, request }, testInfo) => {
+test('saved starter runs in Student mode, restarts, switches versions and stays isolated', async ({ page, request }, testInfo) => {
   test.setTimeout(60_000);
   await page.setViewportSize({ width: 1024, height: 900 });
   await buildActivity(page);
@@ -22,11 +22,8 @@ test('saved starter runs in Student mode, restarts, keeps its version and return
   expect(await (await request.get(`${savedPreview}index.html`)).body()).toEqual(readFileSync(new URL('../stub/fixtures/preview/index.html', import.meta.url)));
   expect((await request.get(`${savedPreview}%2e%2e%2fserver.ts`)).status()).toBe(404);
   expect((await request.get('http://127.0.0.1:3002/api/builds/missing/preview/index.html')).status()).toBe(404);
-  const preview = page.getByRole('button', { name: 'Preview', exact: true });
-  await preview.focus();
-  await page.keyboard.press('Enter');
-  await expect(page.getByRole('heading', { name: 'Preview — Build 1' })).toBeFocused();
-  await expect(page.getByRole('region', { name: 'Preview — Build 1' }).getByRole('status')).toHaveText('Preview ready.');
+  await expect(page.getByLabel('Describe a change')).toBeFocused();
+  await expect(page.getByRole('region', { name: 'Preview · Version 1' }).getByRole('status')).toHaveText('Preview ready.');
   const wrapper = page.frameLocator('iframe[title="Interactive preview of build 1"]');
   const activity = wrapper.frameLocator('#activity');
   await expect(activity.getByRole('heading', { name: 'Sample SCORM activity' })).toBeVisible();
@@ -50,25 +47,18 @@ test('saved starter runs in Student mode, restarts, keeps its version and return
   await page.keyboard.press('Enter');
   await expect(activity.locator('#score')).toHaveText('0 of 3 answered');
   await expect(activity.getByRole('button', { name: 'Submit', exact: true })).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Build activity', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
   const selectedUrl = await page.getByTitle('Interactive preview of build 1').getAttribute('src');
-  await page.getByLabel('What should students learn or do?').fill('Create the next version.');
-  await page.getByRole('button', { name: 'Build activity', exact: true }).click();
-  await expect(preview).toBeVisible({ timeout: 15_000 });
+  await page.getByLabel('Describe a change').fill('Create the next version.');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(page.locator('.build-result .result-label')).toHaveText('BUILD 2', { timeout: 15_000 });
-  await expect(preview).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole('link', { name: 'Download SCORM package' })).not.toHaveAttribute('href', downloadUrl!);
-  await expect(page.getByRole('heading', { name: 'Preview — Build 1' })).toBeVisible();
-  await expect(page.getByTitle('Interactive preview of build 1')).toHaveAttribute('src', selectedUrl!);
-  await preview.click();
+  await expect(page.getByTitle('Interactive preview of build 1')).toHaveCount(0);
   await expect(page.getByTitle('Interactive preview of build 2')).not.toHaveAttribute('src', selectedUrl!);
   await expect(page.getByTitle('Interactive preview of build 2')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('preview-1024.png'), fullPage: true });
-  await page.getByRole('button', { name: 'Close', exact: true }).focus();
-  await page.keyboard.press('Enter');
-  await expect(preview).toBeFocused();
-  await expect(page.locator('iframe')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Close', exact: true })).toHaveCount(0);
   expect(await (await request.get(`/api/builds/${buildId}`)).json()).toEqual(before);
   expect(await (await request.get(downloadUrl!)).body()).toEqual(packageBefore);
 });
@@ -77,7 +67,7 @@ test('unavailable builds and launch failures offer retry', async ({ page }) => {
   await buildActivity(page);
   const launchPattern = '**:3002/api/builds/*/preview/index.html';
   await page.route(launchPattern, (route) => route.fulfill({ status: 404 }));
-  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await page.getByRole('button', { name: 'Restart preview' }).click();
   await expect(page.getByRole('alert')).toContainText('saved build is unavailable');
   await page.unroute(launchPattern);
   await page.route('**:3002/preview/tenant-profile.json', (route) => route.fulfill({ status: 500 }));
@@ -85,5 +75,5 @@ test('unavailable builds and launch failures offer retry', async ({ page }) => {
   await expect(page.getByRole('alert')).toContainText('activity could not be opened');
   await page.unroute('**:3002/preview/tenant-profile.json');
   await page.getByRole('button', { name: 'Retry preview' }).click();
-  await expect(page.getByRole('region', { name: /^Preview — Build/ }).getByRole('status')).toHaveText('Preview ready.');
+  await expect(page.getByRole('region', { name: /^Preview · Version/ }).getByRole('status')).toHaveText('Preview ready.');
 });

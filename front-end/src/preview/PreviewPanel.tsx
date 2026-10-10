@@ -5,21 +5,16 @@ import './preview.css';
 
 type Selection = Pick<Build, 'id' | 'version'>;
 
-export function PreviewPanel({ build, onClose }: { build: Selection; onClose: () => void }) {
+export function PreviewPanel({ build }: { build: Selection | null }) {
   const [attempt, setAttempt] = useState(0);
-  const heading = useRef<HTMLHeadingElement>(null);
-  useEffect(() => { heading.current?.focus(); }, []);
-
-  return <section className="preview-panel" aria-labelledby="preview-title">
+  return <section className="card preview-panel" aria-labelledby="preview-title" tabIndex={0}>
     <div className="preview-header">
-      <div><h2 id="preview-title" ref={heading} tabIndex={-1}>Preview — Build {build.version}</h2>
+      <div><p className="eyebrow">03 / PREVIEW</p><h2 id="preview-title">{build ? 'Preview · Version ' + build.version : 'Preview'}</h2>
         <p>Local preview — results are not sent to Brightspace.</p></div>
-      <div className="preview-controls">
-        <button type="button" onClick={() => setAttempt((value) => value + 1)}>Restart preview</button>
-        <button type="button" onClick={onClose}>Close</button>
-      </div>
+      {build && <button type="button" onClick={() => setAttempt(value => value + 1)}>Restart preview</button>}
     </div>
-    <PreviewAttempt key={`${build.id}:${attempt}`} build={build} onRetry={() => setAttempt((value) => value + 1)} />
+    {build ? <PreviewAttempt key={build.id + ':' + attempt} build={build} onRetry={() => setAttempt(value => value + 1)} /> :
+      <p className="preview-placeholder">Your activity will appear here when the first build is ready.</p>}
   </section>;
 }
 

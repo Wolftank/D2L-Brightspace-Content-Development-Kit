@@ -5,13 +5,16 @@ test('silent turn keeps its step and real elapsed time after reload and replay i
   await page.goto('/');
   await page.getByLabel('Project title').fill('Long silent turn');
   await page.getByLabel('What should students learn or do?').fill('[long-step] Create a quiz');
-  await page.getByRole('button', { name: 'Build activity' }).click();
+  await page.getByRole('button', { name: 'Send' }).click();
   const indicator = page.getByLabel('Request progress');
   await expect(indicator).toContainText('Building from the SCORM starter');
   const project = await page.evaluate(() => sessionStorage.getItem('active-project'));
   await page.waitForTimeout(3100);
   const elapsed = await page.getByLabel('Elapsed time').textContent();
+  await page.getByLabel('Describe a change').fill('Make it shorter next.');
   await page.reload();
+  await expect(page.getByLabel('Describe a change')).toHaveValue('Make it shorter next.');
+  await expect(page.getByLabel('Conversation history').getByRole('article')).toHaveCount(1);
   await expect(indicator).toContainText('Building from the SCORM starter');
   const seconds = (value: string | null) => value!.split(':').reduce((minutes, part) => minutes * 60 + Number(part), 0);
   expect(seconds(await page.getByLabel('Elapsed time').textContent())).toBeGreaterThanOrEqual(seconds(elapsed));

@@ -1,10 +1,4 @@
-/**
- * Stand-in for the back end while the real routes are built. Serves the six V1
- * endpoints plus /api/health and /api/me with the shapes from docs/architecture.md,
- * and plays a scripted turn on the event stream.
- *
- * Deleted in the PR that lands B12.
- */
+/** Serves the development API, scripted turns, and emulator previews. */
 import { randomUUID } from 'node:crypto';
 import { previewZip, startPreviewServer } from './preview';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -50,6 +44,7 @@ interface ProjectState {
   events: StoredEvent[];
   subscribers: Set<(event: StoredEvent) => void>;
   activeTurn: Turn | null;
+  turns: Map<string, Turn>;
 }
 
 const projects = new Map<string, ProjectState>();
@@ -146,6 +141,9 @@ const REPLY_CHUNKS = [
 /** Plays one turn's events over about seven seconds. */
 function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
   const { project } = state;
+  const replyChunks = scenario === 'qa-fail'
+    ? ['I built the activity, but the QA gate found an issue. Tell me what you would like to change and I can revise it.']
+    : state.builds.length > 0 ? ['I updated your activity with your requested changes. The new version is ready to preview and download.'] : REPLY_CHUNKS;
   const replyId = randomUUID();
   const callId = randomUUID();
   let build: Build | null = null;
@@ -161,7 +159,7 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
     ],
     [400, () => append(state, 'turn.status', { turnId: turn.id, text: 'Reading your request' })],
     [1200, () => append(state, 'turn.status', { turnId: turn.id, text: 'Building from the SCORM starter' })],
-    ...REPLY_CHUNKS.map(
+    ...replyChunks.map(
       (text, index): [number, () => void] => [
         2000 + index * 400,
         () => append(state, 'message.delta', { turnId: turn.id, messageId: replyId, text }),
@@ -231,7 +229,7 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
       [
         6600,
         () => {
-          const content: ContentBlock[] = [{ type: 'text', text: REPLY_CHUNKS.join('') }];
+          const content: ContentBlock[] = [{ type: 'text', text: replyChunks.join('') }];
           if (build) content.push({ type: 'build_ref', buildId: build.id });
           const message: Message = {
             id: replyId,
@@ -298,6 +296,7 @@ function createProject(body: unknown): CreateProjectResponse {
     events: [],
     subscribers: new Set(),
     activeTurn: null,
+    turns: new Map(),
   });
   return { project };
 }
@@ -343,6 +342,7 @@ function sendMessage(state: ProjectState, body: unknown): SendMessageResponse {
   message.turnId = turn.id;
   state.messages.push(message);
   state.activeTurn = turn;
+  state.turns.set(turn.id, turn);
   runTurn(state, turn, scenarioFor(textOf(message.content)));
   return { message, turn };
 }
@@ -404,6 +404,12 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (resource === 'projects') {
     if (method === 'POST' && !id) return sendJson(res, 201, createProject(await readJson(req)));
     if (id && !sub && method === 'GET') return sendJson(res, 200, projectView(getProject(id)));
+    if (id && sub === 'messages' && method === 'GET') {
+      const state = getProject(id);
+      return sendJson(res, 200, { items: state.messages.map(message => ({ ...message,
+        ...(message.role === 'instructor' && message.turnId ? { turn: state.turns.get(message.turnId) } : {}),
+      })) });
+    }
     if (id && sub === 'messages' && method === 'POST') {
       return sendJson(res, 202, sendMessage(getProject(id), await readJson(req)));
     }
