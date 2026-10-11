@@ -17,6 +17,7 @@ const ERROR_MESSAGES: Record<RunnerErrorCode, string> = {
   agent_signed_out: "The agent isn't signed in, or its account can't be used. Sign in to the agent, then send the request again.",
   agent_billing: "The agent's account has a billing or account problem. Check the account, then send the request again.",
   agent_busy: "The agent's account is busy or has reached its usage limit. Try again later.",
+  agent_unrestricted: "The agent started with tools or skills CDK doesn't allow, so the request was stopped before it ran.",
   max_steps_exceeded: 'The request needed more steps than allowed. Try a smaller request.',
   max_budget_exceeded: 'The request reached its spending limit. Try a smaller request.',
   no_result: 'The agent stopped unexpectedly before it finished. Send the request again.',
