@@ -53,6 +53,11 @@ function fakeDeps(): Deps {
         throw new Error('not used by these tests');
       },
     },
+    messages: {
+      list: () => {
+        throw new Error('not used by these tests');
+      },
+    },
     driver: {
       name: 'claude',
       probe: async () => ({ ok: true, version: '0.0.0' }),

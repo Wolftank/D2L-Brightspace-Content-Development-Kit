@@ -61,6 +61,11 @@ describe('preview origin', () => {
           throw new Error('not used by these tests');
         },
       },
+      messages: {
+        list: () => {
+          throw new Error('not used by these tests');
+        },
+      },
       driver: { name: 'claude', probe: async () => ({ ok: true }) },
       preview: { origin: `http://${PREVIEW_HOST}`, appOrigin: APP_ORIGIN },
     };

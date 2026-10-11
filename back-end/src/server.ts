@@ -14,6 +14,7 @@ import { createEventService } from './pipeline/events.js';
 import { createRunner, type Runner } from './pipeline/runner.js';
 import { createSessionService } from './pipeline/sessions.js';
 import { createBuildService, type BuildService } from './services/builds.js';
+import { createMessageService } from './services/messages.js';
 import { createProjectService } from './services/projects.js';
 import { createTurnService } from './services/turns.js';
 import { createWorkspaceService } from './services/workspaces.js';
@@ -23,6 +24,7 @@ function buildDeps(cfg: Config): { deps: Deps; runner: Runner; builds: BuildServ
   const projectsRepo = createProjectsRepo(db);
   const buildsRepo = createBuildsRepo(db);
   const turnsRepo = createTurnsRepo(db);
+  const messagesRepo = createMessagesRepo(db);
   const events = createEventService(createEventsRepo(db));
   const workspaces = createWorkspaceService({ dataDir: cfg.dataDir });
   const builds = createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces, events });
@@ -30,7 +32,7 @@ function buildDeps(cfg: Config): { deps: Deps; runner: Runner; builds: BuildServ
 
   const runner = createRunner({
     turns: turnsRepo,
-    messages: createMessagesRepo(db),
+    messages: messagesRepo,
     events,
     sessions: createSessionService({ projects: projectsRepo, workspaces, driver }),
     workspaces,
@@ -41,6 +43,7 @@ function buildDeps(cfg: Config): { deps: Deps; runner: Runner; builds: BuildServ
     users: createUsersRepo(db),
     projects: createProjectService({ projects: projectsRepo, workspaces, builds: buildsRepo, turns: turnsRepo }),
     turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, runner }),
+    messages: createMessageService({ projects: projectsRepo, messages: messagesRepo }),
     builds,
     events,
     driver,
