@@ -39,6 +39,8 @@ Copy-Item .env.example .env
 | `AGENT_DRIVER` | `claude` | The agent that runs turns. Supported: `claude` |
 | `AGENT_MODEL` | the agent's default for the account | A model name, such as `claude-sonnet-5`. The agent checks the name on each turn and on `GET /api/me`, not at startup |
 | `AGENT_EFFORT` | the agent's default | `low`, `medium`, `high`, `xhigh`, or `max` |
+| `AGENT_MAX_STEPS` | `60` | The most model calls one request may make: a whole number, 1 or more. A request that needs more stops with a plain message. `.env.example` explains the default |
+| `AGENT_MAX_BUDGET_USD` | `10` | The most one request may spend, in US dollars: a number greater than 0, such as `2.5`. Claude applies it to the cost it reports at API prices, even when the account is billed by subscription; an agent that reports no cost is not limited by it |
 | `PORT` | `3000` | A whole number from 1 to 65535. When you change it, start the front end with `API_TARGET=http://127.0.0.1:<port>` |
 | `DATA_DIR` | `%LOCALAPPDATA%\CDK` on Windows, `~/.cdk` elsewhere | Where the database, workspaces, and builds are stored. A relative path is resolved against `back-end/` |
 | `APP_ORIGIN` | `http://127.0.0.1:5173` | The origin the app is opened at, and the only one allowed to frame build previews: an http or https origin with no path. The default is the Vite dev server; set it to the back end's own origin when it serves the built app |

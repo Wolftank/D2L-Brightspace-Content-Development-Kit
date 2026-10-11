@@ -1,10 +1,4 @@
-/**
- * Stand-in for the back end while the real routes are built. Serves the six V1
- * endpoints plus /api/health and /api/me with the shapes from docs/architecture.md,
- * and plays a scripted turn on the event stream.
- *
- * Deleted in the PR that lands B12.
- */
+/** Serves the development API, scripted turns, and emulator previews. */
 import { randomUUID } from 'node:crypto';
 import { previewZip, startPreviewServer } from './preview';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -35,7 +29,7 @@ const KEEPALIVE_MS = 15_000;
 
 const user: User = { id: 'stub-user', displayName: 'Stub Instructor', email: null, role: 'instructor' };
 
-type Scenario = 'ok' | 'qa-fail' | 'turn-fail' | 'long-step' | 'long-feed';
+type Scenario = 'ok' | 'qa-fail' | 'turn-fail' | 'long-step' | 'long-feed' | 'multi-message';
 
 interface StoredEvent {
   seq: number;
@@ -50,6 +44,7 @@ interface ProjectState {
   events: StoredEvent[];
   subscribers: Set<(event: StoredEvent) => void>;
   activeTurn: Turn | null;
+  turns: Map<string, Turn>;
 }
 
 const projects = new Map<string, ProjectState>();
@@ -112,6 +107,7 @@ function textOf(content: ContentBlock[]): string {
 }
 
 function scenarioFor(text: string): Scenario {
+  if (text.includes('[multi-message]')) return 'multi-message';
   if (text.includes('[long-feed]')) return 'long-feed';
   if (text.includes('[long-step]')) return 'long-step';
   if (text.includes('[turn-fail]')) return 'turn-fail';
@@ -146,7 +142,13 @@ const REPLY_CHUNKS = [
 /** Plays one turn's events over about seven seconds. */
 function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
   const { project } = state;
+  const replyChunks = scenario === 'multi-message'
+    ? ['I will update the activity. ', 'Then I will check it with the QA gate.']
+    : scenario === 'qa-fail'
+    ? ['I built the activity, but the QA gate found an issue. Tell me what you would like to change and I can revise it.']
+    : state.builds.length > 0 ? ['I updated your activity with your requested changes. The new version is ready to preview and download.'] : REPLY_CHUNKS;
   const replyId = randomUUID();
+  const initialReplyId = scenario === 'multi-message' ? randomUUID() : replyId;
   const callId = randomUUID();
   let build: Build | null = null;
 
@@ -161,10 +163,10 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
     ],
     [400, () => append(state, 'turn.status', { turnId: turn.id, text: 'Reading your request' })],
     [1200, () => append(state, 'turn.status', { turnId: turn.id, text: 'Building from the SCORM starter' })],
-    ...REPLY_CHUNKS.map(
+    ...replyChunks.map(
       (text, index): [number, () => void] => [
         2000 + index * 400,
-        () => append(state, 'message.delta', { turnId: turn.id, messageId: replyId, text }),
+        () => append(state, 'message.delta', { turnId: turn.id, messageId: initialReplyId, text }),
       ],
     ),
     [
@@ -172,6 +174,20 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
       () => append(state, 'tool.started', { turnId: turn.id, callId, name: 'Bash', summary: 'Running the QA gate' }),
     ],
   ];
+
+  if (scenario === 'multi-message') {
+    steps.push([3600, () => {
+      const message: Message = {
+        id: initialReplyId, projectId: project.id, seq: state.messages.length + 1,
+        role: 'agent', content: [{ type: 'text', text: replyChunks.join('') }], turnId: turn.id, createdAt: Date.now(),
+      };
+      state.messages.push(message);
+      append(state, 'message.completed', { message });
+    }]);
+    steps.push([4900, () => append(state, 'message.delta', {
+      turnId: turn.id, messageId: replyId, text: 'The activity is ready to preview and download.',
+    })]);
+  }
 
   if (scenario === 'turn-fail') {
     steps.push([
@@ -185,7 +201,7 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
       },
     ]);
   } else {
-    const passed = scenario === 'ok' || scenario === 'long-step' || scenario === 'long-feed';
+    const passed = scenario === 'ok' || scenario === 'long-step' || scenario === 'long-feed' || scenario === 'multi-message';
     steps.push(
       [
         4800,
@@ -231,7 +247,7 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
       [
         6600,
         () => {
-          const content: ContentBlock[] = [{ type: 'text', text: REPLY_CHUNKS.join('') }];
+          const content: ContentBlock[] = [{ type: 'text', text: scenario === 'multi-message' ? 'The activity is ready to preview and download.' : replyChunks.join('') }];
           if (build) content.push({ type: 'build_ref', buildId: build.id });
           const message: Message = {
             id: replyId,
@@ -298,6 +314,7 @@ function createProject(body: unknown): CreateProjectResponse {
     events: [],
     subscribers: new Set(),
     activeTurn: null,
+    turns: new Map(),
   });
   return { project };
 }
@@ -343,6 +360,7 @@ function sendMessage(state: ProjectState, body: unknown): SendMessageResponse {
   message.turnId = turn.id;
   state.messages.push(message);
   state.activeTurn = turn;
+  state.turns.set(turn.id, turn);
   runTurn(state, turn, scenarioFor(textOf(message.content)));
   return { message, turn };
 }
@@ -404,6 +422,12 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (resource === 'projects') {
     if (method === 'POST' && !id) return sendJson(res, 201, createProject(await readJson(req)));
     if (id && !sub && method === 'GET') return sendJson(res, 200, projectView(getProject(id)));
+    if (id && sub === 'messages' && method === 'GET') {
+      const state = getProject(id);
+      return sendJson(res, 200, { items: state.messages.map(message => ({ ...message,
+        ...(message.role === 'instructor' && message.turnId ? { turn: state.turns.get(message.turnId) } : {}),
+      })) });
+    }
     if (id && sub === 'messages' && method === 'POST') {
       return sendJson(res, 202, sendMessage(getProject(id), await readJson(req)));
     }

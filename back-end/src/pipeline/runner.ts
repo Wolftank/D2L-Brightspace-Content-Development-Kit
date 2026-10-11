@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { EventKind, EventPayloads } from '@cdk/contract';
-import type { AgentEvent, AgentSession, TurnErrorCode, TurnInput, TurnResult } from '../agent/AgentDriver.js';
+import type { AgentEvent, AgentSession, TurnErrorCode, TurnInput, TurnLimits, TurnResult } from '../agent/AgentDriver.js';
 import type { MessagesRepo } from '../db/messages.js';
 import type { Turn } from '../db/schema.js';
 import type { FinishedTurnDetails, FinishTurnInput, RunningTurn, TurnsRepo } from '../db/turns.js';
@@ -18,6 +18,7 @@ const ERROR_MESSAGES: Record<RunnerErrorCode, string> = {
   agent_signed_out: "The agent isn't signed in, or its account can't be used. Sign in to the agent, then send the request again.",
   agent_billing: "The agent's account has a billing or account problem. Check the account, then send the request again.",
   agent_busy: "The agent's account is busy or has reached its usage limit. Try again later.",
+  agent_unrestricted: "The agent started with tools or skills CDK doesn't allow, so the request was stopped before it ran.",
   max_steps_exceeded: 'The request needed more steps than allowed. Try a smaller request.',
   max_budget_exceeded: 'The request reached its spending limit. Try a smaller request.',
   no_result: 'The agent stopped unexpectedly before it finished. Send the request again.',
@@ -34,6 +35,8 @@ export interface RunnerDeps {
   sessions: SessionService;
   workspaces: Pick<WorkspaceService, 'hashOutput'>;
   builds: Pick<BuildService, 'create' | 'latest'>;
+  /** The caps on every turn. */
+  turnLimits: TurnLimits;
 }
 
 /** Runs instructor requests through the agent, one turn at a time per project. */
@@ -61,10 +64,14 @@ interface StatusFeed {
   failUnfinished(): void;
 }
 
+interface StreamedReply {
+  id: string;
+  text: string;
+}
+
 interface Conversation {
   result: TurnResult;
-  /** Every text delta the agent streamed, joined. */
-  streamed: string;
+  replies: StreamedReply[];
 }
 
 export function createRunner(deps: RunnerDeps): Runner {
@@ -122,6 +129,8 @@ export function createRunner(deps: RunnerDeps): Runner {
 
   function progress(turn: Turn, replyId: string, event: AgentEvent, feed: StatusFeed): void {
     switch (event.kind) {
+      case 'message_start':
+        return;
       case 'text_delta':
         append(turn, 'message.delta', { turnId: turn.id, messageId: replyId, text: event.text });
         return;
@@ -141,15 +150,19 @@ export function createRunner(deps: RunnerDeps): Runner {
   /** Sends the request and reports the agent's progress, failing any tool call left unfinished when the agent's events end. On a thrown error the turn's agent work is aborted. */
   async function converse(turn: Turn, session: AgentSession, input: TurnInput, replyId: string, feed: StatusFeed): Promise<Conversation> {
     const controller = new AbortController();
-    let streamed = '';
+    const replies: StreamedReply[] = [{ id: replyId, text: '' }];
     try {
-      const agentTurn = session.send(input, {}, controller.signal);
+      const agentTurn = session.send(input, deps.turnLimits, controller.signal);
       for await (const event of agentTurn.events) {
-        if (event.kind === 'text_delta') streamed += event.text;
-        progress(turn, replyId, event, feed);
+        if (event.kind === 'message_start' && replies.at(-1)!.text !== '') {
+          replies.push({ id: randomUUID(), text: '' });
+        }
+        const current = replies.at(-1)!;
+        if (event.kind === 'text_delta') current.text += event.text;
+        progress(turn, current.id, event, feed);
       }
       feed.failUnfinished();
-      return { result: await agentTurn.result, streamed };
+      return { result: await agentTurn.result, replies };
     } catch (err) {
       controller.abort();
       throw err;
@@ -187,9 +200,9 @@ export function createRunner(deps: RunnerDeps): Runner {
     append(turn, 'turn.started', { turnId: turn.id, startedAt: turn.startedAt });
     const startHash = await deps.workspaces.hashOutput(turn.projectId);
     const input = instructorInput(turn);
-    const replyId = randomUUID();
+    let replyId: string = randomUUID();
     const feed = statusFeed(turn);
-    const { result, streamed } = await converseInSession(turn, input, replyId, feed);
+    const { result, replies } = await converseInSession(turn, input, replyId, feed);
 
     if (result.status === 'cancelled') return { status: 'cancelled', usage: result.usage };
     if (result.status === 'failed') {
@@ -197,16 +210,26 @@ export function createRunner(deps: RunnerDeps): Runner {
       return failure(turn, error.code, error.message, { usage: result.usage });
     }
 
-    const text = result.text.trim() === '' ? streamed : result.text;
-    const reply = deps.messages.create({
-      id: replyId,
-      projectId: turn.projectId,
-      role: 'agent',
-      content: [{ type: 'text', text }],
-      turnId: turn.id,
-    });
+    const finalReply = replies.at(-1)!;
+    if (result.text.trim() !== '') finalReply.text = result.text;
+    const savedReplies = replies.filter(reply => reply.text.trim() !== '');
+    if (savedReplies.length === 0) savedReplies.push(finalReply);
+    for (const streamedReply of savedReplies) {
+      replyId = streamedReply.id;
+      const reply = deps.messages.create({
+        id: replyId,
+        projectId: turn.projectId,
+        role: 'agent',
+        content: [{ type: 'text', text: streamedReply.text }],
+        turnId: turn.id,
+      });
+      try {
+        append(turn, 'message.completed', { message: reply });
+      } catch (err) {
+        return failure(turn, thrownCode(err), err, { usage: result.usage, replyId });
+      }
+    }
     try {
-      append(turn, 'message.completed', { message: reply });
       await buildIfChanged(turn, startHash, feed);
     } catch (err) {
       return failure(turn, thrownCode(err), err, { usage: result.usage, replyId });

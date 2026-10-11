@@ -18,6 +18,8 @@ const INSTRUCTOR_MESSAGE: Message = {
   createdAt: 1,
 };
 
+const TURN_LIMITS = { maxSteps: 60, maxBudgetUsd: 10 };
+
 const COMPLETED: TurnResult = {
   status: 'completed',
   sessionId: 'session-1',
@@ -105,6 +107,7 @@ function setup(options: { session?: AgentSession; hashes?: string[] } = {}) {
       latest: vi.fn((): ApiBuild | undefined => undefined),
       create: vi.fn(async (projectId: string, turnId?: string) => ({ projectId, turnId, status: 'ready' }) as ApiBuild),
     },
+    turnLimits: TURN_LIMITS,
   } satisfies RunnerDeps;
 
   const kinds = () => appended.map((event) => event.kind);
@@ -147,7 +150,7 @@ describe('runner', () => {
     ]);
     expect(session.send).toHaveBeenCalledWith(
       { text: 'Build a self-check on mitosis', attachments: [] },
-      {},
+      TURN_LIMITS,
       expect.any(AbortSignal),
     );
 
@@ -272,6 +275,47 @@ describe('runner', () => {
 
     expect(finished[0]!.input.status).toBe('completed');
     expect(kinds().at(-1)).toBe('turn.completed');
+  });
+
+  it('keeps distinct assistant messages around tool calls and links the final reply', async () => {
+    const { session } = scriptedSession([
+      { kind: 'message_start' },
+      { kind: 'text_delta', text: 'I will ' },
+      { kind: 'text_delta', text: 'edit the activity.' },
+      { kind: 'tool_start', callId: 'edit', name: 'Edit', summary: 'Editing index.html' },
+      { kind: 'tool_end', callId: 'edit', ok: true },
+      { kind: 'message_start' },
+      { kind: 'text_delta', text: 'The activity is ready.' },
+    ], { ...COMPLETED, text: 'The activity is ready.' });
+    const { runner, replies, payloadsOf, finished } = setup({ session });
+    await runner.executeTurn('turn-1');
+    expect(replies.map(reply => reply.content)).toEqual([
+      [{ type: 'text', text: 'I will edit the activity.' }],
+      [{ type: 'text', text: 'The activity is ready.' }],
+    ]);
+    expect(new Set(replies.map(reply => reply.id)).size).toBe(2);
+    expect(payloadsOf('message.delta')).toEqual([
+      { turnId: 'turn-1', messageId: replies[0]!.id, text: 'I will ' },
+      { turnId: 'turn-1', messageId: replies[0]!.id, text: 'edit the activity.' },
+      { turnId: 'turn-1', messageId: replies[1]!.id, text: 'The activity is ready.' },
+    ]);
+    expect(payloadsOf('message.completed')).toHaveLength(2);
+    expect(finished[0]!.input.replyId).toBe(replies[1]!.id);
+  });
+
+  it('does not create empty bubbles for tool-only assistant messages', async () => {
+    const { session } = scriptedSession([
+      { kind: 'message_start' },
+      { kind: 'message_start' },
+      { kind: 'tool_start', callId: 'read', name: 'Read', summary: 'Reading index.html' },
+      { kind: 'tool_end', callId: 'read', ok: true },
+      { kind: 'message_start' },
+      { kind: 'text_delta', text: 'Ready.' },
+    ], { ...COMPLETED, text: '' });
+    const { runner, replies } = setup({ session });
+    await runner.executeTurn('turn-1');
+    expect(replies).toHaveLength(1);
+    expect(replies[0]!.content).toEqual([{ type: 'text', text: 'Ready.' }]);
   });
 
   it('stores the streamed text as the reply when the final message is empty', async () => {

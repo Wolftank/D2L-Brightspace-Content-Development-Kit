@@ -5,14 +5,6 @@ import JSZip from 'jszip';
 /** A stub turn takes about seven seconds from submit to `turn.completed`. */
 const TURN_TIMEOUT = 15_000;
 
-const PASSED_TURN_LINES = [
-  'Starting your build',
-  'Reading your request',
-  'Building from the SCORM starter',
-  'Running the QA gate',
-  'Build complete',
-];
-
 const QA_FINDING_EXPLANATIONS = [
   'lesson_status is set to "completed" during load; D2L will lock the learner out after one attempt.',
   'suspend_data can exceed 4000 characters; the tenant discards writes over 4096.',
@@ -22,7 +14,7 @@ async function submitRequest(page: Page, request: string) {
   await page.goto('/');
   await page.getByLabel('Project title').fill('Cell division practice');
   await page.getByLabel('What should students learn or do?').fill(request);
-  await page.getByRole('button', { name: 'Build activity' }).click();
+  await page.getByRole('button', { name: 'Send' }).click();
 }
 
 function statusLines(page: Page) {
@@ -36,7 +28,7 @@ function buildCard(page: Page, heading: string) {
 test('happy path: the status feed updates and the build is ready to download', async ({ page }) => {
   await submitRequest(page, 'Create a ten-question multiple-choice practice set on cell division.');
 
-  await expect(page.getByRole('button', { name: 'Building…' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Send' })).toBeDisabled();
   await expect(statusLines(page).first()).toHaveText('Starting your build');
   await expect(statusLines(page).filter({ hasText: 'Building from the SCORM starter' })).toBeVisible();
 
@@ -45,8 +37,9 @@ test('happy path: the status feed updates and the build is ready to download', a
   await expect(card).toContainText('BUILD 1');
   await expect(card).toContainText('The QA gate passed.');
   await expect(card.getByRole('link', { name: 'Download SCORM package' })).toBeVisible();
-  await expect(statusLines(page)).toHaveText(PASSED_TURN_LINES, { timeout: TURN_TIMEOUT });
-  await expect(page.getByRole('button', { name: 'Build activity' })).toBeEnabled();
+  await expect(page.getByText('Request complete', { exact: true })).toBeVisible({ timeout: TURN_TIMEOUT });
+  await expect(statusLines(page)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled();
 });
 
 test('QA failure: each finding explains itself and no package is offered', async ({ page }) => {
@@ -54,10 +47,10 @@ test('QA failure: each finding explains itself and no package is offered', async
 
   const card = buildCard(page, 'QA needs attention');
   await expect(card).toBeVisible({ timeout: TURN_TIMEOUT });
-  await expect(card).toContainText(`${QA_FINDING_EXPLANATIONS.length} QA findings need review.`);
+  await expect(card).toContainText('The QA gate needs attention.');
   await expect(card.getByRole('listitem')).toContainText(QA_FINDING_EXPLANATIONS);
 
-  await expect(statusLines(page).last()).toHaveText('Build complete', { timeout: TURN_TIMEOUT });
+  await expect(page.getByText('Request complete', { exact: true })).toBeVisible({ timeout: TURN_TIMEOUT });
   await expect(page.getByRole('link', { name: 'Download SCORM package' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Preview', exact: true })).toHaveCount(0);
 });
@@ -65,10 +58,10 @@ test('QA failure: each finding explains itself and no package is offered', async
 test('turn failure: a plain-language message appears without raw error details', async ({ page }) => {
   await submitRequest(page, '[turn-fail] Create a practice set on cell division.');
 
-  await expect(statusLines(page).last()).toHaveText('The agent stopped before it finished.', {
+  await expect(page.getByLabel('Conversation history')).toContainText('The agent stopped before it finished.', {
     timeout: TURN_TIMEOUT,
   });
-  await expect(page.getByRole('button', { name: 'Build activity' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled();
 
   const panel = page.getByRole('region', { name: 'Build panel' });
   await expect(panel).not.toContainText('agent_error');
@@ -85,7 +78,7 @@ test('reload mid-turn restores the feed without duplicate lines', async ({ page 
   await expect(page.getByLabel('Request progress')).toBeVisible();
   await expect(statusLines(page).first()).toHaveText('Starting your build');
   await expect(buildCard(page, 'Ready to download')).toBeVisible({ timeout: TURN_TIMEOUT });
-  await expect(statusLines(page)).toHaveText(PASSED_TURN_LINES, { timeout: TURN_TIMEOUT });
+  await expect(page.getByText('Request complete', { exact: true })).toBeVisible({ timeout: TURN_TIMEOUT });
 });
 
 test('download: the SCORM package has imsmanifest.xml at the zip root', async ({ page }) => {
@@ -106,7 +99,7 @@ test('download: the SCORM package has imsmanifest.xml at the zip root', async ({
 test('build card: a build being checked shows a neutral state', async ({ page }) => {
   await submitRequest(page, '[qa-fail] Create a practice set on cell division.');
 
-  await expect(page.getByRole('article')).toMatchAriaSnapshot(
+  await expect(page.getByRole('article', { name: 'Build is being checked' })).toMatchAriaSnapshot(
     `
     - article "Build is being checked":
       - /children: equal

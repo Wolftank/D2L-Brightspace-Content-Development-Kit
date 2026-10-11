@@ -3,6 +3,7 @@ import type {
   BuildResponse,
   CreateProjectRequest,
   CreateProjectResponse,
+  MessageHistoryResponse,
   ProjectResponse,
   SendMessageRequest,
   SendMessageResponse,
@@ -58,3 +59,9 @@ export function projectEventsUrl(projectId: string): string {
 export function buildDownloadUrl(buildId: string): string {
   return `/api/builds/${buildId}/download`;
 }
+
+export function getMessages(projectId: string, cursor?: string): Promise<MessageHistoryResponse> {
+  const query = cursor ? '?cursor=' + encodeURIComponent(cursor) : '';
+  return json('/api/projects/' + projectId + '/messages' + query);
+}
+
