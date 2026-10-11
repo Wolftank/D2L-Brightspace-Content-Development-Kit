@@ -2,14 +2,25 @@ import { useEffect, useRef, useState } from 'react';
 import { ApiError, buildDownloadUrl, createProject, getProject, sendMessage } from './api/client';
 import type { Build, Project } from './api/types';
 import { useProjectEvents } from './hooks/useProjectEvents';
+import type { ConnectionStatus } from './WorkingIndicator';
+import type { ProjectEventState } from './hooks/useProjectEvents';
 import { WorkingIndicator } from './WorkingIndicator';
 import { StatusFeed } from './StatusFeed';
 import './App.css';
 import { PreviewPanel } from './preview/PreviewPanel';
 
-function BuildPanel({ build }: { build: Build | null }) {
+function BuildPanel({ build, turn, statusLines, connection, outcome }: {
+  build: Build | null;
+  turn: ProjectEventState['turn'];
+  statusLines: ProjectEventState['statusLines'];
+  connection: ConnectionStatus;
+  outcome?: string;
+}) {
   return <section className="card build-panel" aria-labelledby="build-title" tabIndex={0}>
     <p className="eyebrow">02 / BUILD</p><h2 id="build-title">Build panel</h2>
+    {turn.status === 'running' && turn.startedAt !== null && <WorkingIndicator startedAt={turn.startedAt} step={turn.currentStep} connection={connection} />}
+    {turn.status === 'running' && statusLines.length > 0 && <StatusFeed lines={statusLines} turnId={turn.id} />}
+    {turn.status !== 'running' && turn.status !== 'idle' && <p className="turn-summary">{turn.status === 'completed' ? 'Request complete' : outcome}</p>}
     {!build ? <p className="empty">Your latest build will appear here.</p> :
       <article className={`build-result build-${build.status}`} aria-labelledby="build-result-title">
         <p className="result-label">BUILD {build.version}</p>
@@ -36,11 +47,10 @@ export function App() {
   const [sending, setSending] = useState(false);
   const [pendingTurn, setPendingTurn] = useState<string | null>(null);
   const messageBox = useRef<HTMLTextAreaElement>(null);
-  const { statusLines, replyText, messages, outcomes, builds, turn, connection, historyError, addMessage } = useProjectEvents(project?.id ?? null);
+  const { statusLines, streamingMessages, messages, outcomes, builds, turn, connection, historyError, addMessage } = useProjectEvents(project?.id ?? null);
   const isBuilding = opening || sending || turn.status === 'running' || (pendingTurn !== null && turn.id !== pendingTurn);
   const latestBuild = [...builds].sort((a, b) => b.version - a.version)[0] ?? null;
   const readyBuild = [...builds].filter(build => build.status === 'ready').sort((a, b) => b.version - a.version)[0] ?? null;
-  const hasFinalReply = messages.some(message => message.role === 'agent' && message.turnId === turn.id);
   const latestAgent = messages.filter(message => message.role === 'agent').at(-1);
   const chatHistory = useRef<HTMLDivElement>(null);
 
@@ -54,7 +64,7 @@ export function App() {
   }, [reopenId]);
   useEffect(() => { if (project) sessionStorage.setItem('active-project', JSON.stringify(project)); }, [project]);
   useEffect(() => { sessionStorage.setItem('request-draft', requestText); }, [requestText]);
-  useEffect(() => { const element = chatHistory.current; if (element) element.scrollTop = element.scrollHeight; }, [messages, replyText]);
+  useEffect(() => { const element = chatHistory.current; if (element) element.scrollTop = element.scrollHeight; }, [messages, streamingMessages]);
 
   async function handleSend(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -95,12 +105,9 @@ export function App() {
             {message.role === 'instructor' && message.turnId && ['failed', 'cancelled'].includes(outcomes[message.turnId]?.status ?? '') &&
               <p className="error">{outcomes[message.turnId]?.message}</p>}
           </article>)}
-          {turn.id && !hasFinalReply && replyText && <article className="chat-message message-agent"><p className="speaker">CDK</p><p>{replyText}</p></article>}
+          {streamingMessages.map(message => <article key={message.id} className="chat-message message-agent"><p className="speaker">CDK</p><p>{message.text}</p></article>)}
         </div>
         <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{latestAgent ? `CDK: ${latestAgent.content.filter(block => block.type === 'text').map(block => block.text).join('')}` : ''}</div>
-        {turn.status === 'running' && turn.startedAt !== null && <WorkingIndicator startedAt={turn.startedAt} step={turn.currentStep} connection={connection} />}
-        {turn.status === 'running' && statusLines.length > 0 && <StatusFeed lines={statusLines} turnId={turn.id} />}
-        {turn.status !== 'running' && turn.status !== 'idle' && <p className="turn-summary">{turn.status === 'completed' ? 'Request complete' : outcomes[turn.id ?? '']?.message}</p>}
         {historyError && <p className="error" role="alert">{historyError}</p>}
         <form onSubmit={handleSend} className="composer">
           {!project && <><label htmlFor="project-title">Project title</label><input id="project-title" value={title} onChange={event => setTitle(event.target.value)} placeholder="e.g., Cell division practice" maxLength={160} disabled={sending} /></>}
@@ -110,7 +117,7 @@ export function App() {
           {error && <p className="error" role="alert">{error.message}</p>}
         </form>
       </section>
-      <BuildPanel build={latestBuild} />
+      <BuildPanel build={latestBuild} turn={turn} statusLines={statusLines} connection={connection} outcome={outcomes[turn.id ?? '']?.message} />
       <PreviewPanel build={readyBuild} />
     </div>
   </main>;

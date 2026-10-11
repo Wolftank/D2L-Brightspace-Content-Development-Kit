@@ -72,6 +72,29 @@ describe('F10 conversation', () => {
     expect(fetchMock.mock.calls.filter(([url]) => url === '/api/projects')).toHaveLength(1);
     expect(screen.getByText('CDK: Buttons are larger.')).toHaveAttribute('role', 'status');
   });
+  it('shows progress in the build panel and separate streamed agent messages after tool calls', async () => {
+    const view = render(<App />); await firstRequest();
+    const chat = screen.getByRole('region', { name: 'Conversation' });
+    const panel = screen.getByRole('region', { name: 'Build panel' });
+    expect(within(panel).getByLabelText('Request progress')).toBeVisible();
+    expect(within(chat).queryByLabelText('Request progress')).not.toBeInTheDocument();
+    emit({ seq: 2, kind: 'message.delta', payload: { turnId: 't1', messageId: 'a1', text: 'I will ' } });
+    emit({ seq: 3, kind: 'message.delta', payload: { turnId: 't1', messageId: 'a1', text: 'edit the activity.' } });
+    emit({ seq: 4, kind: 'tool.started', payload: { turnId: 't1', callId: 'edit', name: 'Edit', summary: 'Editing index.html' } });
+    emit({ seq: 5, kind: 'tool.finished', payload: { turnId: 't1', callId: 'edit', ok: true, summary: 'Editing index.html' } });
+    emit({ seq: 6, kind: 'message.delta', payload: { turnId: 't1', messageId: 'a2', text: 'Ready.' } });
+    expect(within(chat).queryByRole('log', { name: 'Build progress' })).not.toBeInTheDocument();
+    expect(within(panel).getByRole('log', { name: 'Build progress' })).toHaveTextContent('Editing index.html');
+    const thread = screen.getByLabelText('Conversation history');
+    expect(within(thread).getAllByRole('article').map(node => node.textContent)).toEqual(['YouCreate a quiz.', 'CDKI will edit the activity.', 'CDKReady.']);
+    view.unmount(); render(<App />);
+    expect(within(screen.getByLabelText('Conversation history')).getAllByRole('article')).toHaveLength(3);
+    emit({ seq: 7, kind: 'message.completed', payload: { message: message('a1', 2, 'agent', 'I will edit the activity.') } });
+    emit({ seq: 8, kind: 'message.completed', payload: { message: message('a2', 3, 'agent', 'Ready.') } });
+    emit({ seq: 9, kind: 'turn.completed', payload: { turnId: 't1' } });
+    expect(within(screen.getByLabelText('Conversation history')).getAllByRole('article')).toHaveLength(3);
+    expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled();
+  });
   it('loads server history on reopening and deduplicates replayed replies', async () => {
     history = [message('u1', 1, 'instructor', 'First request'), message('a1', 2, 'agent', 'First reply')];
     sessionStorage.setItem('active-project', JSON.stringify(project));

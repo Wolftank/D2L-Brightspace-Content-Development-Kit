@@ -22,7 +22,7 @@ export interface ProjectEventState {
     status: 'idle' | 'running' | 'completed' | 'failed' | 'cancelled';
   };
   statusLines: StatusLine[];
-  replyText: string;
+  streamingMessages: { id: string; turnId: string; text: string }[];
   builds: Build[];
   messages: Message[];
   outcomes: Record<string, { status: string; message?: string }>;
@@ -46,7 +46,7 @@ export const initialProjectEventState: ProjectEventState = {
     status: 'idle',
   },
   statusLines: [],
-  replyText: '',
+  streamingMessages: [],
   builds: [],
   messages: [],
   outcomes: {},
@@ -84,7 +84,7 @@ export function projectEventReducer(
           status: message.turn.status, message: message.turn.error?.message,
         };
       }
-      return { ...state, messages: mergeMessages(state.messages, action.messages), outcomes };
+      return { ...state, messages: mergeMessages(state.messages, action.messages), streamingMessages: state.streamingMessages.filter(message => !action.messages.some(saved => saved.id === message.id)), outcomes };
     }
     return { ...action.state, messages: mergeMessages(action.state.messages, state.messages.filter(message => message.projectId === action.projectId)) };
   }
@@ -101,7 +101,7 @@ export function projectEventReducer(
           currentStep: '',
           status: 'running',
         },
-        replyText: '',
+        streamingMessages: [],
         statusLines: [
           { seq: event.seq, text: 'Starting your build' },
         ],
@@ -118,19 +118,19 @@ export function projectEventReducer(
       };
 
     case 'message.delta':
+      if (state.messages.some(message => message.id === event.payload.messageId)) return state;
       return {
         ...state,
-        replyText: state.replyText + event.payload.text,
+        streamingMessages: state.streamingMessages.some(message => message.id === event.payload.messageId)
+          ? state.streamingMessages.map(message => message.id === event.payload.messageId ? { ...message, text: message.text + event.payload.text } : message)
+          : [...state.streamingMessages, { id: event.payload.messageId, turnId: event.payload.turnId, text: event.payload.text }],
       };
 
     case 'message.completed':
   return {
     ...state,
     messages: mergeMessages(state.messages, [event.payload.message]),
-    replyText: event.payload.message.content
-      .filter((block) => block.type === 'text')
-      .map((block) => block.text)
-      .join(''),
+    streamingMessages: state.streamingMessages.filter(message => message.id !== event.payload.message.id),
   };
 
     case 'tool.started':
@@ -220,7 +220,7 @@ export function useProjectEvents(projectId: string | null) {
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [connection, setConnection] = useState<ConnectionStatus>('reconnecting');
   const storageStateKey = projectId
-  ? `chat-${projectId}-event-state`
+  ? `conversation-${projectId}-event-state`
   : null;
 
 const [state, dispatch] = useReducer(
@@ -310,7 +310,7 @@ useEffect(() => {
   useEffect(() => {
     if (!projectId) return;
 
-    const storageKey = `chat-${projectId}-last-seq`;
+    const storageKey = `conversation-${projectId}-last-seq`;
     const lastSeq = sessionStorage.getItem(storageKey);
 
     let url = projectEventsUrl(projectId);

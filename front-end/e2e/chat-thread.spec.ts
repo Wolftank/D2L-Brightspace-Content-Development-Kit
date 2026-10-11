@@ -62,3 +62,30 @@ test('a failed later build retains the last ready preview', async ({ page }) => 
   await expect(page.getByRole('heading', { name: 'QA needs attention' })).toBeVisible();
   await expect(page.getByTitle('Interactive preview of build 1')).toBeVisible();
 });
+
+
+test('keeps progress in the build panel and distinct agent messages around a tool call', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('Project title').fill('Separate agent messages');
+  await page.getByLabel('What should students learn or do?').fill('[multi-message] Update my activity');
+  await page.getByRole('button', { name: 'Send' }).click();
+  const chat = page.getByRole('region', { name: 'Conversation' });
+  const panel = page.getByRole('region', { name: 'Build panel' });
+  await expect(panel.getByLabel('Request progress')).toBeVisible();
+  await expect(chat.getByLabel('Request progress')).toHaveCount(0);
+  await expect(panel.getByRole('log', { name: 'Build progress' })).toContainText('Running the QA gate');
+  await expect(chat.getByRole('log', { name: 'Build progress' })).toHaveCount(0);
+  const thread = page.getByLabel('Conversation history');
+  await expect(thread.getByRole('article')).toHaveCount(3);
+  await expect(thread.getByRole('article').nth(1)).toContainText('I will update the activity. Then I will check it with the QA gate.');
+  await expect(thread.getByRole('article').nth(2)).toContainText('The activity is ready to preview and download.');
+  await page.reload();
+  await expect(thread.getByRole('article')).toHaveCount(3);
+  await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled({ timeout: 15000 });
+  const projectId = await page.evaluate(() => JSON.parse(sessionStorage.getItem('active-project')!).id as string);
+  await page.evaluate(() => sessionStorage.clear());
+  await page.goto('/?project=' + projectId);
+  await expect(thread.getByRole('article')).toHaveCount(3);
+  await expect(thread.getByRole('article').nth(1)).toContainText('I will update the activity.');
+  await expect(thread.getByRole('article').nth(2)).toContainText('The activity is ready to preview and download.');
+});

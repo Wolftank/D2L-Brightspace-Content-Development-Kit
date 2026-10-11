@@ -67,7 +67,7 @@ describe('projectEventReducer', () => {
       },
     });
 
-    expect(second.replyText).toBe('Hello world');
+    expect(second.streamingMessages).toEqual([{ id: 'message-1', turnId: 'turn-1', text: 'Hello world' }]);
   });
 
   it('handles message.completed', () => {
@@ -92,7 +92,8 @@ describe('projectEventReducer', () => {
       },
     });
 
-    expect(result.replyText).toBe('Finished');
+    expect(result.messages[0]?.content).toEqual([{ type: 'text', text: 'Finished' }]);
+    expect(result.streamingMessages).toEqual([]);
   });
 
   it('handles tool.started', () => {
@@ -315,7 +316,7 @@ it('handles build.updated by replacing the existing build', () => {
     const afterFirstTurn = {
       ...initialProjectEventState,
       turn: { id: 'turn-1', status: 'completed' as const, startedAt: 1000, currentStep: 'Checking your build' },
-      replyText: 'First reply.',
+      streamingMessages: [{ id: 'message-1', turnId: 'turn-1', text: 'First reply.' }],
     };
 
     const started = projectEventReducer(afterFirstTurn, {
@@ -324,7 +325,7 @@ it('handles build.updated by replacing the existing build', () => {
       payload: { turnId: 'turn-2', startedAt: 2000 },
     });
 
-    expect(started.replyText).toBe('');
+    expect(started.streamingMessages).toEqual([]);
     expect(started.turn).toMatchObject({ startedAt: 2000, currentStep: '', status: 'running' });
 
     const streaming = projectEventReducer(started, {
@@ -333,6 +334,6 @@ it('handles build.updated by replacing the existing build', () => {
       payload: { turnId: 'turn-2', messageId: 'message-2', text: 'Second' },
     });
 
-    expect(streaming.replyText).toBe('Second');
+    expect(streaming.streamingMessages[0]?.text).toBe('Second');
   });
 });

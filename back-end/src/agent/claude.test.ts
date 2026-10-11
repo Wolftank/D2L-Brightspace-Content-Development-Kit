@@ -139,6 +139,7 @@ describe('mapClaudeStream: progress', () => {
 
     expect(events).toEqual([
       { kind: 'status', text: 'Thinking…' },
+      { kind: 'message_start' },
       { kind: 'status', text: 'Thinking…' },
       { kind: 'status', text: 'Thinking…' },
     ]);
@@ -219,6 +220,23 @@ describe('mapClaudeStream: progress', () => {
     ]);
 
     expect(events).toEqual([{ kind: 'status', text: 'Condensing the conversation…' }]);
+  });
+
+  it('preserves assistant message boundaries and uses the last message as the final text', async () => {
+    const { events, result } = await replay([
+      streamEvent({ type: 'message_start', message: {} }),
+      streamEvent({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'I will edit it.' } }),
+      toolUseStart(1, 'edit', 'Edit'),
+      inputDelta(1, '{"file_path":"/ws/out/index.html"}'),
+      toolResult('edit'),
+      streamEvent({ type: 'message_start', message: {} }),
+      streamEvent({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Done.' } }),
+    ]);
+    expect(events.filter(event => event.kind === 'message_start' || event.kind === 'text_delta')).toEqual([
+      { kind: 'message_start' }, { kind: 'text_delta', text: 'I will edit it.' },
+      { kind: 'message_start' }, { kind: 'text_delta', text: 'Done.' },
+    ]);
+    expect(result?.text).toBe('Done.');
   });
 
   it("reports nothing for a subagent's activity", async () => {

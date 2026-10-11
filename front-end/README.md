@@ -24,12 +24,13 @@ The history shape matches B17 branch `feature/110-list-messages`: instructor `tu
 
 ## Conversation behavior
 
-Live progress sits in the chat with the working indicator. At turn end it collapses to a single outcome line. The instructor and agent messages stay in order. Send stays disabled while the request runs, and the message box remains editable so the next request can be drafted. Failed sends retain the draft.
+Live progress and the working indicator sit in the build panel. At turn end it collapses to a single outcome line. The instructor and agent messages stay in order. Distinct assistant messages within a turn have separate bubbles, including text before and after tool calls. Send stays disabled while the request runs, and the message box remains editable so the next request can be drafted. Failed sends retain the draft.
 
 The build panel shows the newest build. The preview shows the newest ready build, so a checking or failed build keeps the previous ready preview and its version label. Restart reloads the emulator with a fresh attempt. The desktop layout places chat and build side by side with preview below; narrow windows stack the three regions.
 
 ## Stub scenarios
 
+- `[multi-message]`: two distinct agent messages around a tool call, preserved after reload and reopening.
 - `[qa-fail]`: failed QA build; an ordinary follow-up produces the next ready version.
 - `[turn-fail]`: agent failure; an ordinary follow-up continues the same project.
 - `[long-step]`: 20-second pause for checking the timer, reload and drafts.

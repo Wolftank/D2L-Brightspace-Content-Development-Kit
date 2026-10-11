@@ -35,9 +35,14 @@ function writingDriver(): Pick<AgentDriver, 'open'> {
           });
           const notes = join(req.workspaceDir, 'out', 'notes.txt');
           const events = (async function* (): AsyncGenerator<AgentEvent> {
+            if (input.text.includes('multi-message')) {
+              yield { kind: 'message_start' };
+              yield { kind: 'text_delta', text: 'I will write the notes.' };
+            }
             yield { kind: 'tool_start', callId: 'call-1', name: 'Write', summary: 'Writing notes.txt' };
             await fs.writeFile(notes, input.text);
             yield { kind: 'tool_end', callId: 'call-1', ok: true };
+            yield { kind: 'message_start' };
             yield { kind: 'text_delta', text: 'Done.' };
             sessionId = 'agent-session-1';
             resolveResult({ status: 'completed', sessionId, text: 'Done.', usage: { steps: 2 } });
@@ -124,6 +129,22 @@ describe('runner, end to end', () => {
     expect(build.turnId).toBe('turn-1');
     expect(build.outputHash).toBe(await workspaces.hashOutput(projectId));
     expect(projects.getById(projectId)?.sessionId).toBe('agent-session-1');
+  });
+
+  it('stores separate ordered replies around tool calls for history and event replay', async () => {
+    queueTurn('multi-message');
+    await runner.executeTurn('multi-message');
+    const stored = events.after(projectId, 0);
+    const deltas = stored.filter(event => event.kind === 'message.delta').map(event => event.payload as { messageId: string; text: string });
+    const completed = stored.filter(event => event.kind === 'message.completed').map(event => (event.payload as { message: { id: string; seq: number } }).message);
+    expect(deltas.map(delta => delta.text)).toEqual(['I will write the notes.', 'Done.']);
+    expect(completed.map(message => message.id)).toEqual(deltas.map(delta => delta.messageId));
+    expect(completed.map(message => message.seq)).toEqual([2, 3]);
+    const reopened = createMessagesRepo(db);
+    expect(completed.map(message => reopened.get(message.id)?.content)).toEqual([
+      [{ type: 'text', text: 'I will write the notes.' }], [{ type: 'text', text: 'Done.' }],
+    ]);
+    expect(turnRow('multi-message').replyId).toBe(completed[1]!.id);
   });
 
   it('fails interrupted turns on startup, keeping their messages and output, then runs the next turn', async () => {

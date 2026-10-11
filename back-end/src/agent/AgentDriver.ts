@@ -119,6 +119,8 @@ export interface AgentTurn {
 }
 
 export type AgentEvent =
+  /** The main agent started a distinct assistant message. */
+  | { kind: 'message_start' }
   /** Agent text as it is produced. A driver without streaming emits one
    *  delta with the whole message. */
   | { kind: 'text_delta'; text: string }
@@ -154,7 +156,7 @@ export interface TurnResult {
   status: 'completed' | 'failed' | 'cancelled';
   /** The agent's session id after the turn. */
   sessionId: string | null;
-  /** The agent's message for this turn, assembled by the driver. */
+  /** The final agent message for this turn, assembled by the driver. */
   text: string;
   /** `message` is the technical detail, for logs rather than the instructor. */
   error?: { code: TurnErrorCode; message: string };

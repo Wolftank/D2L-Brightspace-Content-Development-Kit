@@ -252,7 +252,9 @@ export async function* mapClaudeStream(
           if (message.parent_tool_use_id) break;
           const event = message.event;
           if (event.type === 'message_start') {
+            textBuf = '';
             streamingCalls.clear();
+            yield { kind: 'message_start' };
           } else if (event.type === 'content_block_start') {
             const block = event.content_block;
             if (block.type === 'thinking' || block.type === 'redacted_thinking') {
