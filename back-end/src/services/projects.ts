@@ -48,12 +48,11 @@ export function createProjectService(deps: ProjectServiceDeps): ProjectService {
     get(ownerId, id) {
       const project = deps.projects.get(ownerId, id);
       if (!project) throw new NotFound();
-      const activeTurn = deps.turns.findActive(id);
       return {
         project: toApi(project),
         builds: deps.builds.listByProject(id).map(({ id, version, status, createdAt }) => ({ id, version, status, createdAt })),
-        ...(activeTurn ? { activeTurn } : {}),
-      };
+        activeTurn: deps.turns.findActive(id),
+      } satisfies ProjectResponse;
     },
   };
 }

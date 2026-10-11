@@ -100,7 +100,7 @@ describe('project service', () => {
           { id: 'build-2', version: 2, status: 'ready', createdAt: 6 },
         ],
       });
-      expect(details).not.toHaveProperty('activeTurn');
+      expect(details.activeTurn).toBeUndefined();
     });
 
     it('includes the active turn when the project has one', async () => {

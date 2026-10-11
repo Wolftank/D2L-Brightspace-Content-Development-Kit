@@ -241,7 +241,7 @@ export function createRunner(deps: RunnerDeps): Runner {
     deps.turns.finish(turn.id, outcome);
     switch (outcome.status) {
       case 'completed':
-        append(turn, 'turn.completed', { turnId: turn.id, ...(outcome.usage ? { usage: outcome.usage } : {}) });
+        append(turn, 'turn.completed', { turnId: turn.id, usage: outcome.usage });
         return;
       case 'failed':
         append(turn, 'turn.failed', { turnId: turn.id, error: outcome.error });

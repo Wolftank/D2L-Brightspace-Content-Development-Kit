@@ -21,7 +21,7 @@ export interface MessageService {
 
 export function createMessageService(deps: MessageServiceDeps): MessageService {
   return {
-    list(ownerId, projectId, { cursor, limit }) {
+    list(ownerId, projectId, { cursor, limit }): MessageHistoryResponse {
       if (!deps.projects.get(ownerId, projectId)) throw new NotFound();
       const rows = deps.messages.listByProject(projectId, { after: cursor ?? 0, limit: limit + 1 });
       const items = rows

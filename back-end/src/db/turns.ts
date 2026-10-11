@@ -1,3 +1,4 @@
+import type { TurnUsage } from '@cdk/contract';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { Db } from './index.js';
 import { createMessagesRepo } from './messages.js';
@@ -17,7 +18,7 @@ export type QueueTurnResult = { message: Message; turn: Turn } | { active: Turn 
 
 /** What a finished turn stores besides its status. */
 export interface FinishedTurnDetails {
-  usage?: Turn['usage'];
+  usage?: TurnUsage;
   replyId?: string;
 }
 
