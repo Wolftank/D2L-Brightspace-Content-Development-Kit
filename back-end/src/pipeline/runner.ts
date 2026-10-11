@@ -60,10 +60,14 @@ interface StatusFeed {
   failUnfinished(): void;
 }
 
+interface StreamedReply {
+  id: string;
+  text: string;
+}
+
 interface Conversation {
   result: TurnResult;
-  /** Every text delta the agent streamed, joined. */
-  streamed: string;
+  replies: StreamedReply[];
 }
 
 export function createRunner(deps: RunnerDeps): Runner {
@@ -121,6 +125,8 @@ export function createRunner(deps: RunnerDeps): Runner {
 
   function progress(turn: Turn, replyId: string, event: AgentEvent, feed: StatusFeed): void {
     switch (event.kind) {
+      case 'message_start':
+        return;
       case 'text_delta':
         append(turn, 'message.delta', { turnId: turn.id, messageId: replyId, text: event.text });
         return;
@@ -140,15 +146,19 @@ export function createRunner(deps: RunnerDeps): Runner {
   /** Sends the request and reports the agent's progress, failing any tool call left unfinished when the agent's events end. On a thrown error the turn's agent work is aborted. */
   async function converse(turn: Turn, session: AgentSession, input: TurnInput, replyId: string, feed: StatusFeed): Promise<Conversation> {
     const controller = new AbortController();
-    let streamed = '';
+    const replies: StreamedReply[] = [{ id: replyId, text: '' }];
     try {
       const agentTurn = session.send(input, {}, controller.signal);
       for await (const event of agentTurn.events) {
-        if (event.kind === 'text_delta') streamed += event.text;
-        progress(turn, replyId, event, feed);
+        if (event.kind === 'message_start' && replies.at(-1)!.text !== '') {
+          replies.push({ id: randomUUID(), text: '' });
+        }
+        const current = replies.at(-1)!;
+        if (event.kind === 'text_delta') current.text += event.text;
+        progress(turn, current.id, event, feed);
       }
       feed.failUnfinished();
-      return { result: await agentTurn.result, streamed };
+      return { result: await agentTurn.result, replies };
     } catch (err) {
       controller.abort();
       throw err;
@@ -186,9 +196,9 @@ export function createRunner(deps: RunnerDeps): Runner {
     append(turn, 'turn.started', { turnId: turn.id, startedAt: turn.startedAt });
     const startHash = await deps.workspaces.hashOutput(turn.projectId);
     const input = instructorInput(turn);
-    const replyId = randomUUID();
+    let replyId: string = randomUUID();
     const feed = statusFeed(turn);
-    const { result, streamed } = await converseInSession(turn, input, replyId, feed);
+    const { result, replies } = await converseInSession(turn, input, replyId, feed);
 
     if (result.status === 'cancelled') return { status: 'cancelled', usage: result.usage };
     if (result.status === 'failed') {
@@ -196,16 +206,26 @@ export function createRunner(deps: RunnerDeps): Runner {
       return failure(turn, error.code, error.message, { usage: result.usage });
     }
 
-    const text = result.text.trim() === '' ? streamed : result.text;
-    const reply = deps.messages.create({
-      id: replyId,
-      projectId: turn.projectId,
-      role: 'agent',
-      content: [{ type: 'text', text }],
-      turnId: turn.id,
-    });
+    const finalReply = replies.at(-1)!;
+    if (result.text.trim() !== '') finalReply.text = result.text;
+    const savedReplies = replies.filter(reply => reply.text.trim() !== '');
+    if (savedReplies.length === 0) savedReplies.push(finalReply);
+    for (const streamedReply of savedReplies) {
+      replyId = streamedReply.id;
+      const reply = deps.messages.create({
+        id: replyId,
+        projectId: turn.projectId,
+        role: 'agent',
+        content: [{ type: 'text', text: streamedReply.text }],
+        turnId: turn.id,
+      });
+      try {
+        append(turn, 'message.completed', { message: reply });
+      } catch (err) {
+        return failure(turn, thrownCode(err), err, { usage: result.usage, replyId });
+      }
+    }
     try {
-      append(turn, 'message.completed', { message: reply });
       await buildIfChanged(turn, startHash, feed);
     } catch (err) {
       return failure(turn, thrownCode(err), err, { usage: result.usage, replyId });

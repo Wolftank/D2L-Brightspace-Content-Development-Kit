@@ -39,6 +39,11 @@ export interface Message {
   createdAt: number;
 }
 
+export interface MessageHistoryResponse {
+  items: (Message & { turn?: Pick<Turn, 'id' | 'status' | 'error'> })[];
+  nextCursor?: string;
+}
+
 export type TurnStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 
 export interface TurnError {

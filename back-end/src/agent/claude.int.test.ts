@@ -115,6 +115,7 @@ describe('mapClaudeStream: recorded fixture replay', () => {
 
     expect(events).toEqual([
       { kind: 'status', text: 'Thinking…' },
+      { kind: 'message_start' },
       { kind: 'status', text: 'Thinking…' },
       {
         kind: 'tool_start',
@@ -130,6 +131,7 @@ describe('mapClaudeStream: recorded fixture replay', () => {
           'File created successfully at: C:\\Users\\benja\\AppData\\Local\\Temp\\cdk-fixture-workspace-fGQ0EP\\hello.txt (file state is current in your context — no need to Read it back)',
       },
       { kind: 'status', text: 'Thinking…' },
+      { kind: 'message_start' },
       { kind: 'text_delta', text: 'Created' },
       { kind: 'text_delta', text: ' h' },
       { kind: 'text_delta', text: 'ello' },
