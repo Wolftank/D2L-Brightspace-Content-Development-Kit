@@ -171,7 +171,7 @@ export interface MeResponse {
   agent: { name: string; ok: boolean; version?: string; detail?: string };
 }
 
-/** V1 creates SCORM projects only; the back end ignores any other field. */
+/** Creates a SCORM project. Any other field is ignored. */
 export interface CreateProjectRequest {
   title: string;
   avenue?: 'scorm';
