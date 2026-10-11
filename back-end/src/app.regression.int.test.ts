@@ -7,6 +7,7 @@ import { createApp } from './app.js';
 import { createBuildsRepo, type BuildsRepo } from './db/builds.js';
 import { createEventsRepo } from './db/events.js';
 import type { Db } from './db/index.js';
+import { createMessagesRepo } from './db/messages.js';
 import { createProjectsRepo, type ProjectsRepo } from './db/projects.js';
 import { users as usersTable, type User } from './db/schema.js';
 import { testDb } from './db/test-db.js';
@@ -16,6 +17,7 @@ import type { Deps } from './deps.js';
 import { NotFound } from './errors.js';
 import { createEventService } from './pipeline/events.js';
 import { createBuildService } from './services/builds.js';
+import { createMessageService } from './services/messages.js';
 import { createProjectService } from './services/projects.js';
 import { createTurnService } from './services/turns.js';
 import { createWorkspaceService, type WorkspaceService } from './services/workspaces.js';
@@ -93,6 +95,7 @@ describe('R3 regression: app, identity, error envelope', () => {
       turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, runner: { executeTurn: async () => {} } }),
       builds: createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces, events }),
       events,
+      messages: createMessageService({ projects: projectsRepo, messages: createMessagesRepo(db) }),
       driver: { name: 'claude', probe: async () => ({ ok: true, version: '0.0.0' }) },
       preview: { origin: 'http://preview.localhost:3000', appOrigin: 'http://127.0.0.1:5173' },
     };
