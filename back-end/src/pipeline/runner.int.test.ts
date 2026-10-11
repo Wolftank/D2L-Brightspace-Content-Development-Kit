@@ -13,6 +13,7 @@ import { turns as turnsTable } from '../db/schema.js';
 import { testDb } from '../db/test-db.js';
 import { createTurnsRepo } from '../db/turns.js';
 import { createUsersRepo } from '../db/users.js';
+import { createMessageService } from '../services/messages.js';
 import { createBuildService } from '../services/builds.js';
 import { createWorkspaceService, type WorkspaceService } from '../services/workspaces.js';
 import { createEventService, type EventService } from './events.js';
@@ -145,6 +146,14 @@ describe('runner, end to end', () => {
       [{ type: 'text', text: 'I will write the notes.' }], [{ type: 'text', text: 'Done.' }],
     ]);
     expect(turnRow('multi-message').replyId).toBe(completed[1]!.id);
+    const history = createMessageService({ projects, messages: reopened });
+    const ownerId = projects.getById(projectId)!.ownerId;
+    const firstPage = history.list(ownerId, projectId, { limit: 2 });
+    expect(firstPage.items.map(message => message.role)).toEqual(['instructor', 'agent']);
+    expect(firstPage.items[0]!.turn?.status).toBe('completed');
+    const nextPage = history.list(ownerId, projectId, { limit: 2, cursor: Number(firstPage.nextCursor) });
+    expect(nextPage.items.map(message => message.id)).toEqual([completed[1]!.id]);
+    expect(nextPage.nextCursor).toBeUndefined();
   });
 
   it('fails interrupted turns on startup, keeping their messages and output, then runs the next turn', async () => {
