@@ -1,5 +1,5 @@
 import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
-import type { ContentBlock, QaReport } from '@cdk/contract';
+import type { BuildError, ContentBlock, QaReport, TurnError, TurnUsage } from '@cdk/contract';
 
 export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
@@ -53,13 +53,8 @@ export const turns = sqliteTable('turns', {
   }).notNull(),
   startedAt: integer('started_at'),
   finishedAt: integer('finished_at'),
-  error: text('error', { mode: 'json' }).$type<{ code: string; message: string }>(),
-  usage: text('usage', { mode: 'json' }).$type<{
-    inputTokens?: number;
-    outputTokens?: number;
-    costUsd?: number;
-    steps?: number;
-  }>(),
+  error: text('error', { mode: 'json' }).$type<TurnError>(),
+  usage: text('usage', { mode: 'json' }).$type<TurnUsage>(),
 });
 
 export type Turn = typeof turns.$inferSelect;
@@ -76,7 +71,7 @@ export const builds = sqliteTable(
     status: text('status', { enum: ['checking', 'ready', 'failed'] }).notNull(),
     avenue: text('avenue', { enum: ['topic', 'scorm', 'widget', 'external'] }).notNull(),
     qa: text('qa', { mode: 'json' }).$type<QaReport>(),
-    error: text('error', { mode: 'json' }).$type<{ code: string; message: string }>(),
+    error: text('error', { mode: 'json' }).$type<BuildError>(),
     /** Hash of the output copied into the build; null while checking and when the copy failed. */
     outputHash: text('output_hash'),
     turnId: text('turn_id'),

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import type { MessageHistoryResponse } from '@cdk/contract';
 import type { Deps } from '../deps.js';
 
 /** Accepts text blocks only. Any other field is dropped. */
@@ -19,7 +20,7 @@ export function messagesRouter(deps: Deps): Router {
 
   router.get('/projects/:projectId/messages', (req, res) => {
     const query = listMessagesQuery.parse(req.query);
-    res.status(200).json(deps.messages.list(req.user.id, req.params.projectId, query));
+    res.status(200).json(deps.messages.list(req.user.id, req.params.projectId, query) satisfies MessageHistoryResponse);
   });
 
   router.post('/projects/:projectId/messages', (req, res) => {

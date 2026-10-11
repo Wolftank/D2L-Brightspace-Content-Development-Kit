@@ -41,8 +41,14 @@ export interface Message {
   createdAt: number;
 }
 
+/** A message as the chat lists it: an instructor message carries a summary of the turn it started. */
+export type ChatMessage = Message & { turn?: Pick<Turn, 'id' | 'status' | 'error'> };
+
+/** A page of a project's messages. */
 export interface MessageHistoryResponse {
-  items: (Message & { turn?: Pick<Turn, 'id' | 'status' | 'error'> })[];
+  /** Oldest first. */
+  items: ChatMessage[];
+  /** Present only when more messages follow; pass it back as `cursor` to read them. */
   nextCursor?: string;
 }
 

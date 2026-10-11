@@ -1,19 +1,7 @@
+import type { ChatMessage, MessageHistoryResponse } from '@cdk/contract';
 import type { MessagesRepo } from '../db/messages.js';
 import type { ProjectsRepo } from '../db/projects.js';
-import type { Message, Turn } from '../db/schema.js';
 import { NotFound } from '../errors.js';
-
-export type TurnSummary = Pick<Turn, 'id' | 'status' | 'error'>;
-
-/** A message as the chat lists it: instructor messages carry a summary of the turn they started. */
-export type ChatMessage = Message & { turn?: TurnSummary };
-
-export interface MessagePage {
-  /** Oldest first. */
-  items: ChatMessage[];
-  /** Present only when more messages follow; pass it back as `cursor` to read them. */
-  nextCursor?: string;
-}
 
 export interface ListMessagesQuery {
   /** The `seq` of the last message already read, or undefined to start from the first. */
@@ -28,7 +16,7 @@ export interface MessageServiceDeps {
 
 export interface MessageService {
   /** A page of `ownerId`'s project's messages. Throws `NotFound` for an unknown or another owner's project. */
-  list(ownerId: string, projectId: string, query: ListMessagesQuery): MessagePage;
+  list(ownerId: string, projectId: string, query: ListMessagesQuery): MessageHistoryResponse;
 }
 
 export function createMessageService(deps: MessageServiceDeps): MessageService {
