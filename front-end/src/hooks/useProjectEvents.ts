@@ -3,10 +3,10 @@ import type { ConnectionStatus } from '../WorkingIndicator';
 import { getMessages, projectEventsUrl } from '../api/client';
 import type {
   Build,
+  ChatMessage,
   Message,
-  Turn,
   ProjectEvent,
-} from '../api/types';
+} from '@cdk/contract';
 
 export interface StatusLine {
   seq: number;
@@ -31,7 +31,7 @@ export interface ProjectEventState {
 type ProjectEventReducerAction =
   | ProjectEvent
   | { type: 'message'; message: Message }
-  | { type: 'history'; messages: (Message & { turn?: Pick<Turn, 'id' | 'status' | 'error'> })[] }
+  | { type: 'history'; messages: ChatMessage[] }
   | {
       type: 'restore';
       projectId: string | null;

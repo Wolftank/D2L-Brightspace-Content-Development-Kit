@@ -1,6 +1,9 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig, devices } from '@playwright/test';
 
 const isCI = !!process.env.CI;
+const tsxCli = fileURLToPath(import.meta.resolve('tsx/cli'));
+const viteCli = fileURLToPath(new URL('bin/vite.js', import.meta.resolve('vite/package.json')));
 
 export default defineConfig({
   testDir: './e2e',
@@ -17,12 +20,12 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: 'node node_modules/tsx/dist/cli.mjs stub/server.ts',
+      command: `node "${tsxCli}" stub/server.ts`,
       url: 'http://127.0.0.1:3001/api/health',
       reuseExistingServer: !isCI,
     },
     {
-      command: 'node node_modules/vite/bin/vite.js --mode stub',
+      command: `node "${viteCli}" --mode stub`,
       url: 'http://127.0.0.1:5173',
       reuseExistingServer: !isCI,
     },

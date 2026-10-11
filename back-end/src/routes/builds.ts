@@ -1,12 +1,13 @@
 import { finished } from 'node:stream';
 import { Router } from 'express';
+import type { BuildResponse } from '@cdk/contract';
 import type { Deps } from '../deps.js';
 
 export function buildsRouter(deps: Deps): Router {
   const router = Router();
 
   router.get('/builds/:buildId', (req, res) => {
-    res.status(200).json({ build: deps.builds.get(req.user.id, req.params.buildId), deployments: [] });
+    res.status(200).json({ build: deps.builds.get(req.user.id, req.params.buildId), deployments: [] } satisfies BuildResponse);
   });
 
   router.get('/builds/:buildId/download', async (req, res) => {

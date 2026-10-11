@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ApiError, buildDownloadUrl, createProject, getProject, sendMessage } from './api/client';
-import type { Build, Project } from './api/types';
+import type { Build, Project } from '@cdk/contract';
 import { useProjectEvents } from './hooks/useProjectEvents';
 import type { ConnectionStatus } from './WorkingIndicator';
 import type { ProjectEventState } from './hooks/useProjectEvents';

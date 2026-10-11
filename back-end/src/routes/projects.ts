@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import type { CreateProjectResponse } from '@cdk/contract';
 import type { Deps } from '../deps.js';
 
-/** V1 creates SCORM projects only. Fields later layers add, such as `targetCourse`, are dropped. */
+/** Creates SCORM projects only. Any other field, such as `targetCourse`, is dropped. */
 const createProjectBody = z.object({
   title: z.string().trim().min(1, 'must not be blank'),
   avenue: z.literal('scorm').default('scorm'),
@@ -14,7 +15,7 @@ export function projectsRouter(deps: Deps): Router {
   router.post('/projects', async (req, res) => {
     const input = createProjectBody.parse(req.body);
     const project = await deps.projects.create(req.user.id, input);
-    res.status(201).json({ project });
+    res.status(201).json({ project } satisfies CreateProjectResponse);
   });
 
   router.get('/projects/:projectId', (req, res) => {

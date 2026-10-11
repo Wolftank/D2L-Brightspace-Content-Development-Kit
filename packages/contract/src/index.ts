@@ -1,6 +1,8 @@
 /**
- * The HTTP API and event stream contract, transcribed from docs/architecture.md.
- * Shared by the app and by the stub server.
+ * The HTTP API and event stream contract from docs/architecture.md: the
+ * resources, request and response bodies, and event payloads that the back
+ * end sends and the front end reads. Types only; both apps import it with
+ * `import type`.
  */
 
 export type Avenue = 'topic' | 'scorm' | 'widget' | 'external';
@@ -39,8 +41,14 @@ export interface Message {
   createdAt: number;
 }
 
+/** A message as the chat lists it: an instructor message carries a summary of the turn it started. */
+export type ChatMessage = Message & { turn?: Pick<Turn, 'id' | 'status' | 'error'> };
+
+/** A page of a project's messages. */
 export interface MessageHistoryResponse {
-  items: (Message & { turn?: Pick<Turn, 'id' | 'status' | 'error'> })[];
+  /** Oldest first. */
+  items: ChatMessage[];
+  /** Present only when more messages follow; pass it back as `cursor` to read them. */
   nextCursor?: string;
 }
 
@@ -163,7 +171,7 @@ export interface MeResponse {
   agent: { name: string; ok: boolean; version?: string; detail?: string };
 }
 
-/** V1 creates SCORM projects only; the back end ignores any other field. */
+/** Creates a SCORM project. Any other field is ignored. */
 export interface CreateProjectRequest {
   title: string;
   avenue?: 'scorm';

@@ -235,7 +235,7 @@ describe('GET /api/projects/:projectId/events', () => {
   });
 
   it('replays full history from the beginning when no cursor is given, over a proper SSE response', async () => {
-    const first = service.append({ projectId: project.id, kind: 'turn.started', payload: { turnId: 't1' } });
+    const first = service.append({ projectId: project.id, kind: 'turn.started', payload: { turnId: 't1', startedAt: 1 } });
     const second = service.append({ projectId: project.id, kind: 'turn.completed', payload: { turnId: 't1' } });
 
     await startServer(fakeDeps());
@@ -245,15 +245,15 @@ describe('GET /api/projects/:projectId/events', () => {
     expect(res.headers['content-type']).toMatch(/^text\/event-stream/);
     expect(res.headers['cache-control']).toBe('no-cache');
     expect(frames).toEqual([
-      { seq: first.seq, kind: 'turn.started', payload: { turnId: 't1' } },
+      { seq: first.seq, kind: 'turn.started', payload: { turnId: 't1', startedAt: 1 } },
       { seq: second.seq, kind: 'turn.completed', payload: { turnId: 't1' } },
     ]);
     req.destroy();
   });
 
   it('resumes via Last-Event-ID, replaying only what comes after it', async () => {
-    const first = service.append({ projectId: project.id, kind: 'turn.started', payload: {} });
-    const second = service.append({ projectId: project.id, kind: 'turn.status', payload: { text: 'go' } });
+    const first = service.append({ projectId: project.id, kind: 'turn.started', payload: { turnId: 't1', startedAt: 1 } });
+    const second = service.append({ projectId: project.id, kind: 'turn.status', payload: { turnId: 't1', text: 'go' } });
 
     await startServer(fakeDeps());
     const { reader, req } = await openSse(port, `/api/projects/${project.id}/events`, {
@@ -261,25 +261,25 @@ describe('GET /api/projects/:projectId/events', () => {
     });
     const frames = await reader.waitFor(1);
 
-    expect(frames).toEqual([{ seq: second.seq, kind: 'turn.status', payload: { text: 'go' } }]);
+    expect(frames).toEqual([{ seq: second.seq, kind: 'turn.status', payload: { turnId: 't1', text: 'go' } }]);
     req.destroy();
   });
 
   it('resumes via ?after=, replaying only what comes after it', async () => {
-    const first = service.append({ projectId: project.id, kind: 'turn.started', payload: {} });
-    const second = service.append({ projectId: project.id, kind: 'turn.status', payload: { text: 'go' } });
+    const first = service.append({ projectId: project.id, kind: 'turn.started', payload: { turnId: 't1', startedAt: 1 } });
+    const second = service.append({ projectId: project.id, kind: 'turn.status', payload: { turnId: 't1', text: 'go' } });
 
     await startServer(fakeDeps());
     const { reader, req } = await openSse(port, `/api/projects/${project.id}/events?after=${first.seq}`);
     const frames = await reader.waitFor(1);
 
-    expect(frames).toEqual([{ seq: second.seq, kind: 'turn.status', payload: { text: 'go' } }]);
+    expect(frames).toEqual([{ seq: second.seq, kind: 'turn.status', payload: { turnId: 't1', text: 'go' } }]);
     req.destroy();
   });
 
   it('prefers Last-Event-ID over ?after= when both are given', async () => {
-    const first = service.append({ projectId: project.id, kind: 'turn.started', payload: {} });
-    const second = service.append({ projectId: project.id, kind: 'turn.status', payload: { text: 'go' } });
+    const first = service.append({ projectId: project.id, kind: 'turn.started', payload: { turnId: 't1', startedAt: 1 } });
+    const second = service.append({ projectId: project.id, kind: 'turn.status', payload: { turnId: 't1', text: 'go' } });
 
     await startServer(fakeDeps());
     const { reader, req } = await openSse(port, `/api/projects/${project.id}/events?after=0`, {
@@ -287,29 +287,29 @@ describe('GET /api/projects/:projectId/events', () => {
     });
     const frames = await reader.waitFor(1);
 
-    expect(frames).toEqual([{ seq: second.seq, kind: 'turn.status', payload: { text: 'go' } }]);
+    expect(frames).toEqual([{ seq: second.seq, kind: 'turn.status', payload: { turnId: 't1', text: 'go' } }]);
     req.destroy();
   });
 
   it('continues seamlessly from replay into live events', async () => {
-    const first = service.append({ projectId: project.id, kind: 'turn.started', payload: {} });
+    const first = service.append({ projectId: project.id, kind: 'turn.started', payload: { turnId: 't1', startedAt: 1 } });
 
     await startServer(fakeDeps());
     const { reader, req } = await openSse(port, `/api/projects/${project.id}/events`);
     await reader.waitFor(1);
 
-    const second = service.append({ projectId: project.id, kind: 'turn.completed', payload: {} });
+    const second = service.append({ projectId: project.id, kind: 'turn.completed', payload: { turnId: 't1' } });
     const frames = await reader.waitFor(2);
 
     expect(frames).toEqual([
-      { seq: first.seq, kind: 'turn.started', payload: {} },
-      { seq: second.seq, kind: 'turn.completed', payload: {} },
+      { seq: first.seq, kind: 'turn.started', payload: { turnId: 't1', startedAt: 1 } },
+      { seq: second.seq, kind: 'turn.completed', payload: { turnId: 't1' } },
     ]);
     req.destroy();
   });
 
   it('delivers an event appended right as replay finishes exactly once, in order (event only in the live buffer)', async () => {
-    const preRace = service.append({ projectId: project.id, kind: 'turn.started', payload: {} });
+    const preRace = service.append({ projectId: project.id, kind: 'turn.started', payload: { turnId: 't1', startedAt: 1 } });
 
     let injected = false;
     let raceEvent: ReturnType<typeof service.append> | undefined;
@@ -323,7 +323,7 @@ describe('GET /api/projects/:projectId/events', () => {
           // replay, but before the route has switched from replaying to live.
           // At this point the event exists ONLY in the live buffer, not in
           // the `list` already captured above.
-          raceEvent = service.append({ projectId, kind: 'turn.completed', payload: {} });
+          raceEvent = service.append({ projectId, kind: 'turn.completed', payload: { turnId: 't1' } });
         }
         return list;
       },
@@ -335,8 +335,8 @@ describe('GET /api/projects/:projectId/events', () => {
 
     expect(raceEvent).toBeDefined();
     expect(frames).toEqual([
-      { seq: preRace.seq, kind: 'turn.started', payload: {} },
-      { seq: raceEvent!.seq, kind: 'turn.completed', payload: {} },
+      { seq: preRace.seq, kind: 'turn.started', payload: { turnId: 't1', startedAt: 1 } },
+      { seq: raceEvent!.seq, kind: 'turn.completed', payload: { turnId: 't1' } },
     ]);
 
     // Give any duplicate delivery a chance to arrive, then confirm there isn't one.
@@ -347,7 +347,7 @@ describe('GET /api/projects/:projectId/events', () => {
   });
 
   it('delivers an event appended right as replay finishes exactly once, in order (event in both history and the live buffer)', async () => {
-    const preRace = service.append({ projectId: project.id, kind: 'turn.started', payload: {} });
+    const preRace = service.append({ projectId: project.id, kind: 'turn.started', payload: { turnId: 't1', startedAt: 1 } });
 
     let injected = false;
     let raceEvent: ReturnType<typeof service.append> | undefined;
@@ -360,7 +360,7 @@ describe('GET /api/projects/:projectId/events', () => {
           // lands in both `listAfter`'s result AND the live buffer (the
           // listener is already subscribed). Only the route's `lastSeq`
           // guard stands between this and a duplicate.
-          raceEvent = service.append({ projectId, kind: 'turn.completed', payload: {} });
+          raceEvent = service.append({ projectId, kind: 'turn.completed', payload: { turnId: 't1' } });
         }
         return service.after(projectId, seq);
       },
@@ -372,8 +372,8 @@ describe('GET /api/projects/:projectId/events', () => {
 
     expect(raceEvent).toBeDefined();
     expect(frames).toEqual([
-      { seq: preRace.seq, kind: 'turn.started', payload: {} },
-      { seq: raceEvent!.seq, kind: 'turn.completed', payload: {} },
+      { seq: preRace.seq, kind: 'turn.started', payload: { turnId: 't1', startedAt: 1 } },
+      { seq: raceEvent!.seq, kind: 'turn.completed', payload: { turnId: 't1' } },
     ]);
 
     await new Promise((resolve) => setTimeout(resolve, 50));

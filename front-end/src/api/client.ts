@@ -3,10 +3,11 @@ import type {
   BuildResponse,
   CreateProjectRequest,
   CreateProjectResponse,
+  MessageHistoryResponse,
   ProjectResponse,
   SendMessageRequest,
   SendMessageResponse,
-} from './types';
+} from '@cdk/contract';
 
 export class ApiError extends Error {
   constructor(
@@ -59,7 +60,7 @@ export function buildDownloadUrl(buildId: string): string {
   return `/api/builds/${buildId}/download`;
 }
 
-export function getMessages(projectId: string, cursor?: string): Promise<import('./types').MessageHistoryResponse> {
+export function getMessages(projectId: string, cursor?: string): Promise<MessageHistoryResponse> {
   const query = cursor ? '?cursor=' + encodeURIComponent(cursor) : '';
   return json('/api/projects/' + projectId + '/messages' + query);
 }

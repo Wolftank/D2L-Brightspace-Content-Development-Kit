@@ -4,7 +4,7 @@ The browser app provides a project conversation, the latest build and QA finding
 
 ## Local preview
 
-Requires Node 20.19+, Node 22.13+, or Node 24+. Install dependencies with `npm install`, then run these commands in separate terminals:
+Requires Node 20.19+, Node 22.13+, or Node 24+. Install dependencies with `npm install` at the repository root, then run these commands in `front-end/`, in separate terminals:
 
 ```
 npm run stub

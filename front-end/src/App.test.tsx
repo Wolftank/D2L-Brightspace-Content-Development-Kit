@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
-import type { Build, Message, ProjectEvent } from './api/types';
+import type { Build, Message, ProjectEvent } from '@cdk/contract';
 
 class Stream extends EventTarget {
   static latest: Stream | undefined;

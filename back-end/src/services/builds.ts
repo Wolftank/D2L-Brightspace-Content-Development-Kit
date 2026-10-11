@@ -4,13 +4,13 @@ import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { Readable } from 'node:stream';
 import { ZipArchive } from 'archiver';
 import { z } from 'zod';
+import type { Build as ApiBuild, QaReport } from '@cdk/contract';
 import type { BuildsRepo, FinishBuildInput } from '../db/builds.js';
 import type { ProjectsRepo } from '../db/projects.js';
 import type { Build, Project } from '../db/schema.js';
 import { BuildIncomplete, BuildNotReady, NotFound } from '../errors.js';
 import { KIT_DIR } from '../kit.js';
 import type { EventService } from '../pipeline/events.js';
-import type { QaReport } from '../types/qa.js';
 import type { WorkspaceService } from './workspaces.js';
 
 const AVENUE = 'scorm';
@@ -48,9 +48,6 @@ export interface BuildServiceDeps {
   /** How long the QA gate may run before it is killed and the build fails. */
   gateTimeoutMs?: number;
 }
-
-/** A build as the API sends it: the stored row plus `pedagogy`, which is null until the pedagogy check exists. */
-export type ApiBuild = Build & { pedagogy: null };
 
 export interface BuildDownload {
   filename: string;

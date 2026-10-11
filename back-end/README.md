@@ -8,8 +8,15 @@ The back end (`src/`): runs turns with the agent, runs the QA gate and the pedag
 
 Requires Node ^20.19, ^22.13, or 24+.
 
+Install from the repository root, which installs the back end, the front end, and the shared contract together:
+
 ```
 npm install
+```
+
+Then, in `back-end/`:
+
+```
 npm start
 ```
 
