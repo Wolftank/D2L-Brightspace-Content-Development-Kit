@@ -42,14 +42,14 @@ describe('server startup', () => {
     return new Promise((resolve) => blocker!.close(() => resolve()));
   }
 
-  /** Runs `src/server.ts` until it exits or logs that it is listening. */
-  function runServer(port: number): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  /** Runs `src/server.ts` with `settings` until it exits or logs that it is listening. */
+  function runServer(port: number, settings: Record<string, string> = {}): Promise<{ code: number | null; stdout: string; stderr: string }> {
     return new Promise((resolve) => {
       let stdout = '';
       let stderr = '';
       child = spawn(process.execPath, ['--import', 'tsx', 'src/server.ts'], {
         cwd: BACK_END,
-        env: { ...process.env, PORT: String(port), DATA_DIR: dataDir },
+        env: { ...process.env, PORT: String(port), DATA_DIR: dataDir, ...settings },
       });
       child.stdout!.on('data', (chunk) => {
         stdout += chunk;
@@ -101,5 +101,17 @@ describe('server startup', () => {
 
     expect(run.stdout).toContain(`back-end listening on http://127.0.0.1:${port}`);
     expect(storedTurn()).toMatchObject({ status: 'failed', error: { code: 'interrupted' } });
+  }, 30_000);
+
+  it('exits naming each invalid turn limit', async () => {
+    const port = await listenOnFreePort();
+    await closeBlocker();
+
+    const run = await runServer(port, { AGENT_MAX_STEPS: '0', AGENT_MAX_BUDGET_USD: 'lots' });
+
+    expect(run.code).toBe(1);
+    expect(run.stderr).toContain('AGENT_MAX_STEPS: must be a whole number of 1 or more');
+    expect(run.stderr).toContain('AGENT_MAX_BUDGET_USD: must be a number of US dollars greater than 0');
+    expect(storedTurn()).toMatchObject({ status: 'running', error: null });
   }, 30_000);
 });

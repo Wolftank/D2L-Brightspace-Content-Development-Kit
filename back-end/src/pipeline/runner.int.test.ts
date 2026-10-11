@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inArray } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { AgentDriver, AgentEvent, AgentSession, TurnResult } from '../agent/AgentDriver.js';
+import type { AgentDriver, AgentEvent, AgentSession, TurnErrorCode, TurnLimits, TurnResult } from '../agent/AgentDriver.js';
 import { createBuildsRepo } from '../db/builds.js';
 import { createEventsRepo } from '../db/events.js';
 import type { Db } from '../db/index.js';
@@ -57,6 +57,58 @@ function writingDriver(): Pick<AgentDriver, 'open'> {
   };
 }
 
+const STEP_COST_USD = 1;
+
+/**
+ * A driver whose agent takes the number of steps its request asks for, such
+ * as "Take 3 steps", at `STEP_COST_USD` a step, and stops at the turn's
+ * limits the way the SDK does: before a step past `maxSteps`, and after the
+ * step whose cost passes `maxBudgetUsd`.
+ */
+function steppingDriver(): Pick<AgentDriver, 'open'> {
+  return {
+    async open(req) {
+      const session: AgentSession = {
+        sessionId: req.sessionId,
+        send(input, limits) {
+          const wanted = Number(/Take (\d+) steps?/.exec(input.text)?.[1] ?? 1);
+          let resolveResult!: (result: TurnResult) => void;
+          const result = new Promise<TurnResult>((resolve) => {
+            resolveResult = resolve;
+          });
+          const stopped = (code: TurnErrorCode, steps: number): TurnResult => ({
+            status: 'failed',
+            sessionId: null,
+            text: '',
+            error: { code, message: `The SDK stopped the turn after ${steps} steps` },
+            usage: { steps, costUsd: steps * STEP_COST_USD },
+          });
+          const events = (async function* (): AsyncGenerator<AgentEvent> {
+            let steps = 0;
+            while (steps < wanted) {
+              if (steps === limits.maxSteps) {
+                resolveResult(stopped('max_steps_exceeded', steps));
+                return;
+              }
+              steps++;
+              yield { kind: 'status', text: `Step ${steps}` };
+              if (limits.maxBudgetUsd !== undefined && steps * STEP_COST_USD > limits.maxBudgetUsd) {
+                resolveResult(stopped('max_budget_exceeded', steps));
+                return;
+              }
+            }
+            yield { kind: 'text_delta', text: 'Done.' };
+            resolveResult({ status: 'completed', sessionId: null, text: 'Done.', usage: { steps, costUsd: steps * STEP_COST_USD } });
+          })();
+          return { events, result };
+        },
+        async close() {},
+      };
+      return session;
+    },
+  };
+}
+
 describe('runner, end to end', () => {
   let dataDir: string;
   let db: Db;
@@ -68,13 +120,13 @@ describe('runner, end to end', () => {
   let runner: Runner;
   let projectId: string;
 
-  function queueTurn(turnId: string, status: 'queued' | 'running' = 'queued'): void {
+  function queueTurn(turnId: string, status: 'queued' | 'running' = 'queued', text = `Request for ${turnId}`): void {
     const messageId = `message-${turnId}`;
     messages.create({
       id: messageId,
       projectId,
       role: 'instructor',
-      content: [{ type: 'text', text: `Request for ${turnId}` }],
+      content: [{ type: 'text', text }],
       turnId,
     });
     db.insert(turnsTable).values({ id: turnId, projectId, messageId, status }).run();
@@ -84,6 +136,13 @@ describe('runner, end to end', () => {
     return db.select().from(turnsTable).all().find((turn) => turn.id === turnId)!;
   }
 
+  /** Runs turns with `driver`'s agent, capped by `turnLimits`. */
+  function useAgent(driver: Pick<AgentDriver, 'open'>, turnLimits: TurnLimits): void {
+    sessions = createSessionService({ projects, workspaces, driver });
+    const builds = createBuildService({ builds: createBuildsRepo(db), projects, workspaces, events });
+    runner = createRunner({ turns: createTurnsRepo(db), messages, events, sessions, workspaces, builds, turnLimits });
+  }
+
   beforeEach(async () => {
     dataDir = await fs.mkdtemp(join(tmpdir(), 'cdk-runner-'));
     db = testDb();
@@ -91,9 +150,7 @@ describe('runner, end to end', () => {
     messages = createMessagesRepo(db);
     events = createEventService(createEventsRepo(db));
     workspaces = createWorkspaceService({ dataDir });
-    sessions = createSessionService({ projects, workspaces, driver: writingDriver() });
-    const builds = createBuildService({ builds: createBuildsRepo(db), projects, workspaces, events });
-    runner = createRunner({ turns: createTurnsRepo(db), messages, events, sessions, workspaces, builds });
+    useAgent(writingDriver(), { maxSteps: 60, maxBudgetUsd: 10 });
 
     const ownerId = createUsersRepo(db).ensureLocalUser().id;
     projectId = projects.create({ id: 'project-1', ownerId, title: 'Cell division practice', avenue: 'scorm' }).id;
@@ -182,5 +239,23 @@ describe('runner, end to end', () => {
       .where(inArray(turnsTable.status, ['queued', 'running']))
       .all();
     expect(active).toEqual([]);
+  });
+
+  it.each([
+    ['step', { maxSteps: 3, maxBudgetUsd: 10 }, 'max_steps_exceeded', 'The request needed more steps than allowed. Try a smaller request.'],
+    ['spending', { maxSteps: 60, maxBudgetUsd: 2.5 }, 'max_budget_exceeded', 'The request reached its spending limit. Try a smaller request.'],
+  ] as const)('ends a turn at its %s limit with the plain message, then runs the next request', async (_limit, turnLimits, code, message) => {
+    useAgent(steppingDriver(), turnLimits);
+    queueTurn('too-big', 'queued', 'Take 5 steps');
+
+    await runner.executeTurn('too-big');
+
+    expect(turnRow('too-big')).toMatchObject({ status: 'failed', error: { code, message } });
+    expect(events.after(projectId, 0).at(-1)).toMatchObject({ kind: 'turn.failed', payload: { error: { code, message } } });
+
+    queueTurn('smaller', 'queued', 'Take 2 steps');
+    await runner.executeTurn('smaller');
+
+    expect(turnRow('smaller')).toMatchObject({ status: 'completed', usage: { steps: 2 } });
   });
 });

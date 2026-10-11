@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
+import type { TurnLimits } from './agent/AgentDriver.js';
 import { AGENT_DRIVERS, AGENT_EFFORTS, type AgentSettings } from './agent/drivers.js';
 
 /** `back-end/`, resolved from this file's own location so it never depends on the working directory. */
@@ -19,6 +20,8 @@ export interface Config {
   /** Where the database, workspaces, and builds are stored. Always absolute. */
   dataDir: string;
   agent: AgentSettings;
+  /** The caps on every turn the agent runs. */
+  turnLimits: Required<TurnLimits>;
   /** The origin the app is opened at, and the only one that may frame the preview. */
   appOrigin: string;
   /** Where build previews are served: `http://preview.localhost:<port>`, on the back end's own port. */
@@ -34,6 +37,8 @@ export class ConfigError extends Error {
 }
 
 const PORT_RULE = 'must be a whole number from 1 to 65535';
+const STEPS_RULE = 'must be a whole number of 1 or more';
+const BUDGET_RULE = 'must be a number of US dollars greater than 0, such as 2.5';
 const ORIGIN_RULE = 'must be an http or https origin with no path, such as http://127.0.0.1:5173';
 
 /** Whether `value` is an http(s) URL made of a scheme, host and optional port only. */
@@ -54,6 +59,18 @@ const settingsSchema = z.object({
   AGENT_DRIVER: z.enum(AGENT_DRIVERS, { error: `must be one of ${AGENT_DRIVERS.join(', ')}` }).default('claude'),
   AGENT_MODEL: z.string().trim().min(1, 'must not be blank').optional(),
   AGENT_EFFORT: z.enum(AGENT_EFFORTS, { error: `must be one of ${AGENT_EFFORTS.join(', ')}` }).optional(),
+  AGENT_MAX_STEPS: z
+    .string()
+    .regex(/^\d+$/, STEPS_RULE)
+    .transform(Number)
+    .pipe(z.number().int().min(1, STEPS_RULE))
+    .default(60),
+  AGENT_MAX_BUDGET_USD: z
+    .string()
+    .regex(/^\d+(\.\d+)?$/, BUDGET_RULE)
+    .transform(Number)
+    .pipe(z.number().positive(BUDGET_RULE))
+    .default(10),
   PORT: z
     .string()
     .regex(/^\d+$/, PORT_RULE)
@@ -92,6 +109,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     port: settings.PORT,
     dataDir: resolve(BACK_END_DIR, settings.DATA_DIR ?? defaultDataDir(env)),
     agent: { driver: settings.AGENT_DRIVER, model: settings.AGENT_MODEL, effort: settings.AGENT_EFFORT },
+    turnLimits: { maxSteps: settings.AGENT_MAX_STEPS, maxBudgetUsd: settings.AGENT_MAX_BUDGET_USD },
     appOrigin: settings.APP_ORIGIN,
     previewOrigin: `http://${PREVIEW_HOSTNAME}:${settings.PORT}`,
   };

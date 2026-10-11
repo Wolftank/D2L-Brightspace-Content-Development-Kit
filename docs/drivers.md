@@ -45,7 +45,9 @@ Terms are defined in [architecture.md](architecture.md#terms). This file records
 
 **Sandbox.** `sandbox.enabled` in settings confines shell writes to the workspace and blocks network access except `sandbox.network.allowedDomains`; `sandbox.failIfUnavailable` makes an unsupported host refuse to run. Supported on macOS, Linux, and WSL2, not on native Windows.
 
-**Limits.** `maxTurns` and `maxBudgetUsd` are enforced by the SDK, and the SDK leaves out the matching CLI flag when either is undefined, so an omitted `TurnLimits` field imposes no limit. There is no wall-clock option; a caller that wants one fires the turn's abort signal.
+**Limits.** `maxTurns` and `maxBudgetUsd` are enforced by the SDK, and the SDK leaves out the matching CLI flag when either is undefined, so an omitted `TurnLimits` field imposes no limit. The back end's `AGENT_MAX_STEPS` and `AGENT_MAX_BUDGET_USD` settings set both on every turn. There is no wall-clock option; a caller that wants one fires the turn's abort signal.
+
+**Limits, measured 2026-10-10 with a subscription sign-in.** `maxTurns: 1` stopped a build request with `error_max_turns` after 8 seconds, and the result reported `num_turns: 2`: the model call that reached the limit counts. `maxBudgetUsd: 0.01` stopped a one-word reply with `error_max_budget_usd` after one step that reported `total_cost_usd` 0.09. The CLI computes `total_cost_usd` at API prices whether the account is billed by API key or by subscription, and the budget applies to that figure.
 
 **Model and effort.** The back end's `AGENT_MODEL` and `AGENT_EFFORT` settings become `options.model` and `options.effort` on every turn. An unset setting leaves its option out, so the CLI uses the account's default model and its default effort. The probe behind `GET /api/me` sends one small request with the same model and `persistSession: false`, so a readiness check leaves no transcript.
 

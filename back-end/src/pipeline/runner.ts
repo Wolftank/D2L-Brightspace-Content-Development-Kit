@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { AgentEvent, AgentSession, TurnErrorCode, TurnInput, TurnResult } from '../agent/AgentDriver.js';
+import type { AgentEvent, AgentSession, TurnErrorCode, TurnInput, TurnLimits, TurnResult } from '../agent/AgentDriver.js';
 import type { MessagesRepo } from '../db/messages.js';
 import type { Turn } from '../db/schema.js';
 import type { FinishTurnInput, TurnsRepo } from '../db/turns.js';
@@ -33,6 +33,8 @@ export interface RunnerDeps {
   sessions: SessionService;
   workspaces: Pick<WorkspaceService, 'hashOutput'>;
   builds: Pick<BuildService, 'create' | 'latest'>;
+  /** The caps on every turn. */
+  turnLimits: TurnLimits;
 }
 
 /** Runs instructor requests through the agent, one turn at a time per project. */
@@ -148,7 +150,7 @@ export function createRunner(deps: RunnerDeps): Runner {
     const controller = new AbortController();
     const replies: StreamedReply[] = [{ id: replyId, text: '' }];
     try {
-      const agentTurn = session.send(input, {}, controller.signal);
+      const agentTurn = session.send(input, deps.turnLimits, controller.signal);
       for await (const event of agentTurn.events) {
         if (event.kind === 'message_start' && replies.at(-1)!.text !== '') {
           replies.push({ id: randomUUID(), text: '' });

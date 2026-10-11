@@ -18,6 +18,8 @@ const INSTRUCTOR_MESSAGE: Message = {
   createdAt: 1,
 };
 
+const TURN_LIMITS = { maxSteps: 60, maxBudgetUsd: 10 };
+
 const COMPLETED: TurnResult = {
   status: 'completed',
   sessionId: 'session-1',
@@ -105,6 +107,7 @@ function setup(options: { session?: AgentSession; hashes?: string[] } = {}) {
       latest: vi.fn((): ApiBuild | undefined => undefined),
       create: vi.fn(async (projectId: string, turnId?: string) => ({ projectId, turnId, status: 'ready' }) as ApiBuild),
     },
+    turnLimits: TURN_LIMITS,
   } satisfies RunnerDeps;
 
   const kinds = () => appended.map((event) => event.kind);
@@ -147,7 +150,7 @@ describe('runner', () => {
     ]);
     expect(session.send).toHaveBeenCalledWith(
       { text: 'Build a self-check on mitosis', attachments: [] },
-      {},
+      TURN_LIMITS,
       expect.any(AbortSignal),
     );
 

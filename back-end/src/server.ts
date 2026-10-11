@@ -37,6 +37,7 @@ function buildDeps(cfg: Config): { deps: Deps; runner: Runner; builds: BuildServ
     sessions: createSessionService({ projects: projectsRepo, workspaces, driver }),
     workspaces,
     builds,
+    turnLimits: cfg.turnLimits,
   });
 
   const deps: Deps = {
