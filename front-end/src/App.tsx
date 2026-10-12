@@ -97,7 +97,7 @@ export function App() {
     <div className="workspace">
       <section className="card chat-panel" aria-labelledby="chat-title" tabIndex={0}>
         <p className="eyebrow">01 / CHAT</p><h2 id="chat-title">Conversation</h2>
-        <div ref={chatHistory} className="chat-history" tabIndex={0} aria-label="Conversation history">
+        <div ref={chatHistory} className="chat-history" role="group" tabIndex={0} aria-label="Conversation history">
           {!messages.length && <p className="empty">Tell CDK what your students should learn or do.</p>}
           {messages.map(message => <article className={`chat-message message-${message.role}`} key={message.id}>
             <p className="speaker">{message.role === 'instructor' ? 'You' : 'CDK'}</p>
