@@ -29,7 +29,7 @@ const KEEPALIVE_MS = 15_000;
 
 const user: User = { id: 'stub-user', displayName: 'Stub Instructor', email: null, role: 'instructor' };
 
-type Scenario = 'ok' | 'qa-fail' | 'turn-fail' | 'long-step' | 'long-feed' | 'multi-message';
+type Scenario = 'ok' | 'qa-fail' | 'turn-fail' | 'long-step' | 'long-feed' | 'multi-message' | 'drop' | 'drop-lost';
 
 interface StoredEvent {
   seq: number;
@@ -43,6 +43,8 @@ interface ProjectState {
   builds: Build[];
   events: StoredEvent[];
   subscribers: Set<(event: StoredEvent) => void>;
+  streamDrops: Set<() => void>;
+  refuseNextStream: boolean;
   activeTurn: Turn | null;
   turns: Map<string, Turn>;
 }
@@ -107,6 +109,8 @@ function textOf(content: ContentBlock[]): string {
 }
 
 function scenarioFor(text: string): Scenario {
+  if (text.includes('[drop-lost]')) return 'drop-lost';
+  if (text.includes('[drop]')) return 'drop';
   if (text.includes('[multi-message]')) return 'multi-message';
   if (text.includes('[long-feed]')) return 'long-feed';
   if (text.includes('[long-step]')) return 'long-step';
@@ -175,6 +179,10 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
     ],
   ];
 
+  if (scenario === 'drop' || scenario === 'drop-lost') {
+    steps.push([1600, () => dropStreams(state, scenario === 'drop-lost')]);
+  }
+
   if (scenario === 'multi-message') {
     steps.push([3600, () => {
       const message: Message = {
@@ -201,7 +209,7 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
       },
     ]);
   } else {
-    const passed = scenario === 'ok' || scenario === 'long-step' || scenario === 'long-feed' || scenario === 'multi-message';
+    const passed = scenario !== 'qa-fail';
     steps.push(
       [
         4800,
@@ -313,6 +321,8 @@ function createProject(body: unknown): CreateProjectResponse {
     builds: [],
     events: [],
     subscribers: new Set(),
+    streamDrops: new Set(),
+    refuseNextStream: false,
     activeTurn: null,
     turns: new Map(),
   });
@@ -365,7 +375,21 @@ function sendMessage(state: ProjectState, body: unknown): SendMessageResponse {
   return { message, turn };
 }
 
+/**
+ * Ends the project's open event streams, telling clients to retry in two
+ * seconds, as a dropped connection would. With `refuseReconnect`, the next
+ * stream request gets a 503, so the browser gives up on the stream.
+ */
+function dropStreams(state: ProjectState, refuseReconnect: boolean): void {
+  state.refuseNextStream = refuseReconnect;
+  for (const drop of state.streamDrops) drop();
+}
+
 function streamEvents(req: IncomingMessage, res: ServerResponse, state: ProjectState, after: number): void {
+  if (state.refuseNextStream) {
+    state.refuseNextStream = false;
+    throw new HttpError(503, 'stream_unavailable', 'The event stream is unavailable');
+  }
   res.writeHead(200, {
     'Content-Type': 'text/event-stream; charset=utf-8',
     'Cache-Control': 'no-cache',
@@ -385,10 +409,18 @@ function streamEvents(req: IncomingMessage, res: ServerResponse, state: ProjectS
   state.subscribers.add(write);
   const keepalive = setInterval(() => res.write(': keepalive\n\n'), KEEPALIVE_MS);
 
-  req.on('close', () => {
+  const detach = () => {
     clearInterval(keepalive);
     state.subscribers.delete(write);
-  });
+    state.streamDrops.delete(drop);
+  };
+  const drop = () => {
+    detach();
+    res.write('retry: 2000\n\n');
+    res.end();
+  };
+  state.streamDrops.add(drop);
+  req.on('close', detach);
 }
 
 function download(res: ServerResponse, buildId: string): void {
