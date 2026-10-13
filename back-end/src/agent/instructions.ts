@@ -6,10 +6,12 @@ export interface ProjectInstructionsInput {
   /** Absolute path returned by the workspace service's pathFor(projectId). */
   workspaceDir: string;
   shell: 'bash' | 'powershell';
+  /** The absolute path of the Node runtime that runs the QA gate: the back end's own executable. */
+  runtime: string;
 }
 
 /** Renders project context and the kit's build/check/fix workflow for one request. */
-export function renderProjectInstructions({ project, workspaceDir, shell }: ProjectInstructionsInput): string {
+export function renderProjectInstructions({ project, workspaceDir, shell, runtime }: ProjectInstructionsInput): string {
   if (!isAbsolute(workspaceDir) || /[\r\n\0]/.test(workspaceDir)) {
     throw new Error('workspaceDir must be an absolute, single-line path');
   }
@@ -17,7 +19,7 @@ export function renderProjectInstructions({ project, workspaceDir, shell }: Proj
   const outDir = join(workspaceDir, 'out');
   const checker = join(kitDir, 'harness', 'lint', 'lint.js');
   const quote = (value: string) => `'${value.replaceAll("'", shell === 'powershell' ? "''" : "'\\''")}'`;
-  const command = `node ${quote(checker)} ${quote(outDir)} --avenue scorm`;
+  const command = `${shell === 'powershell' ? '& ' : ''}${quote(runtime)} ${quote(checker)} ${quote(outDir)} --avenue scorm`;
 
   return `# Project instructions
 

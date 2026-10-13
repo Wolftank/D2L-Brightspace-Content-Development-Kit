@@ -61,7 +61,7 @@ export function createSessionService(deps: SessionServiceDeps): SessionService {
     const session = await deps.driver.open({
       workspaceDir,
       sessionId: project.sessionId,
-      instructions: renderProjectInstructions({ project, workspaceDir, shell: SHELL }),
+      instructions: renderProjectInstructions({ project, workspaceDir, shell: SHELL, runtime: process.execPath }),
       skillsDir: join(workspaceDir, 'kit', 'skills'),
       skills: SCORM_SKILLS,
       tools: { name: 'cdk', tools: [] },
