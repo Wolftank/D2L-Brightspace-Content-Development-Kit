@@ -26,6 +26,8 @@ export interface Config {
   appOrigin: string;
   /** Where build previews are served: `http://preview.localhost:<port>`, on the back end's own port. */
   previewOrigin: string;
+  /** The built front end the back end serves on its own origin. Always absolute when set. */
+  appDir?: string;
 }
 
 /** A setting is invalid or unusable. The message names the setting and what it must be. */
@@ -85,6 +87,7 @@ const settingsSchema = z.object({
     .transform((value) => new URL(value).origin)
     .refine((origin) => new URL(origin).hostname !== PREVIEW_HOSTNAME, `must not be the preview origin (${PREVIEW_HOSTNAME})`)
     .default('http://127.0.0.1:5173'),
+  APP_DIR: z.string().trim().min(1, 'must not be blank').optional(),
 });
 
 /** Loads `path` into `process.env`, keeping variables that are already set. A missing file is skipped. */
@@ -112,6 +115,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     turnLimits: { maxSteps: settings.AGENT_MAX_STEPS, maxBudgetUsd: settings.AGENT_MAX_BUDGET_USD },
     appOrigin: settings.APP_ORIGIN,
     previewOrigin: `http://${PREVIEW_HOSTNAME}:${settings.PORT}`,
+    appDir: settings.APP_DIR === undefined ? undefined : resolve(BACK_END_DIR, settings.APP_DIR),
   };
 }
 

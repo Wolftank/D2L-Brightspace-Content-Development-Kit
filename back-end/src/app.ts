@@ -26,6 +26,7 @@ export function createApp(deps: Deps): Express {
   app.use('/api', buildsRouter(deps));
   app.use('/api', eventsRouter(deps));
   app.use('/api', (_req, _res, next) => next(new NotFound('Not found')));
+  if (deps.appDir) app.use(express.static(deps.appDir));
 
   app.use(errorHandler);
 

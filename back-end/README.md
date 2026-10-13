@@ -44,6 +44,7 @@ Copy-Item .env.example .env
 | `PORT` | `3000` | A whole number from 1 to 65535. When you change it, start the front end with `API_TARGET=http://127.0.0.1:<port>` |
 | `DATA_DIR` | `%LOCALAPPDATA%\CDK` on Windows, `~/.cdk` elsewhere | Where the database, workspaces, and builds are stored. A relative path is resolved against `back-end/` |
 | `APP_ORIGIN` | `http://127.0.0.1:5173` | The origin the app is opened at, and the only one allowed to frame build previews: an http or https origin with no path. The default is the Vite dev server; set it to the back end's own origin when it serves the built app |
+| `APP_DIR` | unset | The built front end (`front-end/dist`) to serve at `/` on the back end's own origin, as the desktop app does. Set `APP_ORIGIN` to `http://127.0.0.1:<PORT>` with it. A relative path is resolved against `back-end/` |
 
 `ANTHROPIC_API_KEY` is read by the Claude CLI, not by the back end. The agent's shell commands can read it too.
 
@@ -51,13 +52,14 @@ Copy-Item .env.example .env
 
 - `npm start` — run the server from source
 - `npm run dev` — run the server from source, restarting on change
+- `npm run build` — compile `src/` to `dist/` for the desktop app, which runs `dist/server.js` without tsx
 - `npm test` — run all unit and integration tests in `src/` (excludes live tests)
 - `npm run test:unit` — run only unit tests (`*.test.ts`)
 - `npm run test:int` — run only integration tests (`*.int.test.ts`)
 - `npm run test:live` — run only live agent tests (`*.live.test.ts`); requires a signed-in Claude CLI
 - `npm run lint` — ESLint over `src/` (`kit/` is excluded; it's plain JS with its own conventions)
 - `npm run typecheck` — `tsc --noEmit`
-- `npm run db:generate` — generate a Drizzle migration from `src/db/schema.ts` into `src/db/migrations/`, after changing the schema
+- `npm run db:generate` — generate a Drizzle migration from `src/db/schema.ts` into `drizzle/`, after changing the schema
 
 ## Inside `src/`
 

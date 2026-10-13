@@ -129,7 +129,7 @@ A build always runs the QA gate. The pedagogy check is a separate step on a buil
 
 ### Preview origin
 
-Previews are served on their own origin, so an activity's scripts never run on the app's origin, where they could call the API or reach into the app's page. Locally the preview origin is `http://preview.localhost:<PORT>`: the back end's own port, under a hostname browsers resolve to this computer. The back end tells the two apart by the `Host` header. The preview origin serves only these routes, and the app origin serves none of them.
+Previews are served on their own origin, so an activity's scripts never run on the app's origin, where they could call the API or reach into the app's page. Locally the preview origin is `http://preview.localhost:<PORT>`: the back end's own port, under a hostname browsers resolve to this computer. The back end tells the two apart by the `Host` header. The preview origin serves only these routes, and the app origin serves none of them. When the back end also serves the built app (the `APP_DIR` setting, as in the desktop app), the app origin is `http://127.0.0.1:<PORT>` and the app finds the preview origin on its own port; under the Vite dev server, `VITE_PREVIEW_ORIGIN` names it.
 
 ```
 GET    /preview/player.html?buildId=&attempt=&parentOrigin=   the emulator player; 403 unless parentOrigin is the app origin
