@@ -13,6 +13,7 @@ For the full proposal, see [`docs/Capstone_Project_Proposal.pdf`](docs/Capstone_
 | [`back-end/src/`](back-end/src/) | The back end — runs turns with the agent, runs the QA gate and the pedagogy check, creates builds, deploys to D2L, translates findings to plain language |
 | [`packages/contract/`](packages/contract/) | The HTTP API and event stream contract from `architecture.md` as TypeScript types, imported by both the back end and the front end |
 | [`front-end/`](front-end/) | Local server + browser app: chat, configurator, build panel, preview. Displays the turn status, QA gate findings, and pedagogy check findings the back end produces — does not run those checks itself |
+| [`desktop/`](desktop/) | The Windows app: starts the back end, opens the CDK window, and stops everything when the window closes |
 | [`.github/`](.github/) | Issue/PR templates, CI workflow |
 
 ## Getting started
@@ -24,6 +25,38 @@ npm install
 ```
 
 Then run the back end and the front end from their folders, as their READMEs describe. From the root, `npm test`, `npm run lint`, and `npm run typecheck` run that script in every package.
+
+## The Windows app
+
+The Windows app runs CDK without a terminal, Node, or developer tools. One launch starts the back end and opens the CDK window. Launching it again brings the open window to the front. Closing the window stops the back end and any request the agent is running. A request still running when the window closes is marked as interrupted, and its changes so far are kept.
+
+### Build the installer
+
+On Windows, at the repository root, after `npm install`:
+
+```
+npm run package
+```
+
+This builds every package, then writes the installer to `desktop/release/CDK Setup <version>.exe` and a runnable copy to `desktop/release/win-unpacked/CDK.exe`. Packaging downloads Electron and the Electron build of better-sqlite3 the first time, so it needs internet access. It takes about a minute and a half.
+
+### Install and run
+
+1. Copy `CDK Setup <version>.exe` to the laptop and run it. It installs for the current user, without admin rights, into `%LOCALAPPDATA%\Programs\cdk-desktop`, adds CDK to the Start menu and the desktop, and opens it.
+2. After that, open CDK from the Start menu.
+
+The app isn't signed yet, so Windows may warn before it runs:
+
+- **"Windows protected your PC"** (SmartScreen): select **More info**, then **Run anyway**. Windows shows this for an installer downloaded from the internet or received through chat or email; it does not show it for an installer you built on the same computer.
+- **Smart App Control** (Windows 11, Settings > Privacy & security > Windows Security > App & browser control): when it is on, it blocks unsigned apps and offers no way to run them. Use a laptop where it is off.
+
+The agent uses the Claude sign-in on the laptop, like the development setup. If Claude Code is already signed in there, nothing else is needed. Otherwise, sign in once from PowerShell with the copy of Claude that ships with CDK:
+
+```
+& "$env:LOCALAPPDATA\Programs\cdk-desktop\resources\app\node_modules\@anthropic-ai\claude-agent-sdk-win32-x64\claude.exe" auth login
+```
+
+Projects and builds are stored in `%LOCALAPPDATA%\CDK`, the same folder the development back end uses, so the app and a development back end on the same laptop share projects. The window's own browser data is in `%APPDATA%\CDK`. Uninstalling CDK from Settings > Apps removes the app and keeps both folders.
 
 ## Why front-end and back-end are separate top-level folders
 

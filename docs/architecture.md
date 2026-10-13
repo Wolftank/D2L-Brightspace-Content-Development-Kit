@@ -309,7 +309,7 @@ Layers 1 to 3 ship with V1. Layer 4 is on wherever the agent supports the host. 
 
 **Agent state.** Each agent keeps transcripts, settings, and sign-in under its own configuration directory, listed per agent in [drivers.md](drivers.md). In local mode, leave the defaults so the instructor's existing sign-in is used. In hosted mode, point each at a directory owned by the service account so state has one known home; transcripts are already separated per project because every agent keys them by workspace.
 
-**Windows.** Local mode runs on the instructor's Windows machine. Keep the data directory short, `%LOCALAPPDATA%\CDK`, to stay under path-length limits. The commands in the skills must work in both PowerShell and bash, because the agents differ in which shell they use. Copy builds with a retry, because the preview server or antivirus can hold a file open for a moment.
+**Windows.** Local mode runs on the instructor's Windows machine. Keep the data directory short, `%LOCALAPPDATA%\CDK`, to stay under path-length limits. The commands in the skills must work in both PowerShell and bash, because the agents differ in which shell they use. Copy builds with a retry, because the preview server or antivirus can hold a file open for a moment. The desktop app (`desktop/`) is how instructors run local mode: its Electron main process starts the back end with the app's own executable as Node, opens one window on the back end's origin, and when the window closes ends the back end's whole process tree, the agent included.
 
 ## Modes
 
