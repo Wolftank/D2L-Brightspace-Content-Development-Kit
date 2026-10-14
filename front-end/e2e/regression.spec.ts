@@ -10,6 +10,19 @@ const QA_FINDING_EXPLANATIONS = [
   'suspend_data can exceed 4000 characters; the tenant discards writes over 4096.',
 ];
 
+/**
+ * The status lines of a passing stub turn while the QA gate runs, each shown
+ * once. "Running the QA gate" arrives live after any reload or reconnect
+ * replay, so by the time the list matches, a duplicated replay line would
+ * already be on screen.
+ */
+const FEED_WHILE_CHECKING = [
+  'Starting your build',
+  'Reading your request',
+  'Building from the SCORM starter',
+  'Running the QA gate',
+];
+
 async function submitRequest(page: Page, request: string) {
   await page.goto('/');
   await page.getByLabel('Project title').fill('Cell division practice');
@@ -19,6 +32,10 @@ async function submitRequest(page: Page, request: string) {
 
 function statusLines(page: Page) {
   return page.getByRole('log', { name: 'Build progress' }).getByRole('listitem');
+}
+
+function connectionStatus(page: Page) {
+  return page.getByLabel('Request progress').getByRole('status');
 }
 
 function buildCard(page: Page, heading: string) {
@@ -76,7 +93,31 @@ test('reload mid-turn restores the feed without duplicate lines', async ({ page 
   await page.reload();
 
   await expect(page.getByLabel('Request progress')).toBeVisible();
-  await expect(statusLines(page).first()).toHaveText('Starting your build');
+  await expect(statusLines(page)).toHaveText(FEED_WHILE_CHECKING);
+  await expect(buildCard(page, 'Ready to download')).toBeVisible({ timeout: TURN_TIMEOUT });
+  await expect(page.getByText('Request complete', { exact: true })).toBeVisible({ timeout: TURN_TIMEOUT });
+});
+
+test('dropped connection: the feed says it is reconnecting, then carries on without duplicate lines', async ({ page }) => {
+  await submitRequest(page, '[drop] Create a practice set on cell division.');
+  await expect(statusLines(page).filter({ hasText: 'Building from the SCORM starter' })).toBeVisible();
+
+  await expect(connectionStatus(page)).toHaveText('Reconnecting to your request…');
+  await expect(statusLines(page)).toHaveText(FEED_WHILE_CHECKING);
+  await expect(connectionStatus(page)).toHaveText('');
+  await expect(buildCard(page, 'Ready to download')).toBeVisible({ timeout: TURN_TIMEOUT });
+  await expect(page.getByText('Request complete', { exact: true })).toBeVisible({ timeout: TURN_TIMEOUT });
+});
+
+test('lost connection: the feed says the connection was lost, and a reload restores it', async ({ page }) => {
+  await submitRequest(page, '[drop-lost] Create a practice set on cell division.');
+  await expect(statusLines(page).filter({ hasText: 'Building from the SCORM starter' })).toBeVisible();
+
+  await expect(connectionStatus(page)).toHaveText('Connection lost. Reload the page to reconnect.', { timeout: TURN_TIMEOUT });
+
+  await page.reload();
+
+  await expect(statusLines(page)).toHaveText(FEED_WHILE_CHECKING);
   await expect(buildCard(page, 'Ready to download')).toBeVisible({ timeout: TURN_TIMEOUT });
   await expect(page.getByText('Request complete', { exact: true })).toBeVisible({ timeout: TURN_TIMEOUT });
 });
