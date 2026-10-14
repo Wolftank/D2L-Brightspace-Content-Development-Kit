@@ -1,0 +1,22 @@
+appId: edu.stcloudstate.cdk
+productName: CDK
+directories:
+  output: release
+asar: false
+npmRebuild: false
+afterPack: ./after-pack.mjs
+files:
+  - dist/**/*
+  - "!dist/**/*.test.js"
+  - package.json
+  - "!node_modules/cdk-back-end/**"
+  - node_modules/cdk-back-end/package.json
+  - node_modules/cdk-back-end/{dist,drizzle,kit,preview}/**
+extraResources:
+  - from: ../front-end/dist
+    to: front-end
+win:
+  target: nsis
+nsis:
+  oneClick: true
+  perMachine: false

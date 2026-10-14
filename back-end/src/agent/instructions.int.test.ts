@@ -20,7 +20,7 @@ describe('instructions against a provisioned workspace', () => {
     await workspaces.create(project.id);
     const workspace = workspaces.pathFor(project.id);
     const shell = process.platform === 'win32' ? 'powershell' : 'bash';
-    const markdown = renderProjectInstructions({ project, workspaceDir: workspace, shell });
+    const markdown = renderProjectInstructions({ project, workspaceDir: workspace, shell, runtime: process.execPath });
     const references = [
       'files', 'out', 'kit',
       'kit/skills/d2l-scorm-package/SKILL.md', 'kit/skills/d2l-tenant-qa/SKILL.md',

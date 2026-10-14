@@ -7,7 +7,7 @@ import type { MessageService } from './services/messages.js';
 import type { ProjectService } from './services/projects.js';
 import type { TurnService } from './services/turns.js';
 
-/** Everything the app needs: one field per service, repository, and driver, plus the preview origin's settings. */
+/** Everything the app needs: one field per service, repository, and driver, plus the preview origin's settings and the built front end. */
 export interface Deps {
   users: UsersRepo;
   projects: ProjectService;
@@ -17,4 +17,6 @@ export interface Deps {
   events: EventService;
   driver: Pick<AgentDriver, 'name' | 'probe'>;
   preview: PreviewSettings;
+  /** The built front end to serve on the app origin, when the back end serves the app. */
+  appDir?: string;
 }

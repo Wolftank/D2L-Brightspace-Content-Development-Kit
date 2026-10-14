@@ -15,6 +15,7 @@ describe('loadConfig', () => {
       turnLimits: { maxSteps: 60, maxBudgetUsd: 10 },
       appOrigin: 'http://127.0.0.1:5173',
       previewOrigin: 'http://preview.localhost:3000',
+      appDir: undefined,
     });
   });
 
@@ -32,6 +33,7 @@ describe('loadConfig', () => {
       PORT: '4000',
       DATA_DIR: resolve('/data/cdk'),
       APP_ORIGIN: 'http://127.0.0.1:4000',
+      APP_DIR: resolve('/app/front-end'),
     });
 
     expect(config).toEqual({
@@ -41,6 +43,7 @@ describe('loadConfig', () => {
       turnLimits: { maxSteps: 30, maxBudgetUsd: 2.5 },
       appOrigin: 'http://127.0.0.1:4000',
       previewOrigin: 'http://preview.localhost:4000',
+      appDir: resolve('/app/front-end'),
     });
   });
 
@@ -54,6 +57,10 @@ describe('loadConfig', () => {
 
   it('resolves a relative DATA_DIR against back-end/', () => {
     expect(loadConfig({ DATA_DIR: 'local-data' }).dataDir).toBe(join(BACK_END, 'local-data'));
+  });
+
+  it('resolves a relative APP_DIR against back-end/', () => {
+    expect(loadConfig({ APP_DIR: '../front-end/dist' }).appDir).toBe(join(BACK_END, '..', 'front-end', 'dist'));
   });
 
   it.each([
@@ -81,6 +88,7 @@ describe('loadConfig', () => {
     ['AGENT_MAX_BUDGET_USD', '', 'must be a number of US dollars greater than 0'],
     ['DATA_DIR', '', 'must not be blank'],
     ['DATA_DIR', '   ', 'must not be blank'],
+    ['APP_DIR', '   ', 'must not be blank'],
     ['APP_ORIGIN', '127.0.0.1:5173', 'must be an http or https origin with no path'],
     ['APP_ORIGIN', 'ftp://127.0.0.1:5173', 'must be an http or https origin with no path'],
     ['APP_ORIGIN', 'http://127.0.0.1:5173/app', 'must be an http or https origin with no path'],

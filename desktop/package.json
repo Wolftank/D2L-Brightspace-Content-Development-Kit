@@ -1,0 +1,31 @@
+{
+  "name": "cdk-desktop",
+  "productName": "CDK",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The Windows app: starts the back end, opens the CDK window, and stops everything on close",
+  "type": "module",
+  "main": "dist/main.js",
+  "engines": {
+    "node": "^20.19.0 || ^22.13.0 || >=24.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "package": "electron-builder --win",
+    "test": "vitest run",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "cdk-back-end": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "electron": "42.11.9",
+    "electron-builder": "26.17.0",
+    "eslint": "^10.10.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.70.0",
+    "vitest": "^3.2.4"
+  }
+}

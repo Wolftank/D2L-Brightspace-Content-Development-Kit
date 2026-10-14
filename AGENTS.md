@@ -20,9 +20,9 @@ capability without checking its documentation and types.
 * Make architectural decisions for the long term. Do not accept a stopgap
 that only works for now and is meant to be replaced later.
 
-## Back-end test conventions
+## Test conventions
 
-Tests in `back-end/src/` use three file suffixes:
+Tests in `back-end/src/` and `desktop/src/` use three file suffixes:
 
 | Suffix | Layer | What it may use |
 |---|---|---|

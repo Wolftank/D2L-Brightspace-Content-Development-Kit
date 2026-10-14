@@ -129,7 +129,7 @@ A build always runs the QA gate. The pedagogy check is a separate step on a buil
 
 ### Preview origin
 
-Previews are served on their own origin, so an activity's scripts never run on the app's origin, where they could call the API or reach into the app's page. Locally the preview origin is `http://preview.localhost:<PORT>`: the back end's own port, under a hostname browsers resolve to this computer. The back end tells the two apart by the `Host` header. The preview origin serves only these routes, and the app origin serves none of them.
+Previews are served on their own origin, so an activity's scripts never run on the app's origin, where they could call the API or reach into the app's page. Locally the preview origin is `http://preview.localhost:<PORT>`: the back end's own port, under a hostname browsers resolve to this computer. The back end tells the two apart by the `Host` header. The preview origin serves only these routes, and the app origin serves none of them. When the back end also serves the built app (the `APP_DIR` setting, as in the desktop app), the app origin is `http://127.0.0.1:<PORT>` and the app finds the preview origin on its own port; under the Vite dev server, `VITE_PREVIEW_ORIGIN` names it.
 
 ```
 GET    /preview/player.html?buildId=&attempt=&parentOrigin=   the emulator player; 403 unless parentOrigin is the app origin
@@ -309,7 +309,7 @@ Layers 1 to 3 ship with V1. Layer 4 is on wherever the agent supports the host. 
 
 **Agent state.** Each agent keeps transcripts, settings, and sign-in under its own configuration directory, listed per agent in [drivers.md](drivers.md). In local mode, leave the defaults so the instructor's existing sign-in is used. In hosted mode, point each at a directory owned by the service account so state has one known home; transcripts are already separated per project because every agent keys them by workspace.
 
-**Windows.** Local mode runs on the instructor's Windows machine. Keep the data directory short, `%LOCALAPPDATA%\CDK`, to stay under path-length limits. The commands in the skills must work in both PowerShell and bash, because the agents differ in which shell they use. Copy builds with a retry, because the preview server or antivirus can hold a file open for a moment.
+**Windows.** Local mode runs on the instructor's Windows machine. Keep the data directory short, `%LOCALAPPDATA%\CDK`, to stay under path-length limits. The commands in the skills must work in both PowerShell and bash, because the agents differ in which shell they use. Copy builds with a retry, because the preview server or antivirus can hold a file open for a moment. The desktop app (`desktop/`) is how instructors run local mode: its Electron main process starts the back end with the app's own executable as Node, opens one window on the back end's origin, and when the window closes ends the back end's whole process tree, the agent included.
 
 ## Modes
 

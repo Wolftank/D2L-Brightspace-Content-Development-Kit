@@ -149,6 +149,13 @@ describe('the agent environment', () => {
     expect(Object.values(env)).not.toContain('back-end-secret');
   });
 
+  it("passes the desktop app's ELECTRON_RUN_AS_NODE, so the agent can run the QA gate with the back end's runtime", async () => {
+    vi.stubEnv('ELECTRON_RUN_AS_NODE', '1');
+    const { agentEnv } = await import('./claude.js');
+
+    expect(agentEnv()).toMatchObject({ ELECTRON_RUN_AS_NODE: '1' });
+  });
+
   it("holds only the inherited variables and the driver's own settings", async () => {
     const { AGENT_SETTINGS_ENV, INHERITED_ENV, agentEnv } = await import('./claude.js');
     const known = [...INHERITED_ENV, ...Object.keys(AGENT_SETTINGS_ENV)];

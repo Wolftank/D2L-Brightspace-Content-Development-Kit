@@ -18,7 +18,7 @@ A project can be reopened at `/?project=<projectId>`. Reload restores its histor
 `npm run dev` proxies to the real back end at port 3000. The real back end and stub provide the message-history route; configure the separate preview origin for interactive build previews:
 
 - `GET /api/projects/:id/messages` returns `{ items, nextCursor? }`, oldest first. Instructor messages include a `turn` with its status and plain-language error, when present. The app follows every page and merges messages by ID.
-- F6 renders ready builds through the emulator on a separate preview origin. Set `VITE_PREVIEW_ORIGIN` for the app; stub mode uses port 3002.
+- F6 renders ready builds through the emulator on a separate preview origin. `VITE_PREVIEW_ORIGIN` sets it for the dev server (`.env.development`); stub mode uses port 3002. A build made with `npm run build` leaves it unset and uses `http://preview.localhost` on the app's own port, because the back end that serves the built app (`APP_DIR`) serves previews on that port too.
 
 The history shape follows the shared contract: instructor `turn` contains `{ id, status, error }`.
 

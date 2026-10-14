@@ -4,6 +4,7 @@ import { renderProjectInstructions, type ProjectInstructionsInput } from './inst
 
 const project = { id: 'project-26', title: 'Cell division practice' };
 const workspaceDir = resolve('test workspace');
+const runtime = resolve('Program Files', 'CDK', 'CDK.exe');
 
 function checkCommand(markdown: string): string {
   const command = /```(?:bash|powershell)\n([^\n]+)\n```/.exec(markdown)?.[1];
@@ -13,7 +14,7 @@ function checkCommand(markdown: string): string {
 
 describe('renderProjectInstructions', () => {
   it('identifies project facts and the complete single-request workflow deterministically', () => {
-    const input: ProjectInstructionsInput = { project, workspaceDir, shell: 'bash' };
+    const input: ProjectInstructionsInput = { project, workspaceDir, shell: 'bash', runtime };
     const markdown = renderProjectInstructions(input);
     expect(renderProjectInstructions(input)).toBe(markdown);
     expect(markdown).toContain(project.id);
@@ -37,19 +38,20 @@ describe('renderProjectInstructions', () => {
 
   it('keeps multiline titles and Markdown delimiters inside literal project data', () => {
     const title = 'A `title`\n```\n# Another heading';
-    const markdown = renderProjectInstructions({ project: { ...project, title }, workspaceDir, shell: 'bash' });
+    const markdown = renderProjectInstructions({ project: { ...project, title }, workspaceDir, shell: 'bash', runtime });
     expect(markdown).toContain(`Project title: \`\`\`\` ${title.replaceAll('\n', '\\n')} \`\`\`\``);
     expect(markdown).not.toContain('\n# Another heading');
   });
 
   it.each(['bash', 'powershell'] as const)('quotes shell-sensitive paths literally for %s', (shell) => {
     const path = join(workspaceDir, "instructor's $HOME & `project` (1)");
-    const command = checkCommand(renderProjectInstructions({ project, workspaceDir: path, shell }));
+    const command = checkCommand(renderProjectInstructions({ project, workspaceDir: path, shell, runtime: join(path, 'CDK.exe') }));
     const escaped = path.replaceAll("'", shell === 'powershell' ? "''" : "'\\''");
-    expect(command).toBe(`node '${join(escaped, 'kit', 'harness', 'lint', 'lint.js')}' '${join(escaped, 'out')}' --avenue scorm`);
+    const call = shell === 'powershell' ? '& ' : '';
+    expect(command).toBe(`${call}'${join(escaped, 'CDK.exe')}' '${join(escaped, 'kit', 'harness', 'lint', 'lint.js')}' '${join(escaped, 'out')}' --avenue scorm`);
   });
 
   it.each(['relative/workspace', `${workspaceDir}\nother`, `${workspaceDir}\0other`])('rejects an unusable workspace path', (path) => {
-    expect(() => renderProjectInstructions({ project, workspaceDir: path, shell: 'bash' })).toThrow('absolute, single-line path');
+    expect(() => renderProjectInstructions({ project, workspaceDir: path, shell: 'bash', runtime })).toThrow('absolute, single-line path');
   });
 });
