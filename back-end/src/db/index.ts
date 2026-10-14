@@ -10,7 +10,7 @@ import * as schema from './schema.js';
 export type Db = BetterSQLite3Database<typeof schema>;
 
 /** `back-end/drizzle`, resolved from this file's own location so it never depends on the working directory. */
-const migrationsFolder = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'drizzle');
+export const migrationsFolder = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'drizzle');
 
 /**
  * Opens the SQLite database at `path` (or `:memory:`), running any pending
