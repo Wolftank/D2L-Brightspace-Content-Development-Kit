@@ -1,14 +1,13 @@
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { getTableConfig } from 'drizzle-orm/sqlite-core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createEventsRepo } from './events.js';
-import { type Db, openDb } from './index.js';
+import { type Db, migrationsFolder, openDb } from './index.js';
 import { createProjectsRepo } from './projects.js';
 import * as schema from './schema.js';
  
@@ -20,8 +19,7 @@ import * as schema from './schema.js';
  
 type OpenDb = Db & { $client: Database.Database };
  
-const MIGRATIONS = join(dirname(fileURLToPath(import.meta.url)), 'migrations');
-const JOURNAL = JSON.parse(readFileSync(join(MIGRATIONS, 'meta', '_journal.json'), 'utf8')) as {
+const JOURNAL = JSON.parse(readFileSync(join(migrationsFolder, 'meta', '_journal.json'), 'utf8')) as {
   entries: unknown[];
 };
 const SCHEMA_TABLES = Object.values(schema).map((table) => getTableConfig(table));
@@ -57,14 +55,14 @@ describe('R5 regression: database', () => {
  
   /** Creates a database file at `path` with only the first `count` migrations applied. */
   function createWithMigrations(path: string, count: number): Database.Database {
-    const migrationsFolder = join(dataDir, 'migrations');
-    cpSync(MIGRATIONS, migrationsFolder, { recursive: true });
+    const earlierMigrations = join(dataDir, 'migrations');
+    cpSync(migrationsFolder, earlierMigrations, { recursive: true });
     writeFileSync(
-      join(migrationsFolder, 'meta', '_journal.json'),
+      join(earlierMigrations, 'meta', '_journal.json'),
       JSON.stringify({ ...JOURNAL, entries: JOURNAL.entries.slice(0, count) }),
     );
     const sqlite = new Database(path);
-    migrate(drizzle(sqlite), { migrationsFolder });
+    migrate(drizzle(sqlite), { migrationsFolder: earlierMigrations });
     return sqlite;
   }
  
