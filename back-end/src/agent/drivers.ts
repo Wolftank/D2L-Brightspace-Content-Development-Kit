@@ -1,9 +1,10 @@
 import type { EffortLevel } from '@anthropic-ai/claude-agent-sdk';
 import type { AgentDriver, AgentName } from './AgentDriver.js';
 import { createClaudeAgentDriver } from './claude.js';
+import { createScriptedAgentDriver } from './scripted.js';
 
 /** The drivers this back end can run. */
-export const AGENT_DRIVERS = ['claude'] as const satisfies readonly AgentName[];
+export const AGENT_DRIVERS = ['claude', 'scripted'] as const satisfies readonly AgentName[];
 
 /** The reasoning effort levels an agent can run with. */
 export const AGENT_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const satisfies readonly EffortLevel[];
@@ -20,5 +21,7 @@ export function createAgentDriver(settings: AgentSettings): AgentDriver {
   switch (settings.driver) {
     case 'claude':
       return createClaudeAgentDriver({ model: settings.model, effort: settings.effort });
+    case 'scripted':
+      return createScriptedAgentDriver();
   }
 }

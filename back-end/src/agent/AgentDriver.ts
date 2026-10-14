@@ -1,6 +1,6 @@
 import type { ZodType } from 'zod';
 
-export type AgentName = 'claude' | 'copilot';
+export type AgentName = 'claude' | 'copilot' | 'scripted';
 
 /**
  * Drives one agent on behalf of the session service and the runner.
