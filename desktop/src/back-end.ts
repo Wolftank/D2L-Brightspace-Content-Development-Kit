@@ -64,16 +64,22 @@ function killTree(pid: number): Promise<void> {
 }
 
 /**
- * Starts the back end at `server` with this process's executable as its Node
- * runtime, and resolves once it answers `/api/health`.
+ * Starts the back end at `server` with `runtime` as its Node runtime, and
+ * resolves once it answers `/api/health`. In the app, `runtime` is the app's
+ * own executable.
  *
  * Raises:
  *   BackEndStartError: when the back end exits or stays unhealthy for
  *   `STARTUP_TIMEOUT_MS`. The back end is stopped first.
  */
-export async function startBackEnd(server: string, appDir: string, timeoutMs = STARTUP_TIMEOUT_MS): Promise<BackEnd> {
+export async function startBackEnd(
+  runtime: string,
+  server: string,
+  appDir: string,
+  timeoutMs = STARTUP_TIMEOUT_MS,
+): Promise<BackEnd> {
   const port = await freePort();
-  const child = spawn(process.execPath, [server], {
+  const child = spawn(runtime, [server], {
     env: backEndEnv(process.env, port, appDir),
     stdio: ['ignore', 'ignore', 'pipe'],
     detached: process.platform !== 'win32',
