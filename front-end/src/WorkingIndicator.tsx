@@ -19,11 +19,11 @@ export function WorkingIndicator({ startedAt, step, connection }: {
       ? 'Reconnecting to your request…'
       : step || 'Working on your request';
   return (
-    <div className={`working-indicator connection-${connection}`} aria-label="Request progress">
+    <div className={`working-indicator connection-${connection}`} role="group" aria-label="Request progress">
       <span className="working-dot" aria-hidden="true" />
       <span aria-live="off">{connection === 'connected' ? text : ''}</span>
       <span role="status">{connection === 'connected' ? '' : text}</span>
-      <span className="elapsed-time" aria-live="off" aria-label="Elapsed time">
+      <span className="elapsed-time" role="group" aria-live="off" aria-label="Elapsed time">
         {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}
       </span>
     </div>
