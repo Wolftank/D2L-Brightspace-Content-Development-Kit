@@ -37,12 +37,14 @@ describe('projectEventReducer', () => {
       payload: {
         turnId: 'turn-1',
         text: 'Running quality checks',
+        category: 'other' as const,
       },
     });
 
     expect(result.statusLines.at(-1)).toEqual({
       seq: 2,
       text: 'Running quality checks',
+      category: 'other',
     });
   });
 
@@ -105,12 +107,14 @@ describe('projectEventReducer', () => {
         callId: 'call-1',
         name: 'builder',
         summary: 'Generating activity',
+        category: 'other' as const,
       },
     });
 
     expect(result.statusLines.at(-1)).toEqual({
       seq: 6,
       text: 'Generating activity',
+      category: 'other',
       callId: 'call-1',
     });
   });
@@ -124,6 +128,7 @@ describe('projectEventReducer', () => {
         callId: 'call-1',
         ok: true,
         summary: 'Activity generated',
+        category: 'other' as const,
       },
     });
 
@@ -336,4 +341,24 @@ it('handles build.updated by replacing the existing build', () => {
 
     expect(streaming.streamingMessages[0]?.text).toBe('Second');
   });
+});
+
+it('keeps thinking out of progress history across replay and replaces the active step on tools and replies', () => {
+  const events: Parameters<typeof projectEventReducer>[1][] = [
+    { seq: 1, kind: 'turn.started', payload: { turnId: 't1', startedAt: 1000 } },
+    { seq: 2, kind: 'turn.status', payload: { turnId: 't1', text: 'Internal thinking text', category: 'thinking' } },
+    { seq: 3, kind: 'tool.started', payload: { turnId: 't1', callId: 'c1', name: 'Write', summary: 'Updating the activity', category: 'writing' } },
+    { seq: 4, kind: 'turn.status', payload: { turnId: 't1', text: 'Thinking…', category: 'thinking' } },
+    { seq: 5, kind: 'message.delta', payload: { turnId: 't1', messageId: 'm1', text: 'Here is the activity' } },
+    { seq: 6, kind: 'turn.completed', payload: { turnId: 't1' } },
+  ];
+  let state = initialProjectEventState;
+  for (const event of events) {
+    state = projectEventReducer(state, event);
+    expect(state.statusLines.some(line => /thinking/i.test(line.text))).toBe(false);
+    if ('seq' in event && event.seq === 2 || 'seq' in event && event.seq === 4) expect(state.turn.currentStep).toBe('Thinking…');
+    if ('seq' in event && event.seq === 3) expect(state.turn.currentStep).toBe('Updating the activity');
+    if ('seq' in event && event.seq === 5) expect(state.turn.currentStep).toBe('Writing your reply');
+  }
+  expect(events.reduce(projectEventReducer, initialProjectEventState)).toEqual(state);
 });

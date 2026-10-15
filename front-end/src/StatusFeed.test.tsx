@@ -14,7 +14,7 @@ it('follows the bottom, pauses on scroll up, and resumes on bottom, jump, or a n
   expect(feed.scrollTop).toBe(500);
   fireEvent.scroll(feed, { target: { scrollTop: 150 } });
   expect(screen.getByRole('button', { name: 'Jump to latest' })).toBeInTheDocument();
-  view.rerender(<StatusFeed lines={[...lines, { seq: 3, text: 'Thinking' }]} turnId="t1" />);
+  view.rerender(<StatusFeed lines={[...lines, { seq: 3, text: 'Writing more' }]} turnId="t1" />);
   expect(feed.scrollTop).toBe(150);
   fireEvent.click(screen.getByRole('button', { name: 'Jump to latest' }));
   expect(feed.scrollTop).toBe(500);
@@ -24,11 +24,11 @@ it('follows the bottom, pauses on scroll up, and resumes on bottom, jump, or a n
   fireEvent.keyDown(feed, { key: 'Home' });
   expect(feed.scrollTop).toBe(0);
   fireEvent.scroll(feed, { target: { scrollTop: 400 } });
-  expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Jump to latest' })).not.toBeInTheDocument();
   fireEvent.scroll(feed, { target: { scrollTop: 0 } });
   view.rerender(<StatusFeed lines={lines} turnId="t2" />);
   expect(feed.scrollTop).toBe(500);
-  expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Jump to latest' })).not.toBeInTheDocument();
   expect(feed).toHaveAttribute('tabindex', '0');
   expect(feed).toHaveAttribute('aria-relevant', 'additions text');
 });
@@ -40,4 +40,22 @@ it('retains existing line nodes and changes only the failed call text', () => {
   expect(screen.getByText('Reading a')).toBe(line);
   view.rerender(<StatusFeed turnId="t1" lines={[{ seq: 1, text: 'Failed: Reading a' }, { seq: 2, text: 'Writing b' }]} />);
   expect(screen.getByText('Failed: Reading a')).toBe(line);
+});
+
+it('uses category metadata for the summary and reveals every non-thinking step in details', () => {
+  render(<StatusFeed turnId="t1" lines={[
+    { seq: 1, text: 'Writing a guide', category: 'reading' },
+    { seq: 2, text: 'Looking for source files', category: 'searching' },
+    { seq: 3, text: 'A custom tool', category: 'other' },
+    { seq: 4, text: 'Updating the activity', category: 'writing' },
+    { seq: 5, text: 'Verifying the result', category: 'checking' },
+    { seq: 6, text: 'Packaging the activity', category: 'building' },
+    { seq: 7, text: 'Failed to read a file', category: 'reading', failed: true },
+  ]} />);
+  expect(screen.getAllByRole('listitem').map(line => line.textContent)).toEqual([
+    'Updating the activity', 'Verifying the result', 'Packaging the activity', 'Failed to read a file',
+  ]);
+  fireEvent.click(screen.getByRole('button', { name: 'Show details' }));
+  expect(screen.getAllByRole('listitem')).toHaveLength(7);
+  expect(screen.getByRole('button', { name: 'Hide details' })).toHaveAttribute('aria-expanded', 'true');
 });

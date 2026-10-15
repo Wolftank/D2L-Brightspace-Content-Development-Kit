@@ -80,8 +80,8 @@ describe('F10 conversation', () => {
     expect(within(chat).queryByLabelText('Request progress')).not.toBeInTheDocument();
     emit({ seq: 2, kind: 'message.delta', payload: { turnId: 't1', messageId: 'a1', text: 'I will ' } });
     emit({ seq: 3, kind: 'message.delta', payload: { turnId: 't1', messageId: 'a1', text: 'edit the activity.' } });
-    emit({ seq: 4, kind: 'tool.started', payload: { turnId: 't1', callId: 'edit', name: 'Edit', summary: 'Editing index.html' } });
-    emit({ seq: 5, kind: 'tool.finished', payload: { turnId: 't1', callId: 'edit', ok: true, summary: 'Editing index.html' } });
+    emit({ seq: 4, kind: 'tool.started', payload: { turnId: 't1', callId: 'edit', name: 'Edit', summary: 'Editing index.html', category: 'writing' as const } });
+    emit({ seq: 5, kind: 'tool.finished', payload: { turnId: 't1', callId: 'edit', ok: true, summary: 'Editing index.html', category: 'writing' as const } });
     emit({ seq: 6, kind: 'message.delta', payload: { turnId: 't1', messageId: 'a2', text: 'Ready.' } });
     expect(within(chat).queryByRole('log', { name: 'Build progress' })).not.toBeInTheDocument();
     expect(within(panel).getByRole('log', { name: 'Build progress' })).toHaveTextContent('Editing index.html');

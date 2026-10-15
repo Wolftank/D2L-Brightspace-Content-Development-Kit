@@ -334,10 +334,21 @@ describe('mapClaudeStream: progress', () => {
     ]);
 
     expect(events).toEqual([
-      { kind: 'status', text: 'Thinking…' },
+      { kind: 'status', text: 'Thinking…', category: 'thinking' as const },
       { kind: 'message_start' },
-      { kind: 'status', text: 'Thinking…' },
-      { kind: 'status', text: 'Thinking…' },
+      { kind: 'status', text: 'Thinking…', category: 'thinking' as const },
+      { kind: 'status', text: 'Thinking…', category: 'thinking' as const },
+    ]);
+  });
+
+  it('ends the thinking phase when its content block stops', async () => {
+    const { events } = await replay([
+      streamEvent({ type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '' } }),
+      streamEvent({ type: 'content_block_stop', index: 0 }),
+    ]);
+    expect(events).toEqual([
+      { kind: 'status', text: 'Thinking…', category: 'thinking' },
+      { kind: 'status', text: 'Preparing next step', category: 'other' },
     ]);
   });
 
@@ -353,7 +364,7 @@ describe('mapClaudeStream: progress', () => {
     ]);
 
     expect(events).toEqual([
-      { kind: 'tool_start', callId: 'call-1', name: 'Write', summary: 'Writing index.html' },
+      { kind: 'tool_start', callId: 'call-1', name: 'Write', summary: 'Writing index.html', category: 'writing' as const },
       { kind: 'tool_end', callId: 'call-1', ok: true, output: 'ok' },
     ]);
     expect(readAt[0]).toBe(3);
@@ -362,7 +373,7 @@ describe('mapClaudeStream: progress', () => {
   it('sends a line that needs no input when the call starts', async () => {
     const { events, readAt } = await replay([toolUseStart(0, 'call-1', 'Grep'), inputDelta(0, '{"pattern": "x"}')]);
 
-    expect(events).toEqual([{ kind: 'tool_start', callId: 'call-1', name: 'Grep', summary: 'Searching the files' }]);
+    expect(events).toEqual([{ kind: 'tool_start', callId: 'call-1', name: 'Grep', summary: 'Searching the files', category: 'searching' as const }]);
     expect(readAt[0]).toBe(1);
   });
 
@@ -374,7 +385,7 @@ describe('mapClaudeStream: progress', () => {
       assistantToolUse('call-1', 'PowerShell', { command: 'node lint.js out' }),
     ]);
 
-    expect(events).toEqual([{ kind: 'tool_start', callId: 'call-1', name: 'PowerShell', summary: 'Running a command' }]);
+    expect(events).toEqual([{ kind: 'tool_start', callId: 'call-1', name: 'PowerShell', summary: 'Running a command', category: 'checking' as const }]);
     expect(readAt[0]).toBe(4);
   });
 
@@ -387,8 +398,8 @@ describe('mapClaudeStream: progress', () => {
     ]);
 
     expect(events).toEqual([
-      { kind: 'tool_start', callId: 'call-2', name: 'Edit', summary: 'Editing b.html' },
-      { kind: 'tool_start', callId: 'call-1', name: 'Read', summary: 'Reading a.html' },
+      { kind: 'tool_start', callId: 'call-2', name: 'Edit', summary: 'Editing b.html', category: 'writing' as const },
+      { kind: 'tool_start', callId: 'call-1', name: 'Read', summary: 'Reading a.html', category: 'reading' as const },
     ]);
   });
 
@@ -405,7 +416,7 @@ describe('mapClaudeStream: progress', () => {
       },
     ]);
 
-    expect(events).toEqual([{ kind: 'status', text: "The agent's service is busy. Trying again…" }]);
+    expect(events).toEqual([{ kind: 'status', text: "The agent's service is busy. Trying again…", category: 'other' as const }]);
   });
 
   it('reports condensing when it starts and nothing when it ends', async () => {
@@ -415,7 +426,7 @@ describe('mapClaudeStream: progress', () => {
       { type: 'system', subtype: 'status', status: null, compact_result: 'success' },
     ]);
 
-    expect(events).toEqual([{ kind: 'status', text: 'Condensing the conversation…' }]);
+    expect(events).toEqual([{ kind: 'status', text: 'Condensing the conversation…', category: 'other' as const }]);
   });
 
   it('preserves assistant message boundaries and uses the last message as the final text', async () => {

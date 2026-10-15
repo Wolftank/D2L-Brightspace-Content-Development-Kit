@@ -40,7 +40,7 @@ function writingDriver(): Pick<AgentDriver, 'open'> {
               yield { kind: 'message_start' };
               yield { kind: 'text_delta', text: 'I will write the notes.' };
             }
-            yield { kind: 'tool_start', callId: 'call-1', name: 'Write', summary: 'Writing notes.txt' };
+            yield { kind: 'tool_start', callId: 'call-1', name: 'Write', summary: 'Writing notes.txt', category: 'writing' as const };
             await fs.writeFile(notes, input.text);
             yield { kind: 'tool_end', callId: 'call-1', ok: true };
             yield { kind: 'message_start' };
@@ -91,7 +91,7 @@ function steppingDriver(): Pick<AgentDriver, 'open'> {
                 return;
               }
               steps++;
-              yield { kind: 'status', text: `Step ${steps}` };
+              yield { kind: 'status', text: `Step ${steps}`, category: 'other' as const };
               if (limits.maxBudgetUsd !== undefined && steps * STEP_COST_USD > limits.maxBudgetUsd) {
                 resolveResult(stopped('max_budget_exceeded', steps));
                 return;

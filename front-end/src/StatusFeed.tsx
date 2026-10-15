@@ -5,6 +5,8 @@ export function StatusFeed({ lines, turnId }: { lines: StatusLine[]; turnId: str
   const viewport = useRef<HTMLDivElement>(null);
   const following = useRef(true);
   const previousTurn = useRef(turnId);
+  const [details, setDetails] = useState(false);
+  const visibleLines = details ? lines : lines.filter(line => line.failed || !['reading', 'searching', 'other'].includes(line.category ?? 'building'));
   const [paused, setPaused] = useState(false);
 
   useLayoutEffect(() => {
@@ -14,7 +16,7 @@ export function StatusFeed({ lines, turnId }: { lines: StatusLine[]; turnId: str
       setPaused(false);
     }
     if (following.current && viewport.current) viewport.current.scrollTop = viewport.current.scrollHeight;
-  }, [lines, turnId]);
+  }, [lines, turnId, details]);
 
   function jumpToLatest() {
     following.current = true;
@@ -24,7 +26,8 @@ export function StatusFeed({ lines, turnId }: { lines: StatusLine[]; turnId: str
 
   return (
     <div className="status-feed-panel">
-      <div className="status-feed-viewport" ref={viewport} role="log" aria-label="Build progress"
+      <button type="button" aria-expanded={details} aria-controls="progress-steps" onClick={() => setDetails(value => !value)}>{details ? 'Hide details' : 'Show details'}</button>
+      <div id="progress-steps" className="status-feed-viewport" ref={viewport} role="log" aria-label="Build progress"
         aria-live="polite" aria-relevant="additions text" tabIndex={0}
         onWheel={(event) => {
           if (event.deltaY < 0) {
@@ -53,7 +56,7 @@ export function StatusFeed({ lines, turnId }: { lines: StatusLine[]; turnId: str
           setPaused(!following.current);
         }}>
         <ol className="status-feed">
-          {lines.map((line) => <li key={line.seq}>{line.text}</li>)}
+          {visibleLines.map((line) => <li key={line.seq}>{line.text}</li>)}
         </ol>
       </div>
       <div className="status-feed-controls">

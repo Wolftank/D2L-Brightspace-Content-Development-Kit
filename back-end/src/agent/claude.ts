@@ -25,6 +25,7 @@ import type {
   TurnLimits,
   TurnResult,
 } from './AgentDriver.js';
+import { toolCategory } from './progress.js';
 
 /**
  * Built-in file-editing tools that `.claude/settings.json` allows for the
@@ -455,10 +456,11 @@ export async function* mapClaudeStream(
   let assistantError: SDKAssistantMessageError | undefined;
   const startedCallIds = new Set<string>();
   const streamingCalls = new Map<number, StreamingToolCall>();
+  const thinkingBlocks = new Set<number>();
 
-  function toolStart(callId: string, name: string, summary: string): AgentEvent {
+  function toolStart(callId: string, name: string, summary: string, input: unknown): AgentEvent {
     startedCallIds.add(callId);
-    return { kind: 'tool_start', callId, name, summary };
+    return { kind: 'tool_start', callId, name, summary, category: toolCategory(name, input) };
   }
 
   try {
@@ -473,11 +475,11 @@ export async function* mapClaudeStream(
               yield { kind: 'notice', text: describePermissionDenied(message) };
               break;
             case 'status':
-              if (message.status === 'requesting') yield { kind: 'status', text: THINKING };
-              if (message.status === 'compacting') yield { kind: 'status', text: CONDENSING };
+              if (message.status === 'requesting') yield { kind: 'status', text: THINKING, category: 'thinking' };
+              if (message.status === 'compacting') yield { kind: 'status', text: CONDENSING, category: 'other' };
               break;
             case 'api_retry':
-              yield { kind: 'status', text: RETRYING };
+              yield { kind: 'status', text: RETRYING, category: 'other' };
               break;
           }
           break;
@@ -487,16 +489,20 @@ export async function* mapClaudeStream(
           if (event.type === 'message_start') {
             textBuf = '';
             streamingCalls.clear();
+            thinkingBlocks.clear();
             yield { kind: 'message_start' };
           } else if (event.type === 'content_block_start') {
             const block = event.content_block;
             if (block.type === 'thinking' || block.type === 'redacted_thinking') {
-              yield { kind: 'status', text: THINKING };
+              thinkingBlocks.add(event.index);
+              yield { kind: 'status', text: THINKING, category: 'thinking' };
             } else if (block.type === 'tool_use') {
               const summary = knownSummary(block.name, block.input);
-              if (summary) yield toolStart(block.id, block.name, summary);
+              if (summary) yield toolStart(block.id, block.name, summary, block.input);
               else streamingCalls.set(event.index, { callId: block.id, name: block.name, inputJson: '' });
             }
+          } else if (event.type === 'content_block_stop' && thinkingBlocks.delete(event.index)) {
+            yield { kind: 'status', text: 'Preparing next step', category: 'other' };
           } else if (event.type === 'content_block_delta') {
             if (event.delta.type === 'text_delta') {
               textBuf += event.delta.text;
@@ -508,7 +514,7 @@ export async function* mapClaudeStream(
               const summary = knownSummary(call.name, parseCompleteFields(call.inputJson));
               if (summary) {
                 streamingCalls.delete(event.index);
-                yield toolStart(call.callId, call.name, summary);
+                yield toolStart(call.callId, call.name, summary, parseCompleteFields(call.inputJson));
               }
             }
           }
@@ -519,7 +525,7 @@ export async function* mapClaudeStream(
           if (message.parent_tool_use_id) break;
           for (const block of message.message.content) {
             if (block.type === 'tool_use' && !startedCallIds.has(block.id)) {
-              yield toolStart(block.id, block.name, summarizeTool(block.name, block.input));
+              yield toolStart(block.id, block.name, summarizeTool(block.name, block.input), block.input);
             }
           }
           break;

@@ -163,11 +163,11 @@ Each event: `id` is the project-wide `seq`, `event` is the kind, `data` is JSON.
 | kind | payload | When |
 |---|---|---|
 | `turn.started` | `{ turnId, startedAt }` | The runner picked the turn up; `startedAt` is the recorded turn start in epoch milliseconds |
-| `turn.status` | `{ turnId, text }` | Plain-language progress, sent when the agent starts a new step: "Thinking…", "The agent's service is busy. Trying again…", "Condensing the conversation…", "Checking your build". Never sent on a timer, and never stored when its text repeats the turn's latest `turn.status`, `tool.started`, or `tool.finished` line. Only the main agent's steps are reported, not a subagent's |
+| `turn.status` | `{ turnId, text, category }` | Plain-language progress, sent when the agent starts a new step: "Thinking…", "The agent's service is busy. Trying again…", "Condensing the conversation…", "Checking your build". Never sent on a timer, and never stored when its text repeats the turn's latest `turn.status`, `tool.started`, or `tool.finished` line. Only the main agent's steps are reported, not a subagent's |
 | `message.delta` | `{ turnId, messageId, text }` | Streamed text for one agent message; a distinct assistant message has a new `messageId` |
 | `message.completed` | `{ message }` | The agent's full message is stored |
-| `tool.started` | `{ turnId, callId, name, summary }` | The agent is calling a tool. Sent once per `callId`, as soon as the driver knows `summary`, its plain-language line such as "Writing index.html", which can be before the call's input is complete |
-| `tool.finished` | `{ turnId, callId, ok, summary, buildId? }` | The tool returned, or the turn ended before it did, which is `ok: false`. `summary` repeats the started one, prefixed "Failed: " when `ok` is false |
+| `tool.started` | `{ turnId, callId, name, summary, category }` | The agent is calling a tool. Sent once per `callId`, as soon as the driver knows `summary`, its plain-language line such as "Writing index.html", which can be before the call's input is complete |
+| `tool.finished` | `{ turnId, callId, ok, summary, category, buildId? }` | The tool returned, or the turn ended before it did, which is `ok: false`. `summary` repeats the started one, prefixed "Failed: " when `ok` is false |
 | `build.created` | `{ build }` | A new build exists (status `checking`) |
 | `build.updated` | `{ build }` | QA gate report attached, pedagogy check report attached, or failed |
 | `deployment.updated` | `{ deployment }` | Any status change, including `requested` from the agent |
@@ -180,6 +180,13 @@ The UI derives its build panel from `build.*` and `deployment.*` events plus the
 ## A turn, end to end
 
 A turn is the agent's work in response to one instructor message. This section follows one from the message arriving to the instructor confirming a deployment, naming the component responsible for each step.
+
+### Progress presentation
+
+Progress events carry a `category`: `thinking`, `reading`, `searching`, `writing`, `checking`, `building`, or `other`. Tool events exclude `thinking`; the driver classifies them from tool identity and structured input, and the runner preserves the category on completion. The UI never classifies display text. Writing, checking, building, terminal summaries, and failed calls appear by default. Show details reveals all non-thinking steps, including after a turn finishes.
+
+Thinking updates only the current-step indicator. It is never added to the progress list, including during replay or after a reload. The end of a thinking block, tool activity, and streamed replies replace it. A reply resets status deduplication so a later thinking phase can start with the same status text.
+
 
 ```mermaid
 sequenceDiagram

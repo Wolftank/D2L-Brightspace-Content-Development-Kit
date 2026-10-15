@@ -1,3 +1,4 @@
+import type { ProgressCategory } from '@cdk/contract';
 import type { ZodType } from 'zod';
 
 export type AgentName = 'claude' | 'copilot';
@@ -137,11 +138,11 @@ export type AgentEvent =
    *  as soon as `summary` is known, which can be before the call's input is
    *  complete. `summary` is a plain-language line for the instructor, e.g.
    *  "Writing index.html". */
-  | { kind: 'tool_start'; callId: string; name: string; summary: string }
+  | { kind: 'tool_start'; callId: string; name: string; summary: string; category: Exclude<ProgressCategory, 'thinking'> }
   | { kind: 'tool_end'; callId: string; ok: boolean; output?: unknown }
   /** The main agent started a new step, e.g. "Thinking…". Emitted when the
    *  step changes, never on a timer. */
-  | { kind: 'status'; text: string }
+  | { kind: 'status'; text: string; category: ProgressCategory }
   /** Something the instructor should see, e.g. "starting a fresh chat". */
   | { kind: 'notice'; text: string };
 

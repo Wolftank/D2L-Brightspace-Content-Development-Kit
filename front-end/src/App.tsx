@@ -19,7 +19,7 @@ function BuildPanel({ build, turn, statusLines, connection, outcome }: {
   return <section className="card build-panel" aria-labelledby="build-title" tabIndex={0}>
     <p className="eyebrow">02 / BUILD</p><h2 id="build-title">Build panel</h2>
     {turn.status === 'running' && turn.startedAt !== null && <WorkingIndicator startedAt={turn.startedAt} step={turn.currentStep} connection={connection} />}
-    {turn.status === 'running' && statusLines.length > 0 && <StatusFeed lines={statusLines} turnId={turn.id} />}
+    {statusLines.length > 0 && <StatusFeed lines={statusLines} turnId={turn.id} />}
     {turn.status !== 'running' && turn.status !== 'idle' && <p className="turn-summary">{turn.status === 'completed' ? 'Request complete' : outcome}</p>}
     {!build ? <p className="empty">Your latest build will appear here.</p> :
       <article className={`build-result build-${build.status}`} aria-labelledby="build-result-title">
