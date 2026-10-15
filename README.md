@@ -30,9 +30,11 @@ Then run the back end and the front end from their folders, as their READMEs des
 
 The Windows app runs CDK without a terminal, Node, or developer tools. One launch starts the back end and opens the CDK window. Launching it again brings the open window to the front. Closing the window stops the back end and any request the agent is running. A request still running when the window closes is marked as interrupted, and its changes so far are kept.
 
-### Build the installer
+### Get the installer
 
-On Windows, at the repository root, after `npm install`:
+CI builds the installer for every pull request and every merge to `main`. On GitHub, open **Actions**, select the run (the latest **CI** run on `main` for the current app), and download `CDK-Setup-<version>-<commit>.exe` from **Artifacts** at the bottom of the run's summary. Downloading needs a GitHub sign-in, and CI keeps each installer for 30 days.
+
+To build it yourself instead, on Windows, at the repository root, after `npm install`:
 
 ```
 npm run package
@@ -42,12 +44,13 @@ This builds every package, then writes the installer to `desktop/release/CDK Set
 
 ### Install and run
 
-1. Copy `CDK Setup <version>.exe` to the laptop and run it. It installs for the current user, without admin rights, into `%LOCALAPPDATA%\Programs\cdk-desktop`, adds CDK to the Start menu and the desktop, and opens it.
+1. Run the installer on the laptop. It installs for the current user, without admin rights, into `%LOCALAPPDATA%\Programs\cdk-desktop`, adds CDK to the Start menu and the desktop, and opens it.
 2. After that, open CDK from the Start menu.
 
 The app isn't signed yet, so Windows may warn before it runs:
 
-- **"Windows protected your PC"** (SmartScreen): select **More info**, then **Run anyway**. Windows shows this for an installer downloaded from the internet or received through chat or email; it does not show it for an installer you built on the same computer.
+- **The browser** may warn that the installer isn't commonly downloaded. Choose to keep the file.
+- **"Windows protected your PC"** (SmartScreen): select **More info**, then **Run anyway**. Windows shows this for an installer downloaded from the internet, including one from CI, or received through chat or email. It does not show it for an installer you built on the same computer.
 - **Smart App Control** (Windows 11, Settings > Privacy & security > Windows Security > App & browser control): when it is on, it blocks unsigned apps and offers no way to run them. Use a laptop where it is off.
 
 The agent uses the Claude sign-in on the laptop, like the development setup. If Claude Code is already signed in there, nothing else is needed. Otherwise, sign in once from PowerShell with the copy of Claude that ships with CDK:
@@ -56,7 +59,13 @@ The agent uses the Claude sign-in on the laptop, like the development setup. If 
 & "$env:LOCALAPPDATA\Programs\cdk-desktop\resources\app\node_modules\@anthropic-ai\claude-agent-sdk-win32-x64\claude.exe" auth login
 ```
 
-Projects and builds are stored in `%LOCALAPPDATA%\CDK`, the same folder the development back end uses, so the app and a development back end on the same laptop share projects. The window's own browser data is in `%APPDATA%\CDK`. Uninstalling CDK from Settings > Apps removes the app and keeps both folders.
+Projects and builds are stored in `%LOCALAPPDATA%\CDK`, the same folder the development back end uses, so the app and a development back end on the same laptop share projects. The window's own browser data is in `%APPDATA%\CDK`.
+
+### Update and uninstall
+
+To update, run the newer installer. It closes CDK if it is open, replaces the app, keeps your projects, and opens CDK again. This can take several minutes.
+
+To uninstall, open Settings > Apps > Installed apps, select **CDK**, then **Uninstall**. If CDK is open, the uninstaller offers to close it. It then asks whether to also delete your projects and builds in `%LOCALAPPDATA%\CDK`. **No**, the default, keeps them. Either way it removes the app, its Start menu and desktop shortcuts, the copy of the installer it keeps in `%LOCALAPPDATA%\cdk-desktop-updater`, and the window's browser data in `%APPDATA%\CDK`.
 
 ## Why front-end and back-end are separate top-level folders
 
