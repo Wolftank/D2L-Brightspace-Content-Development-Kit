@@ -96,3 +96,34 @@ jobs:
         if: success() || failure()
         run: node builds/cdk/routing.test.js
         working-directory: back-end/kit
+
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run package
+      - name: Smoke test the packaged app
+        run: npm run test:e2e
+        working-directory: desktop
+      - name: Name the installer with its version and commit
+        id: installer
+        shell: bash
+        env:
+          COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          version=$(node -p "require('./desktop/package.json').version")
+          name="CDK-Setup-${version}-${COMMIT::7}.exe"
+          mv "desktop/release/CDK Setup ${version}.exe" "desktop/release/${name}"
+          echo "path=desktop/release/${name}" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v7
+        with:
+          path: ${{ steps.installer.outputs.path }}
+          archive: false
+          retention-days: 30
+          if-no-files-found: error
