@@ -27,7 +27,7 @@ async function submitRequest(page: Page, request: string) {
   await page.goto('/');
   await page.getByLabel('Project title').fill('Cell division practice');
   await page.getByLabel('What should students learn or do?').fill(request);
-  await page.getByRole('button', { name: 'Send' }).click();
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
 }
 
 function statusLines(page: Page) {
@@ -45,7 +45,7 @@ function buildCard(page: Page, heading: string) {
 test('happy path: the status feed updates and the build is ready to download', async ({ page }) => {
   await submitRequest(page, 'Create a ten-question multiple-choice practice set on cell division.');
 
-  await expect(page.getByRole('button', { name: 'Send' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
   await expect(statusLines(page).first()).toHaveText('Starting your build');
   await expect(statusLines(page).filter({ hasText: 'Building from the SCORM starter' })).toBeVisible();
 
@@ -56,7 +56,7 @@ test('happy path: the status feed updates and the build is ready to download', a
   await expect(card.getByRole('link', { name: 'Download SCORM package' })).toBeVisible();
   await expect(page.getByText('Request complete', { exact: true })).toBeVisible({ timeout: TURN_TIMEOUT });
   await expect(statusLines(page)).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
 });
 
 test('QA failure: each finding explains itself and no package is offered', async ({ page }) => {
@@ -78,7 +78,7 @@ test('turn failure: a plain-language message appears without raw error details',
   await expect(page.getByLabel('Conversation history')).toContainText('The agent stopped before it finished.', {
     timeout: TURN_TIMEOUT,
   });
-  await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
 
   const panel = page.getByRole('region', { name: 'Build panel' });
   await expect(panel).not.toContainText('agent_error');

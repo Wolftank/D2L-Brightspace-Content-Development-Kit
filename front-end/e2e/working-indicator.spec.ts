@@ -5,7 +5,7 @@ test('silent turn keeps its step and real elapsed time after reload and replay i
   await page.goto('/');
   await page.getByLabel('Project title').fill('Long silent turn');
   await page.getByLabel('What should students learn or do?').fill('[long-step] Create a quiz');
-  await page.getByRole('button', { name: 'Send' }).click();
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
   const indicator = page.getByLabel('Request progress');
   await expect(indicator).toContainText('Building from the SCORM starter');
   const project = await page.evaluate(() => sessionStorage.getItem('active-project'));

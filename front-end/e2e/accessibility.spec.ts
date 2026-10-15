@@ -46,7 +46,7 @@ async function startRequest(page: Page, request: string) {
   await page.goto('/');
   await page.getByLabel('Project title').fill('Accessibility baseline');
   await page.getByLabel('What should students learn or do?').fill(request);
-  await page.getByRole('button', { name: 'Send' }).click();
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
 }
 
 test.describe('accessibility baseline', () => {
@@ -57,7 +57,7 @@ test.describe('accessibility baseline', () => {
   test('empty form', async ({ page }, testInfo) => {
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'Describe what you want to build.' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
     await scan(page, testInfo, 'empty form');
   });
 
