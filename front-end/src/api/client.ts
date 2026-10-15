@@ -1,5 +1,4 @@
 import type {
-  ApiErrorBody,
   BuildResponse,
   CreateProjectRequest,
   CreateProjectResponse,
@@ -9,11 +8,14 @@ import type {
   SendMessageResponse,
 } from '@cdk/contract';
 
+import { readFailure, type NextStep } from './failure';
+
 export class ApiError extends Error {
   constructor(
     readonly code: string,
     message: string,
     readonly details?: unknown,
+    readonly nextStep: NextStep = 'try_again_later',
   ) {
     super(message);
     this.name = 'ApiError';
@@ -29,9 +31,9 @@ async function json<T>(url: string, init: RequestInit = {}): Promise<T> {
   }
 
   if (!response.ok) {
-    const body = await response.json().catch(() => null) as ApiErrorBody | null;
-    const error = body?.error;
-    throw new ApiError(error?.code ?? 'request_failed', error?.message ?? 'The request could not be completed.', error?.details);
+    const body = await response.json().catch(() => null);
+    const failure = readFailure(body?.error);
+    throw new ApiError(body?.error?.code ?? 'request_failed', failure.message, undefined, failure.nextStep);
   }
   return response.json() as Promise<T>;
 }

@@ -1,5 +1,6 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
 import type { ConnectionStatus } from '../WorkingIndicator';
+import { readFailure, type Failure } from '../api/failure';
 import { getMessages, projectEventsUrl } from '../api/client';
 import type {
   Build,
@@ -25,7 +26,7 @@ export interface ProjectEventState {
   streamingMessages: { id: string; turnId: string; text: string }[];
   builds: Build[];
   messages: Message[];
-  outcomes: Record<string, { status: string; message?: string }>;
+  outcomes: Record<string, { status: string; message?: string; failure?: Failure }>;
 }
 
 type ProjectEventReducerAction =
@@ -81,7 +82,8 @@ export function projectEventReducer(
       const outcomes = { ...state.outcomes };
       for (const message of action.messages) {
         if (message.turn && !outcomes[message.turn.id]) outcomes[message.turn.id] = {
-          status: message.turn.status, message: message.turn.error?.message,
+          status: message.turn.status,
+          ...(message.turn.status === 'cancelled' ? { message: 'This request was cancelled.', failure: { message: 'This request was cancelled.', nextStep: 'send_again' as const } } : message.turn.error ? { message: readFailure(message.turn.error).message, failure: readFailure(message.turn.error) } : {}),
         };
       }
       return { ...state, messages: mergeMessages(state.messages, action.messages), streamingMessages: state.streamingMessages.filter(message => !action.messages.some(saved => saved.id === message.id)), outcomes };
@@ -181,7 +183,7 @@ export function projectEventReducer(
     case 'turn.failed':
       return {
         ...state,
-        outcomes: { ...state.outcomes, [event.payload.turnId]: { status: 'failed', message: event.payload.error.message } },
+        outcomes: { ...state.outcomes, [event.payload.turnId]: { status: 'failed', message: readFailure(event.payload.error).message, failure: readFailure(event.payload.error) } },
         turn: {
           id: event.payload.turnId,
           status: 'failed',
@@ -190,14 +192,14 @@ export function projectEventReducer(
         },
         statusLines: [
           ...state.statusLines,
-          { seq: event.seq, text: event.payload.error.message },
+          { seq: event.seq, text: readFailure(event.payload.error).message },
         ],
       };
 
     case 'turn.cancelled':
   return {
     ...state,
-    outcomes: { ...state.outcomes, [event.payload.turnId]: { status: 'cancelled', message: 'This request was cancelled.' } },
+    outcomes: { ...state.outcomes, [event.payload.turnId]: { status: 'cancelled', message: 'This request was cancelled.', failure: { message: 'This request was cancelled.', nextStep: 'send_again' as const } } },
     turn: {
       id: event.payload.turnId,
       status: 'cancelled',
@@ -217,10 +219,11 @@ default:
 
 
 export function useProjectEvents(projectId: string | null) {
+  const [retry, setRetry] = useState(0);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [connection, setConnection] = useState<ConnectionStatus>('reconnecting');
   const storageStateKey = projectId
-  ? `conversation-${projectId}-event-state`
+  ? `recovery-${projectId}-event-state`
   : null;
 
 const [state, dispatch] = useReducer(
@@ -310,7 +313,7 @@ useEffect(() => {
   useEffect(() => {
     if (!projectId) return;
 
-    const storageKey = `conversation-${projectId}-last-seq`;
+    const storageKey = `recovery-${projectId}-last-seq`;
     const lastSeq = sessionStorage.getItem(storageKey);
 
     let url = projectEventsUrl(projectId);
@@ -319,6 +322,7 @@ useEffect(() => {
       url += `?after=${encodeURIComponent(lastSeq)}`;
     }
 
+    setConnection('reconnecting');
     const stream = new EventSource(url);
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
     stream.addEventListener('open', () => {
@@ -328,6 +332,7 @@ useEffect(() => {
     });
     stream.addEventListener('error', () => {
       if (stream.readyState === 2) {
+        stream.close();
         clearTimeout(reconnectTimer);
         setConnection('lost');
         return;
@@ -386,7 +391,7 @@ dispatch(projectEvent);
       clearTimeout(reconnectTimer);
       stream.close();
     };
-  }, [projectId]);
+  }, [projectId, retry]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -404,5 +409,5 @@ dispatch(projectEvent);
     return () => { cancelled = true; };
   }, [projectId]);
 
-  return { ...state, connection, historyError, addMessage: (message: Message) => dispatch({ type: 'message', message }) };
+  return { ...state, connection, historyError, reconnect: () => { setHistoryError(null); setRetry(value => value + 1); }, addMessage: (message: Message) => dispatch({ type: 'message', message }) };
 }

@@ -49,3 +49,11 @@ npm run test:e2e
 Browser tests cover follow-ups on ready and failed builds, message order, reload, reopening with empty session storage, preview replacement and restart, retained ready previews, mobile stacking, focus and automated WCAG checks.
 
 Manual keyboard and NVDA check: send `[long-step]`, confirm focus returns to the message box and Send is disabled with an explanation. Draft a follow-up, reload, and confirm it stays. Confirm timer ticks are silent, progress updates are announced, and the completed agent reply is announced once. Tab through Conversation, history, the message box, Build panel, download, Preview, Restart preview, and the activity controls. At desktop and narrow widths, verify visible focus and no horizontal page scrolling. NVDA verification remains manual.
+
+## F11 draft integration
+
+This PR is intentionally a draft pending B24 (#121). `src/api/failure.ts` defines the proposed next-step values: `send_again`, `sign_in_to_agent`, `try_again_later`, `try_smaller_request`, `wait_for_current_request`, and `start_new_project`. A failure is `{ message, nextStep }`; both the API error envelope and `turn.failed.error` must carry it, and history must preserve it. Until B24 lands, unrecognised errors show a generic message with guidance; the UI does not infer actions from internal error codes.
+
+The sign-in link opens `/api/agent/sign-in` in a separate tab. The stub serves a demonstration page; a real host sign-in handler and Electron external-window integration still need agreement before this draft is ready. The PR does not implement B24 or initiate authentication automatically.
+
+Stub markers `[send_again]`, `[try_smaller_request]`, `[sign_in_to_agent]`, `[try_again_later]`, `[wait_for_current_request]`, `[start_new_project]`, and `[cancelled]` exercise the actions. `[drop-lost]` exercises explicit reconnect. Errors use alerts, action controls are keyboard accessible, and focus returns to the composer after resend/edit. Manual NVDA verification remains outstanding.

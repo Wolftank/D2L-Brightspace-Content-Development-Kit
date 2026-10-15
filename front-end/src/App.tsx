@@ -7,6 +7,7 @@ import type { ProjectEventState } from './hooks/useProjectEvents';
 import { WorkingIndicator } from './WorkingIndicator';
 import { StatusFeed } from './StatusFeed';
 import './App.css';
+import { ErrorNotice } from './ErrorNotice';
 import { PreviewPanel } from './preview/PreviewPanel';
 
 function BuildPanel({ build, turn, statusLines, connection, outcome }: {
@@ -26,7 +27,7 @@ function BuildPanel({ build, turn, statusLines, connection, outcome }: {
         <p className="result-label">BUILD {build.version}</p>
         <h3 id="build-result-title">{build.status === 'ready' ? 'Ready to download' : build.status === 'failed' ? 'QA needs attention' : 'Build is being checked'}</h3>
         {build.qa && <p>{build.qa.passed ? 'The QA gate passed.' : 'The QA gate needs attention.'}</p>}
-        {build.error && <p>{build.error.message}</p>}
+        {build.error && <p>The build could not be prepared. Ask CDK to check the activity and try again.</p>}
         {!!build.qa?.findings.length && <ul className="findings">{build.qa.findings.map((finding, index) =>
           <li key={index}><strong>{finding.severity === 'warn' ? 'WARNING' : 'ERROR'}</strong> {finding.message}{finding.because && <p>{finding.because}</p>}</li>)}</ul>}
         {build.status === 'ready' && <a className="download" href={buildDownloadUrl(build.id)}>Download SCORM package</a>}
@@ -47,7 +48,7 @@ export function App() {
   const [sending, setSending] = useState(false);
   const [pendingTurn, setPendingTurn] = useState<string | null>(null);
   const messageBox = useRef<HTMLTextAreaElement>(null);
-  const { statusLines, streamingMessages, messages, outcomes, builds, turn, connection, historyError, addMessage } = useProjectEvents(project?.id ?? null);
+  const { statusLines, streamingMessages, messages, outcomes, builds, turn, connection, historyError, reconnect, addMessage } = useProjectEvents(project?.id ?? null);
   const isBuilding = opening || sending || turn.status === 'running' || (pendingTurn !== null && turn.id !== pendingTurn);
   const latestBuild = [...builds].sort((a, b) => b.version - a.version)[0] ?? null;
   const readyBuild = [...builds].filter(build => build.status === 'ready').sort((a, b) => b.version - a.version)[0] ?? null;
@@ -66,10 +67,21 @@ export function App() {
   useEffect(() => { sessionStorage.setItem('request-draft', requestText); }, [requestText]);
   useEffect(() => { const element = chatHistory.current; if (element) element.scrollTop = element.scrollHeight; }, [messages, streamingMessages]);
 
+  function startNewProject() {
+    setProject(null); setTitle(''); setPendingTurn(null); setError(null);
+    sessionStorage.removeItem('active-project');
+    window.history.replaceState(null, '', '/');
+    messageBox.current?.focus();
+  }
+
   async function handleSend(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    await submitRequest(requestText);
+  }
+
+  async function submitRequest(request: string) {
     if (isBuilding) return;
-    const text = requestText.trim();
+    const text = request.trim();
     if (!text || (!project && !title.trim())) {
       setError(new ApiError('invalid_request', 'Enter a project title and a request before building.')); return;
     }
@@ -103,18 +115,22 @@ export function App() {
             <p className="speaker">{message.role === 'instructor' ? 'You' : 'CDK'}</p>
             <p>{message.content.filter(block => block.type === 'text').map(block => block.text).join('\n')}</p>
             {message.role === 'instructor' && message.turnId && ['failed', 'cancelled'].includes(outcomes[message.turnId]?.status ?? '') &&
-              <p className="error">{outcomes[message.turnId]?.message}</p>}
+              <ErrorNotice failure={outcomes[message.turnId]?.failure ?? { message: 'This request could not be completed.', nextStep: 'try_again_later' }} disabled={isBuilding}
+                onSendAgain={() => void submitRequest(message.content.filter(block => block.type === 'text').map(block => block.text).join('\n'))}
+                onEdit={() => { setRequestText(message.content.filter(block => block.type === 'text').map(block => block.text).join('\n')); messageBox.current?.focus(); }}
+                onNewProject={startNewProject} />}
           </article>)}
           {streamingMessages.map(message => <article key={message.id} className="chat-message message-agent"><p className="speaker">CDK</p><p>{message.text}</p></article>)}
         </div>
         <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{latestAgent ? `CDK: ${latestAgent.content.filter(block => block.type === 'text').map(block => block.text).join('')}` : ''}</div>
-        {historyError && <p className="error" role="alert">{historyError}</p>}
+        {project && connection !== 'connected' && <div className="connection-notice"><p role="status">{connection === 'reconnecting' ? 'Reconnecting to your request…' : 'Connection lost. Try connecting again.'}</p>{connection === 'lost' && <button type="button" onClick={reconnect}>Try again</button>}</div>}
+        {historyError && <div><p className="error" role="alert">Unable to load the conversation.</p><button type="button" onClick={reconnect}>Try loading the conversation again</button></div>}
         <form onSubmit={handleSend} className="composer">
           {!project && <><label htmlFor="project-title">Project title</label><input id="project-title" value={title} onChange={event => setTitle(event.target.value)} placeholder="e.g., Cell division practice" maxLength={160} disabled={sending} /></>}
           <label htmlFor="request-text">{project ? 'Describe a change' : 'What should students learn or do?'}</label>
           <textarea ref={messageBox} id="request-text" value={requestText} onChange={event => setRequestText(event.target.value)} placeholder={project ? 'Describe a change or ask a question…' : 'Create a ten-question practice quiz on cell division…'} rows={3} maxLength={20000} aria-describedby="composer-hint" />
           <div className="composer-footer"><p className="hint" id="composer-hint">{opening ? 'Opening your project…' : isBuilding ? 'CDK is working on your request. You can draft your next message while you wait.' : 'Your requests stay together in this project.'}</p><button disabled={isBuilding} type="submit">{sending ? 'Sending…' : 'Send'}</button></div>
-          {error && <p className="error" role="alert">{error.message}</p>}
+          {error && <ErrorNotice failure={error} disabled={isBuilding} onSendAgain={() => void submitRequest(requestText)} onEdit={() => messageBox.current?.focus()} onNewProject={startNewProject} />}
         </form>
       </section>
       <BuildPanel build={latestBuild} turn={turn} statusLines={statusLines} connection={connection} outcome={outcomes[turn.id ?? '']?.message} />

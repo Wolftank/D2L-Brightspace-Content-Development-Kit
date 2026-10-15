@@ -113,7 +113,7 @@ test('lost connection: the feed says the connection was lost, and a reload resto
   await submitRequest(page, '[drop-lost] Create a practice set on cell division.');
   await expect(statusLines(page).filter({ hasText: 'Building from the SCORM starter' })).toBeVisible();
 
-  await expect(connectionStatus(page)).toHaveText('Connection lost. Reload the page to reconnect.', { timeout: TURN_TIMEOUT });
+  await expect(connectionStatus(page)).toHaveText('Connection lost. Try connecting again.', { timeout: TURN_TIMEOUT });
 
   await page.reload();
 
