@@ -108,7 +108,7 @@ describe('createApp', () => {
       .send({ content: [{ type: 'text', text: 'x'.repeat(150_000) }] });
 
     expect(res.status).toBe(413);
-    expect(res.body.error).toEqual({ code: 'payload_too_large', message: 'The request is too large.' });
+    expect(res.body.error).toEqual({ code: 'payload_too_large', message: 'The request is too large.', nextStep: 'smaller_request' });
   });
 
   it('returns 404 and the error envelope for an unknown /api route', async () => {

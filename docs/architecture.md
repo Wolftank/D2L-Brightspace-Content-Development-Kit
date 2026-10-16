@@ -30,7 +30,7 @@ User ─< Project ─┬─< Message
 | **Message** | `id, projectId, seq, role, content[], turnId?, createdAt` | `role` is `instructor \| agent`. `content` is a list of blocks (below) |
 | **Turn** | `id, projectId, messageId, replyId?, status, startedAt?, finishedAt?, error?, usage?` | `messageId` is the instructor's message, `replyId` the final agent message; earlier agent messages in the same turn share its `turnId`. `status` is `queued \| running \| completed \| failed \| cancelled` |
 | **File** | `id, projectId, name, mime, size, createdAt` | Instructor uploads: syllabus, assignment text, images |
-| **Build** | `id, projectId, version, status, avenue, qa, error?, outputHash?, pedagogy?, turnId?, createdAt` | `status` is `checking \| ready \| failed`. `outputHash` is the hash of the output the build copied, null while `checking` and when the copy failed. `qa` is `{ passed, findings[] }`, each finding `{ rule, severity, file, line, message, because? }`, or null until the QA gate reports and when it produced no usable report. `error` is `{ code, message }` explaining why a build is `failed`, otherwise null. `pedagogy` is `{ tilt[], udl[] }` once the pedagogy check has run on this build, otherwise null |
+| **Build** | `id, projectId, version, status, avenue, qa, error?, outputHash?, pedagogy?, turnId?, createdAt` | `status` is `checking \| ready \| failed`. `outputHash` is the hash of the output the build copied, null while `checking` and when the copy failed. `qa` is `{ passed, findings[] }`, each finding `{ rule, severity, file, line, message, because? }`, or null until the QA gate reports and when it produced no usable report. `error` is `{ code, message, nextStep }` explaining why a build is `failed` (see [Errors](#errors)), otherwise null. `pedagogy` is `{ tilt[], udl[] }` once the pedagogy check has run on this build, otherwise null |
 | **Deployment** | `id, buildId, status, targetCourse, location?, verification?, turnId?, confirmedAt?, createdAt` | `status` is `requested \| confirmed \| deploying \| verified \| failed`. Only the instructor moves it past `requested` |
 | **Event** | `seq, projectId, turnId?, kind, payload, ts` | What the event stream carries. Replayable by `seq` |
 
@@ -62,7 +62,7 @@ The HTTP API is the request/response contract between the front end and the back
 
 All routes are under `/api`, JSON in and out. One auth middleware runs before every route and sets `req.user`: in local mode it returns the single OS user, in hosted mode it reads the cookie set by the OIDC login. Every query below the middleware filters on `req.user.id`, so hosted mode is a WHERE clause, and local mode is the same code with one instructor.
 
-Errors use one envelope: `{ "error": { "code": "...", "message": "...", "details"?: {} } }` with the usual status codes. Lists are cursor-paginated (`?cursor=&limit=`).
+Errors use one envelope: `{ "error": { "code": "...", "message": "...", "nextStep": "...", "details"?: {} } }` with the usual status codes. [Errors](#errors) lists each code. Lists are cursor-paginated (`?cursor=&limit=`).
 
 ### Identity
 
@@ -105,7 +105,7 @@ Posting a message never blocks on the agent. It stores the message, creates a qu
 
 `POST /api/projects/:projectId/messages` takes `content` holding at least one `{ type: 'text', text }` block and nothing else. Each `text` is trimmed and must not be blank; a `file` block or any other shape gets `400 invalid_request`, and any other field is ignored. A body over 100 KB of JSON gets `413 payload_too_large`. The message and its turn are stored together, or not at all when the project already has a `queued` or `running` turn, which the `409 turn_active` names. There is no cancel route yet.
 
-`GET /api/projects/:projectId/messages` lists the project's instructor and agent messages, oldest first. Each instructor message carries `turn: { id, status, error }`, the turn it started: `status` is the turn's status as stored, `queued` included, and `error` is the failed turn's `{ code, message }`, otherwise null. A failed or cancelled turn has no agent reply. Agent messages carry no `turn`. `limit` is 1 to 200 and defaults to 100, so one page covers a normal conversation. `nextCursor` is present only when more messages follow; passing it back as `cursor` returns the next page. Any other `limit` or `cursor` gets `400 invalid_request`.
+`GET /api/projects/:projectId/messages` lists the project's instructor and agent messages, oldest first. Each instructor message carries `turn: { id, status, error }`, the turn it started: `status` is the turn's status as stored, `queued` included, and `error` is the failed turn's `{ code, message, nextStep }`, otherwise null. A failed or cancelled turn has no agent reply. Agent messages carry no `turn`. `limit` is 1 to 200 and defaults to 100, so one page covers a normal conversation. `nextCursor` is present only when more messages follow; passing it back as `cursor` returns the next page. Any other `limit` or `cursor` gets `400 invalid_request`.
 
 ### Builds and deployments
 
@@ -215,12 +215,73 @@ Runner rules:
 1. One active turn per project. Per-instructor concurrency cap: 1 in local mode, configurable in hosted mode. Extra turns wait in `queued`. V1 enforces the per-project rule when a message is posted and has no per-instructor cap, so a turn stays `queued` only until the runner starts it.
 2. Every driver text, tool, status, or notice event becomes an Event row **and** a live push, in that order, except a status or notice whose text repeats the turn's latest status line. When the driver's events end, every tool call without a `tool.finished` gets one with `ok: false`.
 3. When the driver's result arrives, the runner hands the session back to the session service: `release` after a completed result, `close` after anything else, so a failed or aborted agent process is never reused. On a completed result it stores each nonempty agent message in order and emits `message.completed` for each. Assistant message boundaries from the driver determine distinct message IDs; tool steps do not split text by themselves. The driver's final message completes the last reply, or its streamed text is used when that is empty. The turn's `replyId` references the final stored reply. It then builds per rule 6 and marks the turn.
-4. Every turn ends with exactly one of `turn.completed`, `turn.failed`, and `turn.cancelled`. A failed turn's `error` is `{ code, message }`: the code from the driver, or `workspace_missing`, `interrupted`, or `internal_error` from the runner, and a fixed plain-language message for that code. The technical detail goes to the server log.
+4. Every turn ends with exactly one of `turn.completed`, `turn.failed`, and `turn.cancelled`. A failed turn's `error` is `{ code, message, nextStep }`: the code from the driver, or `workspace_missing`, `interrupted`, or `internal_error` from the runner, with the fixed plain-language message and next step for that code from [Errors](#errors). The technical detail goes to the server log.
 5. `POST /turns/:id/cancel` fires the turn's abort signal. The driver stops the agent; the runner records `cancelled` or `failed`. V1 has no cancel route and imposes no step, spending, or time limit on a turn, so a stuck turn holds its project until the back end restarts.
 6. At the end of a completed turn, the runner compares the workspace service's hash of `out/` with the `outputHash` of the project's latest build, or with `out/` at the turn's start before the project's first build. When they differ it creates a build, with the QA gate and without the pedagogy check. This builds a turn's changes without relying on the agent to remember and, once the project has a build, also builds output a failed or interrupted turn left unbuilt. A build that fails the QA gate leaves the turn `completed`.
 7. On boot, once the back end holds its port and before it handles a request, every turn still `queued` or `running` becomes `failed` with `error.code = 'interrupted'`. Its message and the workspace output are kept, and the UI offers to resend. Every build still `checking` becomes `failed` with the same code.
 
 Not every message produces a build. A question gets an answer. A request to change a colour edits the output and produces a new build. The agent's clarifying questions are ordinary messages; the next instructor message continues the chat.
+
+## Errors
+
+Every error an instructor can see has a `code`, a `message` that says in plain language what happened, and one `nextStep`, the thing to do about it. Technical detail never goes in `message`; it goes to the server log. The front end decides how each next step is shown.
+
+| `nextStep` | What the instructor does |
+| --- | --- |
+| `send_again` | Send the same request again |
+| `sign_in` | Sign in to the agent |
+| `try_later` | Try again later |
+| `smaller_request` | Try a smaller request |
+| `wait` | Wait for the current request |
+| `new_project` | Start a new project |
+| `ask_for_fix` | Ask the agent to fix the build's QA findings |
+
+### Turn errors
+
+A failed turn's `error`, stored on the turn and sent in `turn.failed`. The runner adds `workspace_missing`, `interrupted`, and `internal_error` to the driver's codes.
+
+| Code | Message | Next step |
+| --- | --- | --- |
+| `agent_error` | The agent stopped with an error before it finished. | `send_again` |
+| `agent_signed_out` | The agent isn't signed in, or its account can't be used. | `sign_in` |
+| `agent_billing` | The agent's account has a billing or account problem. | `sign_in` |
+| `agent_busy` | The agent's account is busy or has reached its usage limit. | `try_later` |
+| `agent_unrestricted` | The agent started with tools or skills CDK doesn't allow, so the request didn't run. | `try_later` |
+| `max_steps_exceeded` | The request needed more steps than allowed. | `smaller_request` |
+| `max_budget_exceeded` | The request reached its spending limit. | `smaller_request` |
+| `no_result` | The agent stopped unexpectedly before it finished. | `send_again` |
+| `driver_error` | The agent stopped unexpectedly before it finished. | `send_again` |
+| `workspace_missing` | This project's files are missing, so the request couldn't run. | `new_project` |
+| `interrupted` | The app closed before this request finished. Changes made so far are kept. | `send_again` |
+| `internal_error` | Something went wrong while running this request. | `send_again` |
+
+### API errors
+
+The envelope's `error`. `details`, where present, is for the front end's logic and is never shown to the instructor.
+
+| Code | Status | Message | Next step |
+| --- | --- | --- | --- |
+| `invalid_request` | 400 | The request couldn't be read. | `send_again` |
+| `invalid_json` | 400 | The request couldn't be read. | `send_again` |
+| `payload_too_large` | 413 | The request is too large. | `smaller_request` |
+| `not_found` | 404 | This project or build doesn't exist. | `new_project` |
+| `turn_active` | 409 | A request is already running for this project. | `wait` |
+| `build_not_ready` | 409 | This build isn't ready to download. | `try_later` |
+| `build_incomplete` | 409 | This build is missing files it needs. | `send_again` |
+| `internal_error` | 500 | Something went wrong. | `try_later` |
+
+### Build errors
+
+A failed build's `error`. A build that fails its QA check also carries the findings in `qa`.
+
+| Code | Message | Next step |
+| --- | --- | --- |
+| `qa_failed` | The QA check found problems in this build. | `ask_for_fix` |
+| `interrupted` | The app closed before this build was checked. | `send_again` |
+| `copy_failed` | This build couldn't be saved. | `send_again` |
+| `gate_crashed` | The QA check couldn't finish on this build. | `send_again` |
+| `gate_invalid_output` | The QA check couldn't finish on this build. | `send_again` |
+| `gate_inconsistent` | The QA check couldn't finish on this build. | `send_again` |
 
 ## Tools
 

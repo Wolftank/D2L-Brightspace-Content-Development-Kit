@@ -29,7 +29,7 @@ import { createWorkspaceService, type WorkspaceService } from './services/worksp
  */
 
 const MESSAGE = { content: [{ type: 'text', text: 'Build a self-check on mitosis' }] };
-const ENVELOPE_FIELDS = ['code', 'message', 'details'];
+const ENVELOPE_FIELDS = ['code', 'message', 'nextStep', 'details'];
 
 /** A stack frame such as `at handle (/app/src/routes/projects.ts:21:5)`. */
 const STACK_FRAME = /\bat .+:\d+:\d+/;
@@ -49,6 +49,7 @@ function expectEnvelope(res: request.Response, status: number, code: string): vo
   expect(error.code).toBe(code);
   expect(error.message).toEqual(expect.any(String));
   expect(error.message).not.toBe('');
+  expect(error.nextStep).toEqual(expect.any(String));
   if ('details' in error) expect(error.details).toEqual(expect.any(Object));
 
   expect(res.text).not.toMatch(STACK_FRAME);
@@ -75,7 +76,7 @@ describe('R3 regression: app, identity, error envelope', () => {
     return buildsRepo.finish(build.id, {
       status,
       qa: { passed: status === 'ready', findings: [] },
-      error: status === 'ready' ? null : { code: 'qa_failed', message: 'The QA gate reported 1 error(s)' },
+      error: status === 'ready' ? null : { code: 'qa_failed', message: 'The QA check found problems in this build.', nextStep: 'ask_for_fix' },
       outputHash: null,
     });
   }
@@ -143,7 +144,7 @@ describe('R3 regression: app, identity, error envelope', () => {
   });
 
   describe('errors a route throws', () => {
-    it('returns 404 not_found, keeping the message of the NotFound the route threw (F22)', async () => {
+    it('returns 404 not_found with the plain message, never the text of the NotFound the route threw (F22)', async () => {
       deps.projects = {
         ...deps.projects,
         get: () => {
@@ -154,7 +155,8 @@ describe('R3 regression: app, identity, error envelope', () => {
       const res = await request(app()).get('/api/projects/archived-7');
 
       expectEnvelope(res, 404, 'not_found');
-      expect(res.body.error.message).toBe('Project archived-7 not found');
+      expect(res.body.error).toEqual({ code: 'not_found', message: "This project or build doesn't exist.", nextStep: 'new_project' });
+      expect(res.text).not.toContain('archived-7');
     });
 
     it("returns 404 not_found for a real route's unknown and another owner's id (F22)", async () => {
@@ -174,7 +176,7 @@ describe('R3 regression: app, identity, error envelope', () => {
       const res = await request(app()).get('/api/projects/mine');
 
       expectEnvelope(res, 500, 'internal_error');
-      expect(res.body.error).toEqual({ code: 'internal_error', message: 'Internal server error' });
+      expect(res.body.error).toEqual({ code: 'internal_error', message: 'Something went wrong.', nextStep: 'try_later' });
       expect(res.text).not.toContain('SQLITE_CORRUPT');
       expect(res.text).not.toContain('cdk.db');
       expect(consoleError).toHaveBeenCalledWith(unexpected);
@@ -192,7 +194,7 @@ describe('R3 regression: app, identity, error envelope', () => {
       const res = await request(app()).get('/api/me');
 
       expectEnvelope(res, 500, 'internal_error');
-      expect(res.body.error).toEqual({ code: 'internal_error', message: 'Internal server error' });
+      expect(res.body.error).toEqual({ code: 'internal_error', message: 'Something went wrong.', nextStep: 'try_later' });
       expect(res.text).not.toContain('ENOENT');
       expect(consoleError).toHaveBeenCalledWith(unexpected);
     });

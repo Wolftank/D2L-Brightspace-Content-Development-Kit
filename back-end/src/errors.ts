@@ -1,5 +1,5 @@
-import type { ApiErrorBody } from '@cdk/contract';
-import type { ErrorRequestHandler } from 'express';
+import type { ApiErrorBody, NextStep } from '@cdk/contract';
+import type { ErrorRequestHandler, Response } from 'express';
 import { ZodError } from 'zod';
 
 /** The requested resource does not exist, or is not owned by the caller. */
@@ -42,54 +42,36 @@ export class BuildIncomplete extends Error {
   }
 }
 
+/** Each API error's status, what the instructor reads, and the one thing to do next. */
+export const API_ERRORS = {
+  invalid_request: { status: 400, message: "The request couldn't be read.", nextStep: 'send_again' },
+  invalid_json: { status: 400, message: "The request couldn't be read.", nextStep: 'send_again' },
+  payload_too_large: { status: 413, message: 'The request is too large.', nextStep: 'smaller_request' },
+  not_found: { status: 404, message: "This project or build doesn't exist.", nextStep: 'new_project' },
+  turn_active: { status: 409, message: 'A request is already running for this project.', nextStep: 'wait' },
+  build_not_ready: { status: 409, message: "This build isn't ready to download.", nextStep: 'try_later' },
+  build_incomplete: { status: 409, message: 'This build is missing files it needs.', nextStep: 'send_again' },
+  internal_error: { status: 500, message: 'Something went wrong.', nextStep: 'try_later' },
+} satisfies Record<string, { status: number; message: string; nextStep: NextStep }>;
+
+function send(res: Response, code: keyof typeof API_ERRORS, details?: unknown): void {
+  const { status, message, nextStep } = API_ERRORS[code];
+  res.status(status).json({ error: { code, message, nextStep, details } } satisfies ApiErrorBody);
+}
+
 /**
- * Maps thrown errors to the envelope `{ error: { code, message, details? } }`
+ * Maps thrown errors to the envelope `{ error: { code, message, nextStep, details? } }`
  * from docs/architecture.md. Registered last in `createApp`.
  */
 export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
-  if (err instanceof ZodError) {
-    res.status(400).json({
-      error: { code: 'invalid_request', message: 'Invalid request', details: { issues: err.issues } },
-    } satisfies ApiErrorBody);
-    return;
-  }
-
-  if (err instanceof SyntaxError && (err as { type?: string }).type === 'entity.parse.failed') {
-    res.status(400).json({ error: { code: 'invalid_json', message: 'Invalid JSON body' } } satisfies ApiErrorBody);
-    return;
-  }
-
-  if ((err as { type?: string }).type === 'entity.too.large') {
-    res.status(413).json({ error: { code: 'payload_too_large', message: 'The request is too large.' } } satisfies ApiErrorBody);
-    return;
-  }
-
-  if (err instanceof NotFound) {
-    res.status(404).json({ error: { code: 'not_found', message: err.message } } satisfies ApiErrorBody);
-    return;
-  }
-
-  if (err instanceof TurnActive) {
-    res.status(409).json({
-      error: { code: 'turn_active', message: err.message, details: { turnId: err.turnId } },
-    } satisfies ApiErrorBody);
-    return;
-  }
-
-  if (err instanceof BuildNotReady) {
-    res.status(409).json({
-      error: { code: 'build_not_ready', message: err.message, details: { status: err.status } },
-    } satisfies ApiErrorBody);
-    return;
-  }
-
-  if (err instanceof BuildIncomplete) {
-    res.status(409).json({
-      error: { code: 'build_incomplete', message: err.message, details: { missing: err.missing } },
-    } satisfies ApiErrorBody);
-    return;
-  }
+  if (err instanceof ZodError) return send(res, 'invalid_request', { issues: err.issues });
+  if (err instanceof SyntaxError && (err as { type?: string }).type === 'entity.parse.failed') return send(res, 'invalid_json');
+  if ((err as { type?: string }).type === 'entity.too.large') return send(res, 'payload_too_large');
+  if (err instanceof NotFound) return send(res, 'not_found');
+  if (err instanceof TurnActive) return send(res, 'turn_active', { turnId: err.turnId });
+  if (err instanceof BuildNotReady) return send(res, 'build_not_ready', { status: err.status });
+  if (err instanceof BuildIncomplete) return send(res, 'build_incomplete', { missing: err.missing });
 
   console.error(err);
-  res.status(500).json({ error: { code: 'internal_error', message: 'Internal server error' } } satisfies ApiErrorBody);
+  send(res, 'internal_error');
 };

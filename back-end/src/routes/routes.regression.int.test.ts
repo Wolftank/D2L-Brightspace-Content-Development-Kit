@@ -36,7 +36,11 @@ import { createWorkspaceService, type WorkspaceService } from '../services/works
 
 const STARTER = join(KIT_DIR, 'skills', 'd2l-scorm-package', 'assets', 'starter');
 const BAD_SCORM = join(KIT_DIR, 'harness', 'lint', 'fixtures', 'bad-scorm');
-const WORKSPACE_MISSING_MESSAGE = "This project's files are missing, so the request could not run.";
+const WORKSPACE_MISSING_ERROR = {
+  code: 'workspace_missing',
+  message: "This project's files are missing, so the request couldn't run.",
+  nextStep: 'new_project',
+};
 
 type TurnStatus = NonNullable<ChatMessage['turn']>['status'];
 
@@ -299,9 +303,9 @@ describe('R8 regression: project, message and build routes', () => {
 
       const turn = await runTurn(projectId, 'Create a practice set on cell division.');
 
-      expect(turn).toMatchObject({ status: 'failed', error: { code: 'workspace_missing', message: WORKSPACE_MISSING_MESSAGE } });
+      expect(turn).toMatchObject({ status: 'failed', error: WORKSPACE_MISSING_ERROR });
       const failed = events.after(projectId, 0).find((event) => event.kind === 'turn.failed');
-      expect(failed?.payload).toEqual({ turnId: turn.id, error: { code: 'workspace_missing', message: WORKSPACE_MISSING_MESSAGE } });
+      expect(failed?.payload).toEqual({ turnId: turn.id, error: WORKSPACE_MISSING_ERROR });
       await expect(fs.access(workspaceDir)).rejects.toThrow();
       expect(await latestBuild(projectId)).toBeUndefined();
       expect(consoleError).toHaveBeenCalledWith(`Turn ${turn.id} failed (workspace_missing):`, expect.anything());
@@ -332,7 +336,7 @@ describe('R8 regression: project, message and build routes', () => {
       expect(items.filter((message) => message.role === 'instructor').map((message) => message.turn)).toEqual([
         { id: completed.id, status: 'completed', error: null },
         { id: qaFailed.id, status: 'completed', error: null },
-        { id: failed.id, status: 'failed', error: { code: 'workspace_missing', message: WORKSPACE_MISSING_MESSAGE } },
+        { id: failed.id, status: 'failed', error: WORKSPACE_MISSING_ERROR },
       ]);
       for (const reply of items.filter((message) => message.role === 'agent')) {
         expect(reply).not.toHaveProperty('turn');

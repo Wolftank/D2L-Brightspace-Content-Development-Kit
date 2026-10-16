@@ -20,7 +20,8 @@ describe('errorHandler', () => {
     expect(res.body).toEqual({
       error: {
         code: 'build_not_ready',
-        message: 'Only a ready build can be downloaded; this build is failed',
+        message: "This build isn't ready to download.",
+        nextStep: 'try_later',
         details: { status: 'failed' },
       },
     });
@@ -33,7 +34,8 @@ describe('errorHandler', () => {
     expect(res.body).toEqual({
       error: {
         code: 'build_incomplete',
-        message: 'The build is missing files its manifest needs: index.html',
+        message: 'This build is missing files it needs.',
+        nextStep: 'send_again',
         details: { missing: ['index.html'] },
       },
     });
