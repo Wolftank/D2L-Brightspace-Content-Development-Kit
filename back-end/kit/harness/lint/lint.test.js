@@ -147,9 +147,11 @@ check('bytes that are not UTF-8 are an error',
       byRule(lintFiles({ 'data.json': Buffer.from('{"title": "caf\xe9"}', 'latin1') }), 'shared/text-encoding').length === 1);
 check('non-ASCII text without a UTF-8 declaration is a warning',
       byRule(lintFiles({ 'index.html': '<html lang="en"><body>Café</body></html>' }), 'shared/charset-declaration').length === 1);
-check('either UTF-8 declaration satisfies it', byRule(lintFiles({
+check('either UTF-8 declaration, spelled utf-8 or utf8, satisfies it', byRule(lintFiles({
   'a.html': '<html lang="en"><head><meta charset="UTF-8"></head><body>Café</body></html>',
-  'b.html': '<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"></head><body>Café</body></html>'
+  'b.html': '<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"></head><body>Café</body></html>',
+  'c.html': '<html lang="en"><head><meta charset="utf8"></head><body>Café</body></html>',
+  'd.html': '<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=utf8"></head><body>Café</body></html>'
 }), 'shared/charset-declaration').length === 0);
 
 console.log('\n' + (fail === 0 ? 'ALL PASS' : fail + ' FAILED') + '  (' + pass + ' passed)\n');

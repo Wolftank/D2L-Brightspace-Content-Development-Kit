@@ -129,9 +129,9 @@ function classicInlineScripts(f) {
   return scripts;
 }
 
-/** Whether markup `text` declares UTF-8, by `<meta charset>` or an `http-equiv` content type. */
+/** Whether markup `text` declares UTF-8, spelled `utf-8` or `utf8`, by `<meta charset>` or an `http-equiv` content type. */
 function declaresUtf8(text) {
-  return /<meta\b[^>]*\bcharset\s*=\s*["']?utf-8\b/i.test(text);
+  return /<meta\b[^>]*\bcharset\s*=\s*["']?utf-?8\b/i.test(text);
 }
 
 /* ============================================================== rules */

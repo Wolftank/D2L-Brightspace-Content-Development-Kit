@@ -5,11 +5,10 @@ description: >-
   BEFORE deploying it. Runs the QA gate through CDK's check_output tool and
   interprets the findings. Reach for it whenever someone is about to upload
   something to D2L, asks whether a build is ready, asks why a D2L activity is
-  behaving strangely, or says a D2L activity "worked locally". Also use it after
-  changing the tenant profile, and after running the probes, to keep the
-  measured findings and the enforced rules in step. Every rule it enforces
-  traces to a measured tenant behaviour, and every one of them fails SILENTLY in
-  D2L, which is why running this is worth more than reading the code.
+  behaving strangely, or says a D2L activity "worked locally". Every rule it
+  enforces traces to a measured tenant behaviour, and every one of them fails
+  SILENTLY in D2L, which is why running this is worth more than reading the
+  code.
 ---
 
 # D2L Tenant QA
