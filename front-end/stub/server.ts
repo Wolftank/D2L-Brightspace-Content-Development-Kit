@@ -1,4 +1,5 @@
 /** Serves the development API, scripted turns, and emulator previews. */
+import { NEXT_STEPS } from '../src/api/failure';
 import { randomUUID } from 'node:crypto';
 import { previewZip, startPreviewServer } from './preview';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -30,7 +31,7 @@ const KEEPALIVE_MS = 15_000;
 
 const user: User = { id: 'stub-user', displayName: 'Stub Instructor', email: null, role: 'instructor' };
 
-type Scenario = 'ok' | 'qa-fail' | 'turn-fail' | 'long-step' | 'long-feed' | 'multi-message' | 'drop' | 'drop-lost';
+type Scenario = 'error-action' | 'cancelled' | 'ok' | 'qa-fail' | 'turn-fail' | 'long-step' | 'long-feed' | 'multi-message' | 'drop' | 'drop-lost';
 
 interface StoredEvent {
   seq: number;
@@ -119,6 +120,8 @@ function textOf(content: ContentBlock[]): string {
 }
 
 function scenarioFor(text: string): Scenario {
+  if ((Object.keys(NEXT_STEPS) as NextStep[]).some(step => text.includes('[' + step + ']'))) return 'error-action';
+  if (text.includes('[cancelled]')) return 'cancelled';
   if (text.includes('[drop-lost]')) return 'drop-lost';
   if (text.includes('[drop]')) return 'drop';
   if (text.includes('[multi-message]')) return 'multi-message';
@@ -207,13 +210,17 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
     })]);
   }
 
-  if (scenario === 'turn-fail') {
+  if (scenario === 'cancelled') {
+    steps.push([4800, () => { turn.status = 'cancelled'; turn.finishedAt = Date.now(); state.activeTurn = null; append(state, 'turn.cancelled', { turnId: turn.id }); }]);
+  } else if (scenario === 'turn-fail' || scenario === 'error-action') {
     steps.push([
       4800,
       () => {
         turn.status = 'failed';
         turn.finishedAt = Date.now();
-        turn.error = { code: 'agent_error', message: 'The agent stopped before it finished.', nextStep: 'send_again' };
+        const requestedStep = (Object.keys(NEXT_STEPS) as NextStep[]).find(step => textOf(state.messages.find(message => message.id === turn.messageId)!.content).includes('[' + step + ']'));
+        const failure: { code: string; message: string; nextStep: NextStep } = { code: 'agent_error', message: 'The agent stopped before it finished.', nextStep: requestedStep ?? 'send_again' };
+        turn.error = failure;
         state.activeTurn = null;
         append(state, 'turn.failed', { turnId: turn.id, error: turn.error });
       },
@@ -452,6 +459,11 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
 
   if (segments[0] !== 'api') throw new HttpError('not_found');
   const [, resource, id, sub] = segments;
+
+  if (resource === 'agent' && id === 'sign-in' && method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end('<!doctype html><html lang="en"><title>Agent sign-in</title><h1>Agent sign-in</h1><p>This is the stub sign-in page. Return to the conversation to continue testing.</p></html>'); return;
+  }
 
   if (resource === 'health' && method === 'GET' && !id) return sendJson(res, 200, { ok: true });
 

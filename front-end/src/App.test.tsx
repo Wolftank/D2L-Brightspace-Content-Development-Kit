@@ -143,9 +143,9 @@ describe('F10 conversation', () => {
     expect(within(screen.getByLabelText('Conversation history')).getByText('The agent stopped before it finished.')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled();
     fireEvent.change(screen.getByLabelText('Describe a change'), { target: { value: 'Try a shorter quiz.' } });
-    fetchMock.mockResolvedValueOnce(Response.json({ error: { code: 'offline', message: 'Unable to reach the service.' } }, { status: 503 }));
+    fetchMock.mockResolvedValueOnce(Response.json({ error: { code: 'offline', message: 'Unable to reach the service.', nextStep: 'try_later' } }, { status: 503 }));
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Unable to reach the service.'));
+    await waitFor(() => expect(screen.getByText('Unable to reach the service.')).toHaveAttribute('role', 'alert'));
     expect(screen.getByLabelText('Describe a change')).toHaveValue('Try a shorter quiz.');
   });
 });
