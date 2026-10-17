@@ -22,7 +22,7 @@ The Windows app. Its Electron main process starts the back end, opens the CDK wi
 - `deleteAppDataOnUninstall` removes the window's data in `%APPDATA%\CDK`, except during an upgrade.
 - `--publish never` keeps electron-builder from publishing a release when it runs in CI.
 
-CI's `package` job, on Windows, runs `npm run package` and `npm run test:e2e`, then uploads the installer as `CDK-Setup-<version>-<commit>.exe`.
+CI's `package` job, on Windows, runs `npm run package` and `npm run test:e2e`, then uploads the installer as `CDK-Setup-<version>-<commit>.exe`. When CI is run by hand with a version (see [Publish a release](../README.md#publish-a-release)), the job first sets that version in `package.json` with `npm version`, and CI's `release` job publishes the installer as a GitHub release once every job has passed. The repository's `package.json` keeps its own version, which is the one development and pull-request builds carry.
 
 There is no development mode that runs Electron against the repository: that would need the shared better-sqlite3 rebuilt for Electron, which breaks the back end's tests. Package with `npx electron-builder --win --dir` here (after `npm run build` in each package) for a quicker runnable copy in `release/win-unpacked/` without the installer.
 

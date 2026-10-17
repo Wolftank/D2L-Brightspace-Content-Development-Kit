@@ -32,7 +32,13 @@ The Windows app runs CDK without a terminal, Node, or developer tools. One launc
 
 ### Get the installer
 
-CI builds the installer for every pull request and every merge to `main`. On GitHub, open **Actions**, select the run (the latest **CI** run on `main` for the current app), and download `CDK-Setup-<version>-<commit>.exe` from **Artifacts** at the bottom of the run's summary. Downloading needs a GitHub sign-in, and CI keeps each installer for 30 days.
+Released versions are on the repository's **Releases** page. Download `CDK-Setup-<version>.exe` from the latest release. No GitHub sign-in is needed.
+
+CI also builds the installer for every pull request and every merge to `main`, for testing changes before they are released. On GitHub, open **Actions**, select the run (the latest **CI** run on `main` for the current app), and download `CDK-Setup-<version>-<commit>.exe` from **Artifacts** at the bottom of the run's summary. Downloading needs a GitHub sign-in, and CI keeps each installer for 30 days.
+
+### Publish a release
+
+On GitHub, open **Actions**, select **CI**, then **Run workflow**. Keep the branch as `main`, enter the new version, such as `0.2.0`, and select **Run workflow**. CI runs every check on the latest commit on `main`, builds the installer with that version, and publishes it as release `v<version>` with notes listing the pull requests merged since the last release. If any check fails, nothing is published. A version that is already released is refused.
 
 To build it yourself instead, on Windows, at the repository root, after `npm install`:
 
@@ -50,7 +56,7 @@ This builds every package, then writes the installer to `desktop/release/CDK Set
 The app isn't signed yet, so Windows may warn before it runs:
 
 - **The browser** may warn that the installer isn't commonly downloaded. Choose to keep the file.
-- **"Windows protected your PC"** (SmartScreen): select **More info**, then **Run anyway**. Windows shows this for an installer downloaded from the internet, including one from CI, or received through chat or email. It does not show it for an installer you built on the same computer.
+- **"Windows protected your PC"** (SmartScreen): select **More info**, then **Run anyway**. Windows shows this for an installer downloaded from the internet, including one from a release or from CI, or received through chat or email. It does not show it for an installer you built on the same computer.
 - **Smart App Control** (Windows 11, Settings > Privacy & security > Windows Security > App & browser control): when it is on, it blocks unsigned apps and offers no way to run them. Use a laptop where it is off.
 
 The agent uses the Claude sign-in on the laptop, like the development setup. If Claude Code is already signed in there, nothing else is needed. Otherwise, sign in once from PowerShell with the copy of Claude that ships with CDK:
