@@ -46,16 +46,35 @@ it('uses category metadata for the summary and reveals every non-thinking step i
   render(<StatusFeed turnId="t1" lines={[
     { seq: 1, text: 'Writing a guide', category: 'reading' },
     { seq: 2, text: 'Looking for source files', category: 'searching' },
-    { seq: 3, text: 'A custom tool', category: 'other' },
+    { seq: 3, text: 'Run smoke test of inline engine', category: 'other' },
     { seq: 4, text: 'Updating the activity', category: 'writing' },
     { seq: 5, text: 'Verifying the result', category: 'checking' },
     { seq: 6, text: 'Packaging the activity', category: 'building' },
     { seq: 7, text: 'Failed to read a file', category: 'reading', failed: true },
   ]} />);
   expect(screen.getAllByRole('listitem').map(line => line.textContent)).toEqual([
-    'Updating the activity', 'Verifying the result', 'Packaging the activity', 'Failed to read a file',
+    'Run smoke test of inline engine', 'Updating the activity', 'Verifying the result', 'Packaging the activity', 'Failed to read a file',
   ]);
   fireEvent.click(screen.getByRole('button', { name: 'Show details' }));
   expect(screen.getAllByRole('listitem')).toHaveLength(7);
   expect(screen.getByRole('button', { name: 'Hide details' })).toHaveAttribute('aria-expanded', 'true');
+});
+
+it('summarizes consecutive file edits and keeps exact details available', () => {
+  render(<StatusFeed turnId="t1" lines={[
+    { seq: 1, text: 'Writing index.html', category: 'writing' },
+    { seq: 2, text: 'Reading engine.js', category: 'reading' },
+    { seq: 3, text: 'Writing engine.js', category: 'writing' },
+    { seq: 4, text: 'Run smoke test of inline engine', category: 'other' },
+    { seq: 5, text: 'Editing styles.css', category: 'writing' },
+  ]} />);
+  expect(screen.getAllByRole('listitem').map(line => line.textContent)).toEqual([
+    'Updating the activity', 'Run smoke test of inline engine', 'Updating the activity',
+  ]);
+  expect(screen.queryByText('Writing index.html')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Show details' }));
+  expect(screen.getByText('Writing index.html')).toBeVisible();
+  expect(screen.getByText('Writing engine.js')).toBeVisible();
+  expect(screen.getByText('Reading engine.js')).toBeVisible();
+  expect(screen.getAllByRole('listitem')).toHaveLength(5);
 });

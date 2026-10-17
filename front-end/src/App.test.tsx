@@ -84,7 +84,7 @@ describe('F10 conversation', () => {
     emit({ seq: 5, kind: 'tool.finished', payload: { turnId: 't1', callId: 'edit', ok: true, summary: 'Editing index.html', category: 'writing' as const } });
     emit({ seq: 6, kind: 'message.delta', payload: { turnId: 't1', messageId: 'a2', text: 'Ready.' } });
     expect(within(chat).queryByRole('log', { name: 'Build progress' })).not.toBeInTheDocument();
-    expect(within(panel).getByRole('log', { name: 'Build progress' })).toHaveTextContent('Editing index.html');
+    expect(within(panel).getByRole('log', { name: 'Build progress' })).toHaveTextContent('Updating the activity');
     const thread = screen.getByLabelText('Conversation history');
     expect(within(thread).getAllByRole('article').map(node => node.textContent)).toEqual(['YouCreate a quiz.', 'CDKI will edit the activity.', 'CDKReady.']);
     view.unmount(); render(<App />);
@@ -139,7 +139,7 @@ describe('F10 conversation', () => {
   });
   it('shows a failed request and allows a follow-up with the draft kept on send failure', async () => {
     render(<App />); await firstRequest();
-    emit({ seq: 2, kind: 'turn.failed', payload: { turnId: 't1', error: { code: 'agent_error', message: 'The agent stopped before it finished.' } } });
+    emit({ seq: 2, kind: 'turn.failed', payload: { turnId: 't1', error: { code: 'agent_error', message: 'The agent stopped before it finished.', nextStep: 'send_again' } } });
     expect(within(screen.getByLabelText('Conversation history')).getByText('The agent stopped before it finished.')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled();
     fireEvent.change(screen.getByLabelText('Describe a change'), { target: { value: 'Try a shorter quiz.' } });

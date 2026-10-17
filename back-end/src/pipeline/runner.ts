@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { EventKind, EventPayloads, ProgressCategory } from '@cdk/contract';
+import type { EventKind, EventPayloads, ProgressCategory, TurnError } from '@cdk/contract';
 import type { AgentEvent, AgentSession, TurnErrorCode, TurnInput, TurnLimits, TurnResult } from '../agent/AgentDriver.js';
 import type { MessagesRepo } from '../db/messages.js';
 import type { Turn } from '../db/schema.js';
@@ -10,22 +10,22 @@ import type { WorkspaceService } from '../services/workspaces.js';
 import type { EventService } from './events.js';
 import type { SessionService } from './sessions.js';
 
-type RunnerErrorCode = TurnErrorCode | 'workspace_missing' | 'interrupted' | 'internal_error';
+export type RunnerErrorCode = TurnErrorCode | 'workspace_missing' | 'interrupted' | 'internal_error';
 
-/** What the instructor reads when a turn fails, by error code. */
-const ERROR_MESSAGES: Record<RunnerErrorCode, string> = {
-  agent_error: 'The agent stopped with an error before it finished. Send the request again.',
-  agent_signed_out: "The agent isn't signed in, or its account can't be used. Sign in to the agent, then send the request again.",
-  agent_billing: "The agent's account has a billing or account problem. Check the account, then send the request again.",
-  agent_busy: "The agent's account is busy or has reached its usage limit. Try again later.",
-  agent_unrestricted: "The agent started with tools or skills CDK doesn't allow, so the request was stopped before it ran.",
-  max_steps_exceeded: 'The request needed more steps than allowed. Try a smaller request.',
-  max_budget_exceeded: 'The request reached its spending limit. Try a smaller request.',
-  no_result: 'The agent stopped unexpectedly before it finished. Send the request again.',
-  driver_error: 'The agent stopped unexpectedly before it finished. Send the request again.',
-  workspace_missing: "This project's files are missing, so the request could not run.",
-  interrupted: 'The app closed before this request finished. Changes already made are kept; send the request again.',
-  internal_error: 'Something went wrong while running this request. Send it again.',
+/** What the instructor reads when a turn fails, and the one thing to do next, by error code. */
+export const TURN_ERRORS: Record<RunnerErrorCode, Omit<TurnError, 'code'>> = {
+  agent_error: { message: 'The agent stopped with an error before it finished.', nextStep: 'send_again' },
+  agent_signed_out: { message: "The agent isn't signed in, or its account can't be used.", nextStep: 'sign_in' },
+  agent_billing: { message: "The agent's account has a billing or account problem.", nextStep: 'sign_in' },
+  agent_busy: { message: "The agent's account is busy or has reached its usage limit.", nextStep: 'try_later' },
+  agent_unrestricted: { message: "The agent started with tools or skills CDK doesn't allow, so the request didn't run.", nextStep: 'try_later' },
+  max_steps_exceeded: { message: 'The request needed more steps than allowed.', nextStep: 'smaller_request' },
+  max_budget_exceeded: { message: 'The request reached its spending limit.', nextStep: 'smaller_request' },
+  no_result: { message: 'The agent stopped unexpectedly before it finished.', nextStep: 'send_again' },
+  driver_error: { message: 'The agent stopped unexpectedly before it finished.', nextStep: 'send_again' },
+  workspace_missing: { message: "This project's files are missing, so the request couldn't run.", nextStep: 'new_project' },
+  interrupted: { message: 'The app closed before this request finished. Changes made so far are kept.', nextStep: 'send_again' },
+  internal_error: { message: 'Something went wrong while running this request.', nextStep: 'send_again' },
 };
 
 export interface RunnerDeps {
@@ -82,7 +82,7 @@ export function createRunner(deps: RunnerDeps): Runner {
 
   function failure(turn: Turn, code: RunnerErrorCode, detail: unknown, rest: FinishedTurnDetails = {}): FinishTurnInput {
     console.error(`Turn ${turn.id} failed (${code}):`, detail);
-    return { ...rest, status: 'failed', error: { code, message: ERROR_MESSAGES[code] } };
+    return { ...rest, status: 'failed', error: { code, ...TURN_ERRORS[code] } };
   }
 
   function instructorInput(turn: Turn): TurnInput {
@@ -275,7 +275,7 @@ export function createRunner(deps: RunnerDeps): Runner {
     },
 
     failInterrupted() {
-      const error = { code: 'interrupted', message: ERROR_MESSAGES.interrupted };
+      const error = { code: 'interrupted', ...TURN_ERRORS.interrupted };
       for (const turn of deps.turns.failActive(error)) {
         append(turn, 'turn.failed', { turnId: turn.id, error });
       }

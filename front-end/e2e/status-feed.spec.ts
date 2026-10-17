@@ -65,12 +65,17 @@ test('meaningful progress and details survive reload without recording thinking'
   await page.keyboard.press('Enter');
   await expect(feed).toContainText('Reading authoring guides');
   await expect(feed).not.toContainText('Thinking');
-  await expect(feed).toContainText('Updating the activity', { timeout: 10_000 });
+  await expect(feed).toContainText('Writing index.html', { timeout: 10_000 });
   await expect(indicator).not.toContainText('Thinking');
   await expect(page.getByRole('heading', { name: 'Ready to download' })).toBeVisible({ timeout: 15_000 });
   await expect(indicator).toHaveCount(0);
   await expect(feed).not.toContainText('Thinking');
   await expect(feed).toContainText('Running the QA gate');
+  await expect(feed).toContainText('Run smoke test of inline engine');
+  await page.getByRole('button', { name: 'Hide details' }).click();
+  await expect(feed).toContainText('Updating the activity');
+  await expect(feed).not.toContainText('Writing index.html');
+  await expect(feed).toContainText('Run smoke test of inline engine');
   await page.reload();
   await page.getByRole('button', { name: 'Show details' }).click();
   await expect(feed).toContainText('Reading authoring guides');

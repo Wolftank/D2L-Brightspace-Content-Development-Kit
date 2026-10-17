@@ -6,6 +6,7 @@ export function toolCategory(name: string, input: unknown): Exclude<ProgressCate
   if (name === 'Read' || name === 'Skill' || name.endsWith('__get_project')) return 'reading';
   if (name === 'Glob' || name === 'Grep') return 'searching';
   if (name.endsWith('__create_build')) return 'building';
+  if (name.endsWith('__check_output')) return 'checking';
   if (name.endsWith('__get_build') || name.endsWith('__check_pedagogy')) return 'checking';
   const command = input && typeof input === 'object' && 'command' in input ? (input as { command: unknown }).command : undefined;
   if ((name === 'Bash' || name === 'PowerShell') && typeof command === 'string') {

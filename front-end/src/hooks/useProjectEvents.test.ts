@@ -278,6 +278,7 @@ it('handles build.updated by replacing the existing build', () => {
         error: {
           code: 'build_failed',
           message: 'The build could not be completed',
+          nextStep: 'send_again',
         },
       },
     });

@@ -11,8 +11,9 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "package": "electron-builder --win",
+    "package": "electron-builder --win --publish never",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
@@ -20,6 +21,7 @@
     "cdk-back-end": "*"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/node": "^20.19.43",
     "electron": "42.11.9",
     "electron-builder": "26.17.0",

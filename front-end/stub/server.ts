@@ -13,6 +13,7 @@ import type {
   EventPayloads,
   MeResponse,
   Message,
+  NextStep,
   Project,
   ProjectResponse,
   QaFinding,
@@ -52,14 +53,25 @@ interface ProjectState {
 const projects = new Map<string, ProjectState>();
 const builds = new Map<string, { state: ProjectState; build: Build }>();
 
+/** The stub's API errors, with the back end's statuses, messages, and next steps. `stream_unavailable` is the stub's own. */
+const API_ERRORS = {
+  invalid_request: { status: 400, message: "The request couldn't be read.", nextStep: 'send_again' },
+  invalid_json: { status: 400, message: "The request couldn't be read.", nextStep: 'send_again' },
+  not_found: { status: 404, message: "This project doesn't exist.", nextStep: 'new_project' },
+  build_not_found: { status: 404, message: "This build doesn't exist.", nextStep: 'send_again' },
+  turn_active: { status: 409, message: 'A request is already running for this project.', nextStep: 'wait' },
+  build_not_ready: { status: 409, message: "This build isn't ready to download.", nextStep: 'try_later' },
+  build_failed: { status: 409, message: "This build failed, so it can't be downloaded.", nextStep: 'ask_for_fix' },
+  stream_unavailable: { status: 503, message: 'Live progress is unavailable right now.', nextStep: 'try_later' },
+  internal_error: { status: 500, message: 'Something went wrong.', nextStep: 'try_later' },
+} satisfies Record<string, { status: number; message: string; nextStep: NextStep }>;
+
 class HttpError extends Error {
   constructor(
-    readonly status: number,
-    readonly code: string,
-    message: string,
+    readonly code: keyof typeof API_ERRORS,
     readonly details?: unknown,
   ) {
-    super(message);
+    super(API_ERRORS[code].message);
   }
 }
 
@@ -69,10 +81,8 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 }
 
 function sendError(res: ServerResponse, error: HttpError): void {
-  const body: ApiErrorBody = {
-    error: { code: error.code, message: error.message, ...(error.details === undefined ? {} : { details: error.details }) },
-  };
-  sendJson(res, error.status, body);
+  const { status, message, nextStep } = API_ERRORS[error.code];
+  sendJson(res, status, { error: { code: error.code, message, nextStep, details: error.details } } satisfies ApiErrorBody);
 }
 
 async function readJson(req: IncomingMessage): Promise<unknown> {
@@ -85,13 +95,13 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
   try {
     return JSON.parse(text);
   } catch {
-    throw new HttpError(400, 'invalid_json', 'Invalid JSON body');
+    throw new HttpError('invalid_json');
   }
 }
 
 function getProject(projectId: string): ProjectState {
   const state = projects.get(projectId);
-  if (!state) throw new HttpError(404, 'not_found', 'Project not found');
+  if (!state) throw new HttpError('not_found');
   return state;
 }
 
@@ -204,7 +214,7 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
       () => {
         turn.status = 'failed';
         turn.finishedAt = Date.now();
-        turn.error = { code: 'agent_error', message: 'The agent stopped before it finished.' };
+        turn.error = { code: 'agent_error', message: 'The agent stopped before it finished.', nextStep: 'send_again' };
         state.activeTurn = null;
         append(state, 'turn.failed', { turnId: turn.id, error: turn.error });
       },
@@ -250,7 +260,7 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
           if (!build) return;
           build.status = passed ? 'ready' : 'failed';
           build.qa = { passed, findings: passed ? [] : FAILED_FINDINGS };
-          build.error = passed ? null : { code: 'qa_failed', message: 'The QA gate reported 1 error(s)' };
+          build.error = passed ? null : { code: 'qa_failed', message: 'The QA check found problems in this build.', nextStep: 'ask_for_fix' };
           append(state, 'build.updated', { build: { ...build } });
         },
       ],
@@ -292,7 +302,8 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
       [700, () => append(state, 'tool.started', { turnId: turn.id, callId: 'read', name: 'Read', summary: 'Reading authoring guides', category: 'reading' })],
       [800, () => append(state, 'tool.started', { turnId: turn.id, callId: 'search', name: 'Grep', summary: 'Finding source files', category: 'searching' })],
       [900, () => append(state, 'turn.status', { turnId: turn.id, text: 'Thinking…', category: 'thinking' })],
-      [1800, () => append(state, 'tool.started', { turnId: turn.id, callId: 'write', name: 'Write', summary: 'Updating the activity', category: 'writing' })],
+      [1700, () => append(state, 'tool.started', { turnId: turn.id, callId: 'smoke', name: 'CustomCheck', summary: 'Run smoke test of inline engine', category: 'other' })],
+      [1800, () => append(state, 'tool.started', { turnId: turn.id, callId: 'write', name: 'Write', summary: 'Writing index.html', category: 'writing' })],
     );
   }
 
@@ -316,7 +327,7 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
 function createProject(body: unknown): CreateProjectResponse {
   const input = body as Partial<CreateProjectRequest>;
   if (typeof input.title !== 'string' || input.title.trim() === '') {
-    throw new HttpError(400, 'invalid_request', 'title is required');
+    throw new HttpError('invalid_request');
   }
   const now = Date.now();
   const project: Project = {
@@ -354,12 +365,10 @@ function projectView(state: ProjectState): ProjectResponse {
 function sendMessage(state: ProjectState, body: unknown): SendMessageResponse {
   const input = body as Partial<SendMessageRequest>;
   if (!Array.isArray(input.content) || !input.content.some((block) => block?.type === 'text')) {
-    throw new HttpError(400, 'invalid_request', 'content must include a text block');
+    throw new HttpError('invalid_request');
   }
   if (state.activeTurn) {
-    throw new HttpError(409, 'turn_active', 'A turn is already active for this project', {
-      turnId: state.activeTurn.id,
-    });
+    throw new HttpError('turn_active', { turnId: state.activeTurn.id });
   }
   const message: Message = {
     id: randomUUID(),
@@ -402,7 +411,7 @@ function dropStreams(state: ProjectState, refuseReconnect: boolean): void {
 function streamEvents(req: IncomingMessage, res: ServerResponse, state: ProjectState, after: number): void {
   if (state.refuseNextStream) {
     state.refuseNextStream = false;
-    throw new HttpError(503, 'stream_unavailable', 'The event stream is unavailable');
+    throw new HttpError('stream_unavailable');
   }
   res.writeHead(200, {
     'Content-Type': 'text/event-stream; charset=utf-8',
@@ -439,8 +448,9 @@ function streamEvents(req: IncomingMessage, res: ServerResponse, state: ProjectS
 
 function download(res: ServerResponse, buildId: string): void {
   const entry = builds.get(buildId);
-  if (!entry) throw new HttpError(404, 'not_found', 'Build not found');
-  if (entry.build.status !== 'ready') throw new HttpError(409, 'build_not_ready', 'Build is not ready');
+  if (!entry) throw new HttpError('build_not_found');
+  if (entry.build.status === 'failed') throw new HttpError('build_failed');
+  if (entry.build.status !== 'ready') throw new HttpError('build_not_ready');
   const name = `${entry.state.project.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-v${entry.build.version}.zip`;
   res.writeHead(200, {
     'Content-Type': 'application/zip',
@@ -455,7 +465,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const method = req.method ?? 'GET';
   const segments = url.pathname.split('/').filter(Boolean);
 
-  if (segments[0] !== 'api') throw new HttpError(404, 'not_found', 'Not found');
+  if (segments[0] !== 'api') throw new HttpError('not_found');
   const [, resource, id, sub] = segments;
 
   if (resource === 'health' && method === 'GET' && !id) return sendJson(res, 200, { ok: true });
@@ -487,13 +497,13 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (sub === 'download') return download(res, id);
     if (!sub) {
       const entry = builds.get(id);
-      if (!entry) throw new HttpError(404, 'not_found', 'Build not found');
+      if (!entry) throw new HttpError('build_not_found');
       const body: BuildResponse = { build: entry.build, deployments: [] };
       return sendJson(res, 200, body);
     }
   }
 
-  throw new HttpError(404, 'not_found', 'Not found');
+  throw new HttpError('not_found');
 }
 
 const server = createServer((req, res) => {
@@ -502,7 +512,7 @@ const server = createServer((req, res) => {
       sendError(res, error);
     } else {
       console.error(error);
-      sendError(res, new HttpError(500, 'internal_error', 'Internal server error'));
+      sendError(res, new HttpError('internal_error'));
     }
   });
   res.on('finish', () => console.log(`${req.method} ${req.url} -> ${res.statusCode}`));

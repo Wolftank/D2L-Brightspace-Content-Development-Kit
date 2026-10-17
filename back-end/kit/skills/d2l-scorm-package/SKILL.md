@@ -160,19 +160,15 @@ rule above and passes the lint clean. Copy it rather than starting from scratch.
 
 ## Before you deploy: run the gate
 
-```bash
-node harness/lint/lint.js <your-build-folder> --avenue scorm
-```
+Call the `mcp__cdk__check_output` tool (see `d2l-tenant-qa`). Zero errors to
+deploy. The rules encode exactly the failures above, so a clean run means you
+have not made any of the four mistakes.
 
-Zero errors to deploy. The rules encode exactly the failures above, so a clean
-run means you have not made any of the four mistakes.
-
-Then package it. The manifest **must** be at the zip root. The app does this:
-a build's download (`GET /api/builds/:buildId/download`) zips it with
-`imsmanifest.xml` at the root, after checking that every file the manifest
-declares actually exists. Do not zip a folder path by hand: `Compress-Archive`
-on a folder nests everything one level down and D2L rejects it with an
-unhelpful error.
+Do not package it yourself. The manifest **must** be at the zip root, and CDK
+does this: a build's download zips it with `imsmanifest.xml` at the root,
+after checking that every file the manifest declares actually exists. A zip
+that nests everything one folder down is rejected by D2L with an unhelpful
+error.
 
 ---
 
@@ -209,13 +205,10 @@ is specifically `content-file-uploader` inside `d2l-content-manage-versions`.
 
 ## Verifying it actually works
 
-**Before you need a real student enrollment, run it against the emulator.**
-`harness/emulator-harness.html` (see `d2l-tenant-qa`) loads your actual build
-in an iframe with `D2LEmulator` installed at the same parent depth the real
-player uses. Pick "Instructor (preview)" to confirm your credit-guard actually
-holds — that writes attempted under `credit === 'no-credit'` are the ones the
-emulator flags as `discarded-no-credit`, not silently accepted. This catches a
-missing or broken guard before it costs someone else's enrollment to find.
+**Before you need a real student enrollment, it runs against the emulator.**
+CDK's preview loads each ready build in an iframe with `D2LEmulator` installed
+at the same parent depth the real player uses, so the instructor can try it as a
+student before it goes near D2L.
 
 With a real student enrollment, which the emulator cannot substitute for:
 

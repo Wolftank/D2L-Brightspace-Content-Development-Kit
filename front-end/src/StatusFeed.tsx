@@ -6,7 +6,15 @@ export function StatusFeed({ lines, turnId }: { lines: StatusLine[]; turnId: str
   const following = useRef(true);
   const previousTurn = useRef(turnId);
   const [details, setDetails] = useState(false);
-  const visibleLines = details ? lines : lines.filter(line => line.failed || !['reading', 'searching', 'other'].includes(line.category ?? 'building'));
+  const visibleLines = details ? lines : lines.reduce<StatusLine[]>((summary, line) => {
+    if (!line.failed && (line.category === 'reading' || line.category === 'searching')) return summary;
+    if (!line.failed && line.category === 'writing') {
+      const previous = summary.at(-1);
+      if (previous?.category === 'writing' && !previous.failed) return summary;
+      summary.push({ ...line, text: 'Updating the activity' });
+    } else summary.push(line);
+    return summary;
+  }, []);
   const [paused, setPaused] = useState(false);
 
   useLayoutEffect(() => {

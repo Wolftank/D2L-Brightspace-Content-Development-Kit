@@ -1,8 +1,6 @@
-import { execFile } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkspaceMissing } from '../errors.js';
 import {
@@ -12,7 +10,6 @@ import {
   type WorkspaceService,
 } from './workspaces.js';
 
-const execFileAsync = promisify(execFile);
 
 type CpFn = typeof import('node:fs/promises').cp;
 
@@ -50,7 +47,7 @@ describe('workspace service', () => {
   });
 
   describe('create', () => {
-    it('provisions files/, out/ with the SCORM starter, kit/, and a sibling builds/ dir', async () => {
+    it('provisions files/, out/ with the SCORM starter, and a sibling builds/ dir, and nothing else', async () => {
       await workspaces.create(projectId);
       const workspaceDir = workspaces.pathFor(projectId);
 
@@ -61,19 +58,7 @@ describe('workspace service', () => {
       expect(outFiles).toContain('imsmanifest.xml');
       expect(outFiles).toContain('index.html');
 
-      const skillNames = await fs.readdir(join(workspaceDir, 'kit', 'skills'));
-      expect(skillNames).toContain('d2l-scorm-package');
-      expect(skillNames).toContain('d2l-tenant-qa');
-
-      const harnessFiles = await fs.readdir(join(workspaceDir, 'kit', 'harness'));
-      expect(harnessFiles).toContain('lint');
-      expect(harnessFiles).toContain('tenant-profile.json');
-      expect(await fs.readdir(join(workspaceDir, 'kit', 'harness', 'lint'))).toContain('lint.js');
-
-      const kitPackageJson = JSON.parse(
-        await fs.readFile(join(workspaceDir, 'kit', 'package.json'), 'utf8'),
-      );
-      expect(kitPackageJson.type).toBe('commonjs');
+      expect((await fs.readdir(workspaceDir)).sort()).toEqual(['files', 'out']);
 
       const projectDir = join(dataDir, 'projects', projectId);
       expect((await fs.stat(join(projectDir, 'builds'))).isDirectory()).toBe(true);
@@ -155,23 +140,6 @@ describe('workspace service', () => {
     });
   });
 
-  describe('the provisioned checker', () => {
-    it('runs against out/ from the workspace and passes on the unchanged starter', async () => {
-      await workspaces.create(projectId);
-      const workspaceDir = workspaces.pathFor(projectId);
-
-      const { stdout } = await execFileAsync(
-        process.execPath,
-        ['kit/harness/lint/lint.js', 'out', '--avenue', 'scorm', '--json'],
-        { cwd: workspaceDir },
-      );
-
-      const result = JSON.parse(stdout);
-      expect(result.pass).toBe(true);
-      expect(result.errorCount).toBe(0);
-    });
-  });
-
   describe('hashOutput', () => {
     it('throws WorkspaceMissing when create() has not run', async () => {
       await expect(workspaces.hashOutput(projectId)).rejects.toThrow(WorkspaceMissing);
@@ -239,7 +207,6 @@ describe('workspace service', () => {
       const copied = (await fs.readdir(dest)).sort();
       const outFiles = (await fs.readdir(join(workspaces.pathFor(projectId), 'out'))).sort();
       expect(copied).toEqual(outFiles);
-      expect(copied).not.toContain('kit');
       expect(copied).not.toContain('files');
     });
 

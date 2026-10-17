@@ -54,9 +54,14 @@ export interface MessageHistoryResponse {
 
 export type TurnStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 
+/** The one thing an instructor can do about an error. The front end decides how each is shown. */
+export type NextStep = 'send_again' | 'sign_in' | 'try_later' | 'smaller_request' | 'wait' | 'new_project' | 'ask_for_fix';
+
+/** Why a turn failed: `message` says what happened in plain language, and `nextStep` what to do about it. */
 export interface TurnError {
   code: string;
   message: string;
+  nextStep: NextStep;
 }
 
 export interface TurnUsage {
@@ -94,9 +99,11 @@ export interface QaReport {
   findings: QaFinding[];
 }
 
+/** Why a build failed: `message` says what happened in plain language, and `nextStep` what to do about it. */
 export interface BuildError {
   code: string;
   message: string;
+  nextStep: NextStep;
 }
 
 export interface PedagogyReport {
@@ -159,10 +166,12 @@ export type ProjectEvent = {
   [K in EventKind]: { seq: number; kind: K; payload: EventPayloads[K] };
 }[EventKind];
 
+/** An API error: `message` says what happened in plain language, and `nextStep` what to do about it. */
 export interface ApiErrorBody {
   error: {
     code: string;
     message: string;
+    nextStep: NextStep;
     details?: unknown;
   };
 }
