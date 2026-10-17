@@ -6,9 +6,10 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createBuildsRepo } from './db/builds.js';
 import { type Db, openDb } from './db/index.js';
 import { createProjectsRepo } from './db/projects.js';
-import { turns as turnsTable, type Turn } from './db/schema.js';
+import { builds as buildsTable, turns as turnsTable, type Build, type Turn } from './db/schema.js';
 import { createTurnsRepo } from './db/turns.js';
 import { createUsersRepo } from './db/users.js';
 
@@ -30,6 +31,11 @@ describe('server startup', () => {
 
   function storedTurn(): Turn {
     return withDb((db) => db.select().from(turnsTable).all()[0]!);
+  }
+
+
+  function storedBuild(): Build {
+    return withDb((db) => db.select().from(buildsTable).all()[0]!);
   }
 
   function listenOnFreePort(): Promise<number> {
@@ -68,6 +74,7 @@ describe('server startup', () => {
       const turns = createTurnsRepo(db);
       turns.queue({ turnId: 'turn-1', messageId: 'message-1', projectId: 'project-1', content: [{ type: 'text', text: 'Hi' }] });
       turns.start('turn-1');
+      createBuildsRepo(db).create({ projectId: 'project-1', version: 1, avenue: 'scorm', turnId: 'turn-1' });
     });
   });
 
@@ -83,7 +90,7 @@ describe('server startup', () => {
     await fs.rm(dataDir, { recursive: true, force: true });
   });
 
-  it('exits with a plain message and leaves running turns alone when the port is in use', async () => {
+    it('exits with a plain message and leaves running turns and checking builds alone when the port is in use', async () => {
     const port = await listenOnFreePort();
 
     const run = await runServer(port);
@@ -91,9 +98,10 @@ describe('server startup', () => {
     expect(run.code).toBe(1);
     expect(run.stderr).toContain(`Port ${port} on 127.0.0.1 is already in use`);
     expect(storedTurn()).toMatchObject({ status: 'running', error: null });
+    expect(storedBuild()).toMatchObject({ status: 'checking', error: null });
   }, 30_000);
 
-  it('fails turns left running by an earlier back end once it holds its port', async () => {
+  it('fails turns and builds left active by an earlier back end once it holds its port', async () => {
     const port = await listenOnFreePort();
     await closeBlocker();
 
@@ -101,6 +109,7 @@ describe('server startup', () => {
 
     expect(run.stdout).toContain(`back-end listening on http://127.0.0.1:${port}`);
     expect(storedTurn()).toMatchObject({ status: 'failed', error: { code: 'interrupted' } });
+    expect(storedBuild()).toMatchObject({ status: 'failed', error: { code: 'interrupted' } });
   }, 30_000);
 
   it('exits naming each invalid turn limit', async () => {

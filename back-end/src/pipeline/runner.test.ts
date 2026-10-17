@@ -115,6 +115,11 @@ function setup(options: { session?: AgentSession; hashes?: string[] } = {}) {
   return { deps, runner: createRunner(deps), appended, replies, finished, kinds, payloadsOf };
 }
 
+
+const RAW_ERROR = 'EPERM: operation not permitted, open out/index.html';
+
+type BreakTurn = (deps: ReturnType<typeof setup>['deps'], session: ReturnType<typeof scriptedSession>['session']) => void;
+
 beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
@@ -353,6 +358,46 @@ describe('runner', () => {
     expect(deps.builds.create).not.toHaveBeenCalled();
     expect(deps.sessions.close).toHaveBeenCalledOnce();
     expect(deps.sessions.release).not.toHaveBeenCalled();
+  });
+
+
+  it.each<[string, string, string, BreakTurn]>([
+    [
+      'the agent cannot start',
+      'internal_error',
+      'Something went wrong while running this request. Send it again.',
+      (_deps, session) => {
+        session.send.mockImplementation(() => {
+          throw new Error(RAW_ERROR);
+        });
+      },
+    ],
+    [
+      'the build step throws',
+      'internal_error',
+      'Something went wrong while running this request. Send it again.',
+      (deps) => {
+        deps.builds.create.mockRejectedValue(new Error(RAW_ERROR));
+      },
+    ],
+    [
+      'the workspace is gone',
+      'workspace_missing',
+      "This project's files are missing, so the request could not run.",
+      (deps) => {
+        deps.workspaces.hashOutput.mockRejectedValue(new WorkspaceMissing());
+      },
+    ],
+  ])('sends only the plain message in turn.failed when %s', async (_case, code, message, breakTurn) => {
+    const { session } = scriptedSession([], COMPLETED);
+    const { deps, runner, finished, payloadsOf } = setup({ session });
+    breakTurn(deps, session);
+
+    await runner.executeTurn('turn-1');
+
+    expect(payloadsOf('turn.failed')).toEqual([{ turnId: 'turn-1', error: { code, message } }]);
+    expect(finished[0]!.input).toMatchObject({ error: { code, message } });
+    expect(JSON.stringify(payloadsOf('turn.failed'))).not.toMatch(/EPERM|\n\s+at /);
   });
 
   it('reports a cancelled agent result as a cancelled turn and closes the session', async () => {
