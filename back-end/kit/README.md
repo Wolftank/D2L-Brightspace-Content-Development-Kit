@@ -10,3 +10,17 @@ The D2L Content Development Kit itself — carried over from the internship prot
 - `docs/TILT_UDL_Reference.docx` — the TILT/UDL pedagogical background (definitions, evidence base, design implications) the automated check (E4) is built against
 - `docs/Placement_and_Pedagogy.md`, `docs/Skill_Spectrum_Plan.md`, `docs/Synthetic_Semester_Design.md`, `docs/IT_Proposal_Synthetic_Accounts.md` — design docs behind the validation approach (E8): synthetic-persona testing tiers and where the kit fits pedagogically
 - `cors_server.py` — existing dev-server tooling. Needs a look once `back-end/src` has its own local server — may be redundant.
+
+## Keeping the tenant profile honest
+
+`harness/tenant-profile.json` is the single source of truth for what the tenant
+allows. Rules read their thresholds from it.
+
+When you learn something new about the tenant:
+
+1. Record it in `probes/RESULTS.md` with how it was measured.
+2. Update the profile entry and set `verified: true`.
+3. Add or adjust a lint rule if the finding is something a build can get wrong.
+4. Add an assertion to the relevant test suite.
+
+A finding that is not in the profile will be rediscovered by the next person.
