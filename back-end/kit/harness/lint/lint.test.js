@@ -4,6 +4,8 @@
 
 'use strict';
 
+const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { lint } = require('./lint');
 const profile = require('../tenant-profile.json');
@@ -25,7 +27,8 @@ const bsRules = rulesIn(bs);
   'scorm/credit-guard', 'scorm/commit-before-terminate', 'scorm/suspend-data-cap',
   'scorm/storage-key-learner-id', 'scorm/root-height', 'scorm/manifest',
   'shared/no-viewport-units', 'shared/external-cdn', 'shared/missing-assets',
-  'a11y/alt', 'a11y/lang', 'a11y/heading-order'
+  'a11y/alt', 'a11y/lang', 'a11y/heading-order',
+  'shared/script-syntax', 'shared/text-encoding', 'shared/charset-declaration'
 ].forEach(id => check(id, bsRules.has(id)));
 check('bad-scorm fails the gate', errs(bs) > 0);
 
@@ -112,6 +115,44 @@ const stripped = helpers.stripComments('var a=1; // .length guard\n/* cap */ var
 check('comment text is blanked', !/length|cap/.test(stripped));
 check('line count preserved', stripped.split('\n').length === 2);
 check('code survives', /var a=1;/.test(stripped) && /var b=2;/.test(stripped));
+
+console.log('\n== script syntax and text encoding ==');
+function lintFiles(files, avenue) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cdk-lint-'));
+  try {
+    for (const [name, content] of Object.entries(files)) fs.writeFileSync(path.join(dir, name), content);
+    return lint(dir, avenue || 'scorm', profile);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+const byRule = (r, id) => r.findings.filter(f => f.rule === id);
+
+const inline = byRule(lintFiles({
+  'index.html': '<html lang="en">\n<head><meta charset="utf-8"></head>\n<body>\n<script>\nvar ok = 1;\nvar broken = {;\n</script>\n</body></html>'
+}), 'shared/script-syntax');
+check('an inline syntax error is reported on its line of the page', inline.length === 1 && inline[0].line === 6,
+      JSON.stringify(inline.map(f => f.line)));
+check('a .js syntax error is reported', byRule(lintFiles({ 'app.js': 'function f( {\n' }), 'shared/script-syntax').length === 1);
+check('module, data, external, and commented-out scripts are not compiled', byRule(lintFiles({
+  'index.html': '<html lang="en"><head><meta charset="utf-8"></head><body>' +
+    '<script type="module">import x from "./x.js";</script>' +
+    '<script type="application/json">{"not": js}</script>' +
+    '<script src="app.js">ignored {;</script>' +
+    '<!-- <script>var broken = {;</script> -->' +
+    '</body></html>',
+  'app.js': 'var fine = 1;'
+}), 'shared/script-syntax').length === 0);
+check('bytes that are not UTF-8 are an error',
+      byRule(lintFiles({ 'data.json': Buffer.from('{"title": "caf\xe9"}', 'latin1') }), 'shared/text-encoding').length === 1);
+check('non-ASCII text without a UTF-8 declaration is a warning',
+      byRule(lintFiles({ 'index.html': '<html lang="en"><body>Café</body></html>' }), 'shared/charset-declaration').length === 1);
+check('either UTF-8 declaration, spelled utf-8 or utf8, satisfies it', byRule(lintFiles({
+  'a.html': '<html lang="en"><head><meta charset="UTF-8"></head><body>Café</body></html>',
+  'b.html': '<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"></head><body>Café</body></html>',
+  'c.html': '<html lang="en"><head><meta charset="utf8"></head><body>Café</body></html>',
+  'd.html': '<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=utf8"></head><body>Café</body></html>'
+}), 'shared/charset-declaration').length === 0);
 
 console.log('\n' + (fail === 0 ? 'ALL PASS' : fail + ' FAILED') + '  (' + pass + ' passed)\n');
 process.exit(fail === 0 ? 0 : 1);

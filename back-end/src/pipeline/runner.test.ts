@@ -350,7 +350,7 @@ describe('runner', () => {
 
     await runner.executeTurn('turn-1');
 
-    const error = { code: 'agent_busy', message: "The agent's account is busy or has reached its usage limit. Try again later." };
+    const error = { code: 'agent_busy', message: "The agent's account is busy or has reached its usage limit.", nextStep: 'try_later' };
     expect(finished).toEqual([{ id: 'turn-1', input: { status: 'failed', error, usage: { steps: 1 } } }]);
     expect(kinds()).toEqual(['turn.started', 'message.delta', 'turn.failed']);
     expect(payloadsOf('turn.failed')).toEqual([{ turnId: 'turn-1', error }]);
@@ -527,7 +527,8 @@ describe('runner', () => {
 
     const error = {
       code: 'interrupted',
-      message: 'The app closed before this request finished. Changes already made are kept; send the request again.',
+      message: 'The app closed before this request finished. Changes made so far are kept.',
+      nextStep: 'send_again',
     };
     expect(deps.turns.failActive).toHaveBeenCalledWith(error);
     expect(appended).toEqual([

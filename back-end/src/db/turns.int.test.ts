@@ -87,14 +87,14 @@ describe('turns repo', () => {
 
     const finished = turns.finish('turn-1', {
       status: 'failed',
-      error: { code: 'internal_error', message: 'm' },
+      error: { code: 'internal_error', message: 'm', nextStep: 'send_again' },
       usage: { steps: 3 },
       replyId: 'reply-1',
     });
 
     expect(finished).toMatchObject({
       status: 'failed',
-      error: { code: 'internal_error', message: 'm' },
+      error: { code: 'internal_error', message: 'm', nextStep: 'send_again' },
       usage: { steps: 3 },
       replyId: 'reply-1',
     });
@@ -105,7 +105,7 @@ describe('turns repo', () => {
     insertTurn('queued', 'queued');
     insertTurn('running', 'running');
     insertTurn('completed', 'completed');
-    const error = { code: 'interrupted', message: 'm' };
+    const error = { code: 'interrupted', message: 'm', nextStep: 'send_again' } as const;
 
     const failed = turns.failActive(error);
 

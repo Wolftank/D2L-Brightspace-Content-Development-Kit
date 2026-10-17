@@ -21,7 +21,7 @@ function showWindow(): void {
 }
 
 async function open(): Promise<void> {
-  backEnd = await startBackEnd(SERVER, APP_DIR);
+  backEnd = await startBackEnd(process.execPath, SERVER, APP_DIR);
   void backEnd.exited.then(() => {
     if (quitting) return;
     dialog.showErrorBox('CDK stopped', 'The CDK back end stopped unexpectedly. Open CDK again to continue.');

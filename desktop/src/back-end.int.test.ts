@@ -52,7 +52,7 @@ describe('startBackEnd', () => {
   }
 
   it('starts the back end on a free port as the app origin, serving the built front end', async () => {
-    backEnd = await startBackEnd(await script(FAKE_SERVER), join(dir, 'front-end'));
+    backEnd = await startBackEnd(process.execPath, await script(FAKE_SERVER), join(dir, 'front-end'));
     const { env } = JSON.parse(await readFile(join(dir, 'pids.json'), 'utf8'));
     const origin = new URL(backEnd.url).origin;
 
@@ -62,7 +62,7 @@ describe('startBackEnd', () => {
   });
 
   it("stops the back end's whole process tree, including the processes it started", async () => {
-    backEnd = await startBackEnd(await script(FAKE_SERVER), dir);
+    backEnd = await startBackEnd(process.execPath, await script(FAKE_SERVER), dir);
     const pids = JSON.parse(await readFile(join(dir, 'pids.json'), 'utf8'));
     expect(isRunning(pids.agent)).toBe(true);
 
@@ -73,13 +73,13 @@ describe('startBackEnd', () => {
   });
 
   it('settles exited when the back end stops on its own', async () => {
-    backEnd = await startBackEnd(await script(`${FAKE_SERVER}\nsetTimeout(() => process.exit(0), 300);`), dir);
+    backEnd = await startBackEnd(process.execPath, await script(`${FAKE_SERVER}\nsetTimeout(() => process.exit(0), 300);`), dir);
 
     await expect(backEnd.exited).resolves.toBeUndefined();
   });
 
   it('reports the error output of a back end that stops while starting', async () => {
-    const start = startBackEnd(await script("process.stderr.write('Invalid back-end settings: PORT: must be a whole number'); process.exitCode = 1;"), dir);
+    const start = startBackEnd(process.execPath, await script("process.stderr.write('Invalid back-end settings: PORT: must be a whole number'); process.exitCode = 1;"), dir);
 
     await expect(start).rejects.toThrow(BackEndStartError);
     await expect(start).rejects.toThrow(/stopped while starting[\s\S]*PORT: must be a whole number/);
@@ -92,7 +92,7 @@ describe('startBackEnd', () => {
       setInterval(() => {}, 1000);
     `);
 
-    await expect(startBackEnd(path, dir, 2_000)).rejects.toThrow('did not start within 2 seconds');
+    await expect(startBackEnd(process.execPath, path, dir, 2_000)).rejects.toThrow('did not start within 2 seconds');
     const { backEnd: pid } = JSON.parse(await readFile(join(dir, 'pids.json'), 'utf8'));
     expect(await waitUntilStopped(pid)).toBe(true);
   });
