@@ -141,7 +141,7 @@ export function App() {
           <label htmlFor="request-text">{project ? 'Describe a change' : 'What should students learn or do?'}</label>
           <textarea ref={messageBox} id="request-text" value={requestText} onChange={event => setRequestText(event.target.value)} placeholder={project ? 'Describe a change or ask a question…' : 'Create a ten-question practice quiz on cell division…'} rows={3} maxLength={20000} aria-describedby="composer-hint" />
           <div className="composer-footer"><p className="hint" id="composer-hint">{opening ? 'Opening your project…' : isBuilding ? 'CDK is working on your request. You can draft your next message while you wait.' : 'Your requests stay together in this project.'}</p><button disabled={isBuilding} type="submit">{sending ? 'Sending…' : 'Send'}</button></div>
-          {error && <ErrorNotice failure={error} disabled={isBuilding} onSendAgain={() => void submitRequest(requestText)} onEdit={() => messageBox.current?.focus()} onNewProject={startNewProject} />}
+          {error && <ErrorNotice failure={error} disabled={isBuilding} onSendAgain={() => void submitRequest(requestText)} onEdit={() => messageBox.current?.focus()} onNewProject={startNewProject} onAskForFix={askForFix} />}
         </form>
       </section>
       <BuildPanel build={latestBuild} turn={turn} statusLines={statusLines} connection={connection} outcome={outcomes[turn.id ?? '']?.message} disabled={isBuilding} onAskForFix={askForFix}
