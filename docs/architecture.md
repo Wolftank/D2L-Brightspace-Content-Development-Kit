@@ -198,14 +198,11 @@ sequenceDiagram
   Runner->>Agent: send(input)
   Agent-->>Runner: text, tool, and status events
   Runner-->>UI: turn.status, message.delta
-  Agent->>Tools: create_build()
-  Tools->>Tools: copy out/, run the QA gate
-  Tools-->>UI: build.created, build.updated
-  Agent->>Tools: check_pedagogy({ buildId })
-  Tools-->>UI: build.updated
-  Agent->>Tools: propose_deploy(buildId)
-  Tools-->>UI: deployment.updated (requested)
+  Agent->>Tools: check_output()
+  Tools-->>Agent: QA findings for out/
   Agent-->>Runner: result
+  Runner->>Runner: build out/: copy it, run the QA gate
+  Runner-->>UI: build.created, build.updated
   Runner-->>UI: message.completed, turn.completed
   UI->>API: POST /builds/:id/deploy (instructor confirms)
 ```
@@ -216,7 +213,7 @@ Runner rules:
 2. Every driver text, tool, status, or notice event becomes an Event row **and** a live push, in that order, except a status or notice whose text repeats the turn's latest status line. When the driver's events end, every tool call without a `tool.finished` gets one with `ok: false`.
 3. When the driver's result arrives, the runner hands the session back to the session service: `release` after a completed result, `close` after anything else, so a failed or aborted agent process is never reused. On a completed result it stores each nonempty agent message in order and emits `message.completed` for each. Assistant message boundaries from the driver determine distinct message IDs; tool steps do not split text by themselves. The driver's final message completes the last reply, or its streamed text is used when that is empty. The turn's `replyId` references the final stored reply. It then builds per rule 6 and marks the turn.
 4. Every turn ends with exactly one of `turn.completed`, `turn.failed`, and `turn.cancelled`. A failed turn's `error` is `{ code, message, nextStep }`: the code from the driver, or `workspace_missing`, `interrupted`, or `internal_error` from the runner, with the fixed plain-language message and next step for that code from [Errors](#errors). The technical detail goes to the server log.
-5. `POST /turns/:id/cancel` fires the turn's abort signal. The driver stops the agent; the runner records `cancelled` or `failed`. V1 has no cancel route and imposes no step, spending, or time limit on a turn, so a stuck turn holds its project until the back end restarts.
+5. `POST /turns/:id/cancel` fires the turn's abort signal. The driver stops the agent; the runner records `cancelled` or `failed`. V1 has no cancel route and no time limit on a turn. Its step and spending limits come from `AGENT_MAX_STEPS` and `AGENT_MAX_BUDGET_USD`, so a turn that runs away ends there, but a stuck turn holds its project until the back end restarts.
 6. At the end of a completed turn, the runner compares the workspace service's hash of `out/` with the `outputHash` of the project's latest build, or with `out/` at the turn's start before the project's first build. When they differ it creates a build, with the QA gate and without the pedagogy check. This builds a turn's changes without relying on the agent to remember and, once the project has a build, also builds output a failed or interrupted turn left unbuilt. A build that fails the QA gate leaves the turn `completed`.
 7. On boot, once the back end holds its port and before it handles a request, every turn still `queued` or `running` becomes `failed` with `error.code = 'interrupted'`. Its message and the workspace output are kept, and the UI offers to resend. Every build still `checking` becomes `failed` with the same code.
 
@@ -291,17 +288,19 @@ Tools are the functions the back end exposes to the agent, so that the agent act
 
 | Tool | Does | Side effect |
 |---|---|---|
-| `get_project` | Returns title, avenue, target course, tenant constraints, uploaded files, prior builds | none |
-| `create_build({ note? })` | Copies `out/` and runs the QA gate | Build row, `build.*` events |
-| `get_build({ buildId })` | Full findings for a build | none |
-| `check_pedagogy({ buildId } \| { text })` | The pedagogy check on a build or on pasted text | On a build: report attached, `build.updated` |
-| `propose_deploy({ buildId, note })` | Records that the agent thinks this build is ready | Deployment row in `requested`, `deployment.updated` |
+| `get_project` | Returns the title, the avenue, the latest build's version, status, QA findings, and error, and the tenant profile's sections for the avenue | none |
+| `check_output` | Runs the QA gate on `out/` as it is and returns its findings | none |
+| `delete_files({ paths })` | Deletes files or folders inside `out/` | Files removed from `out/` |
+| `check_pedagogy({ buildId } \| { text })` | Planned: the pedagogy check on a build or on pasted text | On a build: report attached, `build.updated` |
+| `propose_deploy({ buildId, note })` | Planned: records that the agent thinks this build is ready | Deployment row in `requested`, `deployment.updated` |
+
+The agent checks its work with `check_output`, which records nothing. Builds come from the runner, which builds `out/` after every turn that changed it (Runner rule 6), so each request produces one build however many times the agent checked.
 
 Tool handlers are created per session with the project and instructor already bound, so a tool can never touch another project. Skills reach the agent through the driver, which delivers the kit's skills the way its agent takes them (see [Workspaces](#workspaces)).
 
-**The agent runs on a fixed allowlist and is never prompted.** Pre-approved: file tools inside the workspace, the agent's shell, the `cdk` tools, and the kit's skills for the project's output format. The agent loads nothing else, and a session that does fails its turn (see [drivers.md](drivers.md#what-the-agent-can-use)). Everything else is denied automatically and the agent is told so in the tool result, so it adapts or explains in its message. Each driver maps this onto its agent's own permission model (see [drivers.md](drivers.md)). No driver is ever run with an "approve everything" setting.
+**The agent runs on a fixed allowlist and is never prompted.** Pre-approved: file tools inside the workspace, the `cdk` tools, and the kit's skills for the project's output format. The agent loads nothing else, and a session that does fails its turn (see [drivers.md](drivers.md#what-the-agent-can-use)). Everything else is denied automatically and the agent is told so in the tool result, so it adapts or explains in its message. Each driver maps this onto its agent's own permission model (see [drivers.md](drivers.md)). No driver is ever run with an "approve everything" setting.
 
-**The shell is open until the `cdk` tools cover a turn.** The agent runs the QA gate, and anything else a turn needs, through its shell, with every command allowed, so a turn never stalls on how a command is worded. PowerShell on Windows, bash elsewhere. Shell commands run as the instructor and are not bound by the file rules: a command can read or write anything the instructor can, including other projects and the agent's sign-in. That is acceptable only in local mode, on the instructor's own machine. Hosted mode ships without a shell.
+**The agent has no shell**, in local and hosted mode alike. Everything a turn needs goes through the file tools and the `cdk` tools, so the file rules bind everything the agent does. Something the agent needs that its file tools cannot do becomes a `cdk` tool, not a shell command.
 
 ## Sessions
 
@@ -350,29 +349,29 @@ The runner and the session service talk only to this interface. Whether a driver
 
 ## Workspaces
 
-A workspace is the directory where the agent works on one project. It holds the instructor's uploads, the output the agent writes, and whatever the driver puts there for its agent. Everything the agent reads or writes for a project lives inside it, and the confinement layers below keep the agent's file tools from reaching anything outside it. The shell is not confined in local mode (see [Tools](#tools)).
+A workspace is the directory where the agent works on one project. It holds the instructor's uploads, the output the agent writes, and whatever the driver puts there for its agent. Everything the agent reads or writes for a project lives inside it, and the confinement layers below keep the agent's file tools from reaching anything outside it.
 
-**Provisioning.** The workspace service, called by `POST /projects` before the Project row is stored, creates the tree shown under [Resource model](#resource-model): `files/` empty, and `out/` holding the kit's starter for the avenue once the avenue is known. The same service copies `out/` into a build, hashes `out/` so the runner can tell whether a turn changed it, and removes the tree when the project is deleted or its setup fails. Nothing it writes is specific to an agent.
+**Provisioning.** The workspace service, called by `POST /projects` before the Project row is stored, creates the tree shown under [Resource model](#resource-model): `files/` empty, `out/` holding the kit's starter for the avenue once the avenue is known, and `kit/skills/` holding the kit's skills, which the instructions point the agent at. The same service copies `out/` into a build, hashes `out/` so the runner can tell whether a turn changed it, and removes the tree when the project is deleted or its setup fails. Nothing it writes is specific to an agent.
 
 **Agent files.** Each agent takes its instructions, its skills, and its permission rules in its own way, so the driver delivers them at every `open`, and provisioning never writes them. The instructions are generated by the back end from the project facts and the kit's rules (write the output into `out/`, respect the tenant profile). The skills are the kit's skills for the project's output format, from the kit as installed. The permission rules are those in the confinement layers below. The Claude driver writes all three into the workspace, as `CLAUDE.md`, `.claude/skills/`, and `.claude/settings.json`, because that is where Claude reads them. The Copilot driver passes all three as session options, `systemMessage`, `skillDirectories` pointing at the kit, and the tool allowlist, and writes nothing. Delivering at every open means an install can switch agents, a change to the project facts reaches the agent at its next session, and a fix to a skill reaches every project at its next session.
 
-**Builds.** `create_build` copies `out/` into `builds/<version>/` and runs the QA gate over the copy. Preview and download serve from the build, so the instructor sees something stable while the agent keeps editing the output. Retention: every deployed build is kept, plus the newest ten others. Deleting a project removes the whole tree.
+**Builds.** After a turn that changed `out/`, the runner has the build service copy `out/` into `builds/<version>/` and run the QA gate over the copy. Preview and download serve from the build, so the instructor sees something stable while the agent keeps editing the output. Retention: every deployed build is kept, plus the newest ten others. Deleting a project removes the whole tree.
 
 **Confinement, in layers.** The agent runs with the instructor's own permissions in local mode and as the service account in hosted mode, so its file tools are kept inside its workspace by construction rather than by trust. The layers are cumulative; each stays in place when the next is added.
 
 1. **Run inside the workspace, with a deny-by-default permission mode.** The driver starts the agent in the workspace with a mode that approves the allowlist and denies everything else without prompting.
-2. **Permission rules**, delivered by the driver the way its agent takes them. Allow reads, edits, and searches under the workspace. Deny reads of the home directory's credentials and agent configuration and of the app's data directory outside this project. These rules bind the file tools, not the shell.
-3. **A pre-tool hook** in the driver, running in-process, that resolves every path in a file tool's input and denies anything outside the workspace's real path. This backstops the rules against `..` and symlinks.
-4. **The agent's own OS sandbox**, which confines shell commands to the workspace and blocks network access except an allowlist. Which agent supports which operating system is in [drivers.md](drivers.md). Enable it wherever the agent supports the host, configured to refuse to run rather than run unconfined.
+2. **Permission rules**, delivered by the driver the way its agent takes them. Allow reads and searches under the workspace and edits under its `out/`, and refuse reads outside the workspace. Deny reads of the home directory's credentials and agent configuration and of the app's data directory outside this project.
+3. **A pre-tool hook** in the driver, running in-process, that resolves every path in a file tool's input the way the agent reads it, then denies anything outside the workspace's real path, and any edit outside the real path of its `out/`. This backstops the rules against `..`, a leading `~`, surrounding whitespace, and symlinks.
+4. **The agent's own OS sandbox**, which confines shell commands to the workspace and blocks network access except an allowlist. The agent has no shell, so this layer has nothing to confine unless a later tool runs commands. Which agent supports which operating system is in [drivers.md](drivers.md).
 5. **Containers.** If hosted mode must isolate instructors from each other more strongly than the sandbox does, the driver runs each session in a container with the workspace mounted, a network allowlist (the model API and the D2L tenant), and CPU, memory, and disk limits. The driver then spawns the agent inside the container; nothing above the driver changes.
 
-Layers 1 to 3 ship with V1. Layer 4 is on wherever the agent supports the host. Layer 5 is a driver-internal decision for hosted mode.
+Layers 1 to 3 ship with V1. Layer 5 is a driver-internal decision for hosted mode.
 
-**Bounds per turn.** The driver takes an optional step limit and dollar budget and enforces them through its agent; an omitted limit imposes none. V1 sets neither and has no wall-clock limit (Runner rule 5).
+**Bounds per turn.** The driver takes a step limit and a dollar budget and enforces them through its agent. The runner sets both from `AGENT_MAX_STEPS` and `AGENT_MAX_BUDGET_USD`; there is no wall-clock limit (Runner rule 5).
 
 **Agent state.** Each agent keeps transcripts, settings, and sign-in under its own configuration directory, listed per agent in [drivers.md](drivers.md). In local mode, leave the defaults so the instructor's existing sign-in is used. In hosted mode, point each at a directory owned by the service account so state has one known home; transcripts are already separated per project because every agent keys them by workspace.
 
-**Windows.** Local mode runs on the instructor's Windows machine. Keep the data directory short, `%LOCALAPPDATA%\CDK`, to stay under path-length limits. The commands in the skills must work in both PowerShell and bash, because the agents differ in which shell they use. Copy builds with a retry, because the preview server or antivirus can hold a file open for a moment. The desktop app (`desktop/`) is how instructors run local mode: its Electron main process starts the back end with the app's own executable as Node, opens one window on the back end's origin, and when the window closes ends the back end's whole process tree, the agent included.
+**Windows.** Local mode runs on the instructor's Windows machine. Keep the data directory short, `%LOCALAPPDATA%\CDK`, to stay under path-length limits. Copy builds with a retry, because the preview server or antivirus can hold a file open for a moment. The desktop app (`desktop/`) is how instructors run local mode: its Electron main process starts the back end with the app's own executable as Node, opens one window on the back end's origin, and when the window closes ends the back end's whole process tree, the agent included.
 
 ## Modes
 
@@ -384,8 +383,7 @@ A mode is where the app runs and for whom. Local mode runs the whole app on one 
 | Request guard | Bind 127.0.0.1; random launch token required in a header; Origin checked | TLS, cookie, CSRF token |
 | Database | SQLite in app data | Same SQLite; Postgres only if it outgrows it |
 | Workspaces | Under the instructor's data folder | Per-instructor directory tree |
-| Agent sandbox | Layers 1 to 3, plus layer 4 where the agent supports Windows | Layers 1 to 4 |
-| Agent shell | Every command, until the `cdk` tools cover a turn | None |
+| Agent sandbox | Layers 1 to 3 | Layers 1 to 3 |
 | Agent sign-in | The instructor's own | A shared service account, or per instructor |
 | D2L credentials | One token | One token per instructor, stored server-side |
 | Concurrency | One turn at a time | Per-instructor cap, plus a cap on live sessions |

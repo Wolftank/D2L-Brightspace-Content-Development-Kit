@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { AgentEvent, TurnResult } from './AgentDriver.js';
 
@@ -7,7 +6,7 @@ const BARE_FILE_AND_WEB_TOOL_NAMES = ['Read', 'Edit', 'Write', 'Grep', 'Glob', '
 
 /** Replays `messages` through mapClaudeStream. `readAt[i]` is how many
  *  messages had been read from the stream when `events[i]` was emitted. */
-async function replay(messages: unknown[]) {
+async function replay(messages: unknown[], toolSummaries?: ReadonlyMap<string, string>) {
   const { mapClaudeStream } = await import('./claude.js');
   let read = 0;
   async function* source(): AsyncGenerator<SDKMessage> {
@@ -27,6 +26,7 @@ async function replay(messages: unknown[]) {
       result = r;
     },
     () => {},
+    toolSummaries,
   )) {
     events.push(event);
     readAt.push(read);
@@ -96,37 +96,27 @@ describe('buildAllowedTools', () => {
   });
 });
 
-describe('the shell', () => {
-  async function importOnPlatform(platform: NodeJS.Platform) {
-    vi.resetModules();
-    vi.doMock('node:os', async (importOriginal) => ({
-      ...(await importOriginal<typeof import('node:os')>()),
-      platform: () => platform,
-    }));
-    return import('./claude.js');
-  }
-
-  afterEach(() => {
-    vi.doUnmock('node:os');
-    vi.resetModules();
+describe('the workspace settings', () => {
+  it('turn off every plugin built into the CLI', async () => {
+    const { WORKSPACE_SETTINGS } = await import('./claude.js');
+    expect(WORKSPACE_SETTINGS.enabledPlugins).toEqual({
+      'sec-default@builtin': false,
+      'agents-md@builtin': false,
+      'plugin-authoring@builtin': false,
+      'tips@builtin': false,
+      'diff@builtin': false,
+      'claude-test@builtin': false,
+    });
   });
+});
 
-  it('loads PowerShell, not Bash, on Windows and allows every PowerShell command', async () => {
-    const { BUILT_IN_TOOLS, agentEnv, buildAllowedTools } = await importOnPlatform('win32');
+describe("the agent's built-in tools", () => {
+  it('loads the file tools and the Skill tool, and no shell', async () => {
+    const { AGENT_SETTINGS_ENV, BUILT_IN_TOOLS, MUTATING_TOOL_RULES, buildAllowedTools } = await import('./claude.js');
 
-    expect(BUILT_IN_TOOLS).toContain('PowerShell');
-    expect(BUILT_IN_TOOLS).not.toContain('Bash');
-    expect(buildAllowedTools([])).toContain('PowerShell');
-    expect(agentEnv()).toMatchObject({ CLAUDE_CODE_USE_POWERSHELL_TOOL: '1' });
-  });
-
-  it('loads Bash, not PowerShell, elsewhere and allows every Bash command', async () => {
-    const { BUILT_IN_TOOLS, agentEnv, buildAllowedTools } = await importOnPlatform('linux');
-
-    expect(BUILT_IN_TOOLS).toContain('Bash');
-    expect(BUILT_IN_TOOLS).not.toContain('PowerShell');
-    expect(buildAllowedTools([])).toContain('Bash');
-    expect(agentEnv()).not.toHaveProperty('CLAUDE_CODE_USE_POWERSHELL_TOOL');
+    expect(BUILT_IN_TOOLS).toEqual(['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Skill']);
+    expect(buildAllowedTools(['mcp__cdk__check_output'])).toEqual([...MUTATING_TOOL_RULES, 'mcp__cdk__check_output']);
+    expect(AGENT_SETTINGS_ENV).not.toHaveProperty('CLAUDE_CODE_USE_POWERSHELL_TOOL');
   });
 });
 
@@ -147,13 +137,6 @@ describe('the agent environment', () => {
     expect(env).not.toHaveProperty('CDK_TEST_SECRET');
     expect(env).not.toHaveProperty('GITHUB_TOKEN');
     expect(Object.values(env)).not.toContain('back-end-secret');
-  });
-
-  it("passes the desktop app's ELECTRON_RUN_AS_NODE, so the agent can run the QA gate with the back end's runtime", async () => {
-    vi.stubEnv('ELECTRON_RUN_AS_NODE', '1');
-    const { agentEnv } = await import('./claude.js');
-
-    expect(agentEnv()).toMatchObject({ ELECTRON_RUN_AS_NODE: '1' });
   });
 
   it("holds only the inherited variables and the driver's own settings", async () => {
@@ -201,7 +184,8 @@ describe('allowedCapabilities', () => {
     const createBuild = {
       name: 'create_build',
       description: 'Copies out/ and runs the QA gate',
-      inputSchema: z.object({}),
+      summary: 'Building the activity',
+      input: {},
       handler: async () => ({ content: '' }),
     };
 
@@ -368,14 +352,24 @@ describe('mapClaudeStream: progress', () => {
 
   it('sends one line from the completed message when the summary is known only at the end', async () => {
     const { events, readAt } = await replay([
-      toolUseStart(0, 'call-1', 'PowerShell'),
-      inputDelta(0, '{"command": "node lint.js out"'),
-      inputDelta(0, '}'),
-      assistantToolUse('call-1', 'PowerShell', { command: 'node lint.js out' }),
+      toolUseStart(0, 'call-1', 'Write'),
+      inputDelta(0, '{"content": "<html>'),
+      inputDelta(0, '</html>"}'),
+      assistantToolUse('call-1', 'Write', { content: '<html></html>' }),
     ]);
 
-    expect(events).toEqual([{ kind: 'tool_start', callId: 'call-1', name: 'PowerShell', summary: 'Running a command' }]);
+    expect(events).toEqual([{ kind: 'tool_start', callId: 'call-1', name: 'Write', summary: 'Writing a file' }]);
     expect(readAt[0]).toBe(4);
+  });
+
+  it("sends a session tool's own line when the call starts", async () => {
+    const { events, readAt } = await replay(
+      [toolUseStart(0, 'call-1', 'mcp__cdk__check_output')],
+      new Map([['mcp__cdk__check_output', 'Checking the activity']]),
+    );
+
+    expect(events).toEqual([{ kind: 'tool_start', callId: 'call-1', name: 'mcp__cdk__check_output', summary: 'Checking the activity' }]);
+    expect(readAt[0]).toBe(1);
   });
 
   it('keeps streaming calls apart by block index', async () => {
@@ -453,8 +447,6 @@ describe('mapClaudeStream: progress', () => {
 
 describe('summarizeTool', () => {
   it.each([
-    ['PowerShell', { command: 'node lint.js out', description: 'Run the QA check' }, 'Run the QA check'],
-    ['Bash', { command: 'ls' }, 'Running a command'],
     ['Read', { file_path: 'C:\\ws\\kit\\skills\\d2l-scorm-package\\SKILL.md' }, 'Reading SKILL.md'],
     ['Write', { file_path: '/ws/out/index.html' }, 'Writing index.html'],
     ['Edit', { file_path: '/ws/out/imsmanifest.xml' }, 'Editing imsmanifest.xml'],
@@ -464,6 +456,13 @@ describe('summarizeTool', () => {
   ])('describes %s %j as %j', async (name, input, expected) => {
     const { summarizeTool } = await import('./claude.js');
     expect(summarizeTool(name, input)).toBe(expected);
+  });
+
+  it("describes a session tool by its own line", async () => {
+    const { summarizeTool } = await import('./claude.js');
+    const summaries = new Map([['mcp__cdk__delete_files', 'Deleting files']]);
+
+    expect(summarizeTool('mcp__cdk__delete_files', { paths: ['old.html'] }, summaries)).toBe('Deleting files');
   });
 });
 

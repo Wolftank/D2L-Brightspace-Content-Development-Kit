@@ -170,7 +170,7 @@ describe('R8 regression: project, message and build routes', () => {
     workspaces = createWorkspaceService({ dataDir });
     builds = createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces, events });
     agent = fakeAgent();
-    sessions = createSessionService({ projects: projectsRepo, workspaces, driver: agent.driver });
+    sessions = createSessionService({ projects: projectsRepo, workspaces, driver: agent.driver, tools: () => ({ name: 'cdk', tools: [] }) });
     const runner = createRunner({
       turns: turnsRepo,
       messages: messagesRepo,

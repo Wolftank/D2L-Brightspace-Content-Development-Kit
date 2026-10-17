@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import type { AgentDriver, AgentSession } from '../agent/AgentDriver.js';
+import type { AgentDriver, AgentSession, ToolServerSpec } from '../agent/AgentDriver.js';
 import { renderProjectInstructions } from '../agent/instructions.js';
 import type { ProjectsRepo } from '../db/projects.js';
 import { NotFound } from '../errors.js';
@@ -9,12 +9,12 @@ import type { WorkspaceService } from '../services/workspaces.js';
 /** How long a session stays open after its last turn before the service closes it. */
 export const SESSION_IDLE_MS = 15 * 60 * 1000;
 
-const SHELL = process.platform === 'win32' ? 'powershell' : 'bash';
-
 export interface SessionServiceDeps {
   projects: Pick<ProjectsRepo, 'getById' | 'setSessionId'>;
   workspaces: Pick<WorkspaceService, 'locate'>;
   driver: Pick<AgentDriver, 'open'>;
+  /** The CDK tools for a project, bound to it. */
+  tools: (projectId: string) => ToolServerSpec;
 }
 
 /**
@@ -61,11 +61,10 @@ export function createSessionService(deps: SessionServiceDeps): SessionService {
     const session = await deps.driver.open({
       workspaceDir,
       sessionId: project.sessionId,
-      instructions: renderProjectInstructions({ project, workspaceDir, shell: SHELL, runtime: process.execPath }),
+      instructions: renderProjectInstructions({ project, workspaceDir }),
       skillsDir: join(workspaceDir, 'kit', 'skills'),
       skills: SCORM_SKILLS,
-      tools: { name: 'cdk', tools: [] },
-      allowedTools: [],
+      tools: deps.tools(projectId),
     });
     return { session, savedSessionId: project.sessionId };
   }

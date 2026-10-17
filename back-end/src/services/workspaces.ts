@@ -29,7 +29,7 @@ export interface WorkspaceService {
 
   /**
    * Provisions a fresh workspace: an empty `files/` for instructor uploads,
-   * the SCORM starter copied into `out/`, the shared kit copied into `kit/`,
+   * the SCORM starter copied into `out/`, the kit's skills copied into `kit/skills/`,
    * and the sibling `builds/` directory. Writes nothing agent-specific.
    */
   create(projectId: string): Promise<void>;
@@ -104,16 +104,9 @@ export function createWorkspaceService(deps: WorkspaceServiceDeps): WorkspaceSer
     });
   }
 
+  /** Copies the kit's skills, assets included, into `kit/skills/`. */
   async function copyKit(workspaceDir: string): Promise<void> {
-    const kitTargetDir = join(workspaceDir, 'kit');
-    await fs.mkdir(kitTargetDir, { recursive: true });
-    // Whole subtrees, so the kit's internal layout (skill assets, harness
-    // fixtures, etc.) is preserved exactly.
-    await copyWithRetry(join(kitDir, 'skills'), join(kitTargetDir, 'skills'));
-    await copyWithRetry(join(kitDir, 'harness'), join(kitTargetDir, 'harness'));
-    // The checker is CommonJS; this "type": "commonjs" is what keeps `require`
-    // working once the kit is copied out from under back-end's own ESM package.json.
-    await copyWithRetry(join(kitDir, 'package.json'), join(kitTargetDir, 'package.json'));
+    await copyWithRetry(join(kitDir, 'skills'), join(workspaceDir, 'kit', 'skills'));
   }
 
   async function hashOutput(projectId: string): Promise<string> {
