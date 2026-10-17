@@ -15,11 +15,13 @@ describe('renderProjectInstructions', () => {
     expect(markdown).toContain('Output format: SCORM');
     expect(markdown).toContain('instructor request supplied in the message input');
     expect(markdown).toContain('without the prototype\'s output-selection interview');
-    expect(markdown).toContain('Keep source material and kit files unchanged');
+    expect(markdown).toContain('Keep source material unchanged');
+    expect(markdown).toContain('d2l-scorm-package');
+    expect(markdown).toContain('d2l-tenant-qa');
     expect(markdown).toContain('Fix errors you can address in out/ and check again');
     expect(markdown).toContain('do not claim a passing package');
     expect(markdown).toContain('checks the saved output again');
-    expect(markdown).toContain('in place of the guides\' standalone packaging and deployment steps');
+    expect(markdown).toContain('in place of the skills\' standalone packaging and deployment steps');
     expect(markdown).toContain('alt text');
     expect(markdown).toContain('lang="en"');
     expect(markdown).toContain('headings follow a sequential order');

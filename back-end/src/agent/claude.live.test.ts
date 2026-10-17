@@ -7,7 +7,7 @@ import { createEventsRepo } from '../db/events.js';
 import { createProjectsRepo } from '../db/projects.js';
 import { testDb } from '../db/test-db.js';
 import { createUsersRepo } from '../db/users.js';
-import { SCORM_SKILLS } from '../kit.js';
+import { KIT_DIR, SCORM_SKILLS } from '../kit.js';
 import { createEventService } from '../pipeline/events.js';
 import { createBuildService } from '../services/builds.js';
 import { createWorkspaceService } from '../services/workspaces.js';
@@ -229,7 +229,7 @@ describe('ClaudeAgentDriver, live SDK, in a provisioned SCORM workspace', () => 
       workspaceDir,
       sessionId: null,
       instructions: renderProjectInstructions({ project, workspaceDir }),
-      skillsDir: join(workspaceDir, 'kit', 'skills'),
+      skillsDir: join(KIT_DIR, 'skills'),
       skills: SCORM_SKILLS,
       tools: recordingChecks(createCdkTools({ projects, workspaces, builds }, project.id), checks),
     });

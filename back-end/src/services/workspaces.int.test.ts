@@ -47,7 +47,7 @@ describe('workspace service', () => {
   });
 
   describe('create', () => {
-    it('provisions files/, out/ with the SCORM starter, kit/, and a sibling builds/ dir', async () => {
+    it('provisions files/, out/ with the SCORM starter, and a sibling builds/ dir, and nothing else', async () => {
       await workspaces.create(projectId);
       const workspaceDir = workspaces.pathFor(projectId);
 
@@ -58,11 +58,7 @@ describe('workspace service', () => {
       expect(outFiles).toContain('imsmanifest.xml');
       expect(outFiles).toContain('index.html');
 
-      const skillNames = await fs.readdir(join(workspaceDir, 'kit', 'skills'));
-      expect(skillNames).toContain('d2l-scorm-package');
-      expect(skillNames).toContain('d2l-tenant-qa');
-
-      expect(await fs.readdir(join(workspaceDir, 'kit'))).toEqual(['skills']);
+      expect((await fs.readdir(workspaceDir)).sort()).toEqual(['files', 'out']);
 
       const projectDir = join(dataDir, 'projects', projectId);
       expect((await fs.stat(join(projectDir, 'builds'))).isDirectory()).toBe(true);
@@ -211,7 +207,6 @@ describe('workspace service', () => {
       const copied = (await fs.readdir(dest)).sort();
       const outFiles = (await fs.readdir(join(workspaces.pathFor(projectId), 'out'))).sort();
       expect(copied).toEqual(outFiles);
-      expect(copied).not.toContain('kit');
       expect(copied).not.toContain('files');
     });
 

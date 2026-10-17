@@ -12,7 +12,6 @@ export function renderProjectInstructions({ project, workspaceDir }: ProjectInst
   if (!isAbsolute(workspaceDir) || /[\r\n\0]/.test(workspaceDir)) {
     throw new Error('workspaceDir must be an absolute, single-line path');
   }
-  const kitDir = join(workspaceDir, 'kit');
   const outDir = join(workspaceDir, 'out');
 
   return `# Project instructions
@@ -21,18 +20,16 @@ Project ID: ${code(project.id)}
 Project title: ${code(project.title)}
 Output format: SCORM. Build from the instructor request supplied in the message input. Use the SCORM path directly and proceed without the prototype's output-selection interview.
 
-## Workspace and kit
+## Workspace and skills
 
 - Workspace: ${code(workspaceDir)}
 - Source material (files/): ${code(join(workspaceDir, 'files'))}
 - Generated output (out/): ${code(outDir)}
-- Kit skills: ${code(join(kitDir, 'skills'))}
 
-Keep source material and kit files unchanged. Write the activity and its assets only into out/.
-Read and follow these guides for content rules:
-- SCORM skill: ${code(join(kitDir, 'skills', 'd2l-scorm-package', 'SKILL.md'))}
-- QA skill: ${code(join(kitDir, 'skills', 'd2l-tenant-qa', 'SKILL.md'))}
-- SCORM starter: ${code(join(kitDir, 'skills', 'd2l-scorm-package', 'assets', 'starter'))}
+Keep source material unchanged. Write the activity and its assets only into out/.
+Follow these skills for content rules:
+- ${code('d2l-scorm-package')} to build the SCORM activity
+- ${code('d2l-tenant-qa')} to check it against what the D2L tenant allows
 
 Use the starter already provisioned in out/ as the starting point for the activity.
 
@@ -45,10 +42,10 @@ You have no shell. Work with your file tools and these CDK tools:
 
 ## Build, check, and fix within this request
 
-1. Build the requested SCORM activity in out/ using the guides and source material. Ensure all images have alt text, the page declares lang="en", and headings follow a sequential order without skipping levels. The checker enforces these accessibility rules.
+1. Build the requested SCORM activity in out/ using the skills and source material. Ensure all images have alt text, the page declares lang="en", and headings follow a sequential order without skipping levels. The checker enforces these accessibility rules.
 2. Check out/ with ${code('mcp__cdk__check_output')}.
 3. Inspect the findings and their explanations. Fix errors you can address in out/ and check again during this request. Review warnings and report any remaining limitations. If the checker cannot run or errors remain, clearly describe the failure and unresolved findings; do not claim a passing package.
-4. Return a concise description of the activity, the check result, and any unresolved issues. When your turn ends, CDK saves out/ as a new version, checks the saved output again, and packages a passing build with the manifest at the ZIP root. That step owns final packaging and download eligibility. Hand off out/ in place of the guides' standalone packaging and deployment steps.
+4. Return a concise description of the activity, the check result, and any unresolved issues. When your turn ends, CDK saves out/ as a new version, checks the saved output again, and packages a passing build with the manifest at the ZIP root. That step owns final packaging and download eligibility. Hand off out/ in place of the skills' standalone packaging and deployment steps.
 
 ## How to reply
 

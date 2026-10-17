@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentDriver, AgentSession, SessionRequest, ToolServerSpec } from '../agent/AgentDriver.js';
 import type { Project } from '../db/schema.js';
 import { NotFound, WorkspaceMissing } from '../errors.js';
-import { SCORM_SKILLS } from '../kit.js';
+import { KIT_DIR, SCORM_SKILLS } from '../kit.js';
 import { createSessionService, SESSION_IDLE_MS, type SessionService } from './sessions.js';
 
 type FakeSession = AgentSession & { sessionId: string | null; close: ReturnType<typeof vi.fn> };
@@ -89,7 +89,7 @@ describe('session service', () => {
     expect(opened[0]).toMatchObject({
       workspaceDir: workspaceDirOf('p1'),
       sessionId: null,
-      skillsDir: join(workspaceDirOf('p1'), 'kit', 'skills'),
+      skillsDir: join(KIT_DIR, 'skills'),
       skills: SCORM_SKILLS,
     });
     expect(opened[0]?.tools).toBe(TOOLS);

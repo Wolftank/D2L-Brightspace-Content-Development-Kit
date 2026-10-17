@@ -14,8 +14,6 @@ export interface CdkToolsDeps {
   projects: Pick<ProjectsRepo, 'getById'>;
   workspaces: Pick<WorkspaceService, 'locate'>;
   builds: Pick<BuildService, 'latest' | 'checkOutput'>;
-  /** The kit whose tenant profile `get_project` reports. Defaults to `back-end/kit`. */
-  kitDir?: string;
 }
 
 /**
@@ -23,8 +21,6 @@ export interface CdkToolsDeps {
  * tool acts only on `projectId`, so the agent can't reach another project.
  */
 export function createCdkTools(deps: CdkToolsDeps, projectId: string): ToolServerSpec {
-  const kitDir = deps.kitDir ?? KIT_DIR;
-
   const getProject = defineTool({
     name: 'get_project',
     description:
@@ -39,7 +35,7 @@ export function createCdkTools(deps: CdkToolsDeps, projectId: string): ToolServe
         title: project.title,
         avenue: project.avenue,
         latestBuild: latest ? { version: latest.version, status: latest.status, qa: latest.qa, error: latest.error } : null,
-        tenant: await tenantLimits(kitDir),
+        tenant: await tenantLimits(),
       });
     },
   });
@@ -106,8 +102,8 @@ function failed(message: string): ToolResult {
 }
 
 /** The tenant profile's sections for SCORM output, as the QA gate enforces them. */
-async function tenantLimits(kitDir: string): Promise<Record<string, unknown>> {
-  const profile = JSON.parse(await readFile(join(kitDir, 'harness', 'tenant-profile.json'), 'utf8')) as Record<string, unknown>;
+async function tenantLimits(): Promise<Record<string, unknown>> {
+  const profile = JSON.parse(await readFile(join(KIT_DIR, 'harness', 'tenant-profile.json'), 'utf8')) as Record<string, unknown>;
   return Object.fromEntries(SCORM_TENANT_SECTIONS.map((section) => [section, profile[section]]));
 }
 

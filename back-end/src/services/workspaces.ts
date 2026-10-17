@@ -29,8 +29,7 @@ export interface WorkspaceService {
 
   /**
    * Provisions a fresh workspace: an empty `files/` for instructor uploads,
-   * the SCORM starter copied into `out/`, the kit's skills copied into `kit/skills/`,
-   * and the sibling `builds/` directory. Writes nothing agent-specific.
+   * the SCORM starter copied into `out/`, and the sibling `builds/` directory. Writes nothing agent-specific.
    */
   create(projectId: string): Promise<void>;
 
@@ -91,7 +90,6 @@ export function createWorkspaceService(deps: WorkspaceServiceDeps): WorkspaceSer
     const workspaceDir = pathFor(projectId);
     await fs.mkdir(join(workspaceDir, 'files'), { recursive: true });
     await copyWithRetry(starterDir, join(workspaceDir, 'out'));
-    await copyKit(workspaceDir);
     await fs.mkdir(buildsDir(projectId), { recursive: true });
   }
 
@@ -102,11 +100,6 @@ export function createWorkspaceService(deps: WorkspaceServiceDeps): WorkspaceSer
       maxRetries: LOCK_RETRY_ATTEMPTS - 1,
       retryDelay: LOCK_RETRY_DELAY_MS,
     });
-  }
-
-  /** Copies the kit's skills, assets included, into `kit/skills/`. */
-  async function copyKit(workspaceDir: string): Promise<void> {
-    await copyWithRetry(join(kitDir, 'skills'), join(workspaceDir, 'kit', 'skills'));
   }
 
   async function hashOutput(projectId: string): Promise<string> {
