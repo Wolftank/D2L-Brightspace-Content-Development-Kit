@@ -267,7 +267,7 @@ describe('R8 regression: project, message and build routes', () => {
 
       for (const res of [unknown, notMine]) {
         expect(res.status).toBe(404);
-        expect(res.body.error.code).toBe('not_found');
+        expect(res.body.error.code).toBe('build_not_found');
       }
       expect(notMine.body).toEqual(unknown.body);
     });
@@ -362,7 +362,7 @@ describe('R8 regression: project, message and build routes', () => {
   });
 
   describe('builds', () => {
-    it('refuses to download a build the QA gate failed, with 409 build_not_ready', async () => {
+    it('refuses to download a build the QA gate failed, with 409 build_failed', async () => {
       const projectId = await createProject();
       await runTurn(projectId, '[qa-fail] Create a practice set on cell division.');
       const build = await latestBuild(projectId);
@@ -371,8 +371,8 @@ describe('R8 regression: project, message and build routes', () => {
       const res = await request(app()).get(`/api/builds/${build.id}/download`);
 
       expect(res.status).toBe(409);
-      expect(res.body.error.code).toBe('build_not_ready');
-      expect(res.body.error.details).toEqual({ status: 'failed' });
+      expect(res.body.error.code).toBe('build_failed');
+      expect(res.body.error.nextStep).toBe('ask_for_fix');
     });
 
     it('downloads a ready build as a zip with imsmanifest.xml at its root and every file the manifest declares', async () => {

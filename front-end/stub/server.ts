@@ -57,9 +57,11 @@ const builds = new Map<string, { state: ProjectState; build: Build }>();
 const API_ERRORS = {
   invalid_request: { status: 400, message: "The request couldn't be read.", nextStep: 'send_again' },
   invalid_json: { status: 400, message: "The request couldn't be read.", nextStep: 'send_again' },
-  not_found: { status: 404, message: "This project or build doesn't exist.", nextStep: 'new_project' },
+  not_found: { status: 404, message: "This project doesn't exist.", nextStep: 'new_project' },
+  build_not_found: { status: 404, message: "This build doesn't exist.", nextStep: 'send_again' },
   turn_active: { status: 409, message: 'A request is already running for this project.', nextStep: 'wait' },
   build_not_ready: { status: 409, message: "This build isn't ready to download.", nextStep: 'try_later' },
+  build_failed: { status: 409, message: "This build failed, so it can't be downloaded.", nextStep: 'ask_for_fix' },
   stream_unavailable: { status: 503, message: 'Live progress is unavailable right now.', nextStep: 'try_later' },
   internal_error: { status: 500, message: 'Something went wrong.', nextStep: 'try_later' },
 } satisfies Record<string, { status: number; message: string; nextStep: NextStep }>;
@@ -431,7 +433,8 @@ function streamEvents(req: IncomingMessage, res: ServerResponse, state: ProjectS
 
 function download(res: ServerResponse, buildId: string): void {
   const entry = builds.get(buildId);
-  if (!entry) throw new HttpError('not_found');
+  if (!entry) throw new HttpError('build_not_found');
+  if (entry.build.status === 'failed') throw new HttpError('build_failed');
   if (entry.build.status !== 'ready') throw new HttpError('build_not_ready');
   const name = `${entry.state.project.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-v${entry.build.version}.zip`;
   res.writeHead(200, {
@@ -479,7 +482,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (sub === 'download') return download(res, id);
     if (!sub) {
       const entry = builds.get(id);
-      if (!entry) throw new HttpError('not_found');
+      if (!entry) throw new HttpError('build_not_found');
       const body: BuildResponse = { build: entry.build, deployments: [] };
       return sendJson(res, 200, body);
     }

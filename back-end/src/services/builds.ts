@@ -8,7 +8,7 @@ import type { Build as ApiBuild, BuildError, QaReport } from '@cdk/contract';
 import type { BuildsRepo, FinishBuildInput } from '../db/builds.js';
 import type { ProjectsRepo } from '../db/projects.js';
 import type { Build, Project } from '../db/schema.js';
-import { BuildIncomplete, BuildNotReady, NotFound } from '../errors.js';
+import { BuildFailed, BuildIncomplete, BuildNotFound, BuildNotReady } from '../errors.js';
 import { KIT_DIR } from '../kit.js';
 import type { EventService } from '../pipeline/events.js';
 import type { WorkspaceService } from './workspaces.js';
@@ -81,7 +81,7 @@ export interface BuildService {
    */
   create(projectId: string, turnId?: string): Promise<ApiBuild>;
 
-  /** The build, if it belongs to one of `ownerId`'s projects; otherwise throws `NotFound`. */
+  /** The build, if it belongs to one of `ownerId`'s projects; otherwise throws `BuildNotFound`. */
   get(ownerId: string, buildId: string): ApiBuild;
 
   /** Unscoped lookup of the project's highest build version, for pipeline code acting on a project a route has already authorized. */
@@ -89,8 +89,9 @@ export interface BuildService {
 
   /**
    * A zip of a `ready` build with `imsmanifest.xml` at its root, named after
-   * the project's title and the build version. Throws `NotFound`,
-   * `BuildNotReady`, or `BuildIncomplete` before any byte is streamed.
+   * the project's title and the build version. Throws `BuildNotFound`,
+   * `BuildNotReady`, `BuildFailed`, or `BuildIncomplete` before any byte
+   * is streamed.
    */
   download(ownerId: string, buildId: string): Promise<BuildDownload>;
 
@@ -98,7 +99,7 @@ export interface BuildService {
    * The absolute path of the file at `path` (its segments, as a URL gives
    * them) in a `ready` build of one of `ownerId`'s projects. Only the files
    * the download contains can be named, so the QA report, links, and anything
-   * outside the build throw `NotFound`, as does a build that isn't ready.
+   * outside the build throw `BuildNotFound`, as does a build that isn't ready.
    */
   previewFile(ownerId: string, buildId: string, path: string[]): Promise<string>;
 
@@ -177,12 +178,12 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
       : { status: 'failed', qa, error: buildError('qa_failed') };
   }
 
-  /** The build and its project, if the project is `ownerId`'s; otherwise throws `NotFound`. */
+  /** The build and its project, if the project is `ownerId`'s; otherwise throws `BuildNotFound`. */
   function owned(ownerId: string, buildId: string): { build: Build; project: Project } {
     const build = deps.builds.get(buildId);
     const project = build && deps.projects.get(ownerId, build.projectId);
     if (!build || !project) {
-      throw new NotFound();
+      throw new BuildNotFound();
     }
     return { build, project };
   }
@@ -219,8 +220,11 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
 
   async function download(ownerId: string, buildId: string): Promise<BuildDownload> {
     const { build, project } = owned(ownerId, buildId);
+    if (build.status === 'failed') {
+      throw new BuildFailed();
+    }
     if (build.status !== 'ready') {
-      throw new BuildNotReady(build.status);
+      throw new BuildNotReady();
     }
 
     const buildDir = deps.workspaces.buildPathFor(build.projectId, String(build.version));
@@ -248,12 +252,12 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
   async function previewFile(ownerId: string, buildId: string, path: string[]): Promise<string> {
     const { build } = owned(ownerId, buildId);
     if (build.status !== 'ready') {
-      throw new NotFound();
+      throw new BuildNotFound();
     }
     const buildDir = deps.workspaces.buildPathFor(build.projectId, String(build.version));
     const wanted = path.join('/');
     if (!(await packageFiles(buildDir)).includes(wanted)) {
-      throw new NotFound();
+      throw new BuildNotFound();
     }
     return join(buildDir, ...wanted.split('/'));
   }

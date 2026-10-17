@@ -155,7 +155,7 @@ describe('R3 regression: app, identity, error envelope', () => {
       const res = await request(app()).get('/api/projects/archived-7');
 
       expectEnvelope(res, 404, 'not_found');
-      expect(res.body.error).toEqual({ code: 'not_found', message: "This project or build doesn't exist.", nextStep: 'new_project' });
+      expect(res.body.error).toEqual({ code: 'not_found', message: "This project doesn't exist.", nextStep: 'new_project' });
       expect(res.text).not.toContain('archived-7');
     });
 
@@ -241,18 +241,18 @@ describe('R3 regression: app, identity, error envelope', () => {
     });
 
     it('for the build routes: 404 for an unknown or unowned build, 409 for a build that cannot be downloaded', async () => {
+      const checking = buildsRepo.create({ projectId: 'mine', version: buildsRepo.nextVersion('mine'), avenue: 'scorm' });
       const failed = storedBuild('mine', 'failed');
       const incomplete = storedBuild('mine', 'ready');
       const unowned = storedBuild('not-mine', 'ready');
 
-      expectEnvelope(await request(app()).get('/api/builds/no-such-build'), 404, 'not_found');
-      expectEnvelope(await request(app()).get(`/api/builds/${unowned.id}`), 404, 'not_found');
-      expectEnvelope(await request(app()).get('/api/builds/no-such-build/download'), 404, 'not_found');
-      expectEnvelope(await request(app()).get(`/api/builds/${unowned.id}/download`), 404, 'not_found');
+      expectEnvelope(await request(app()).get('/api/builds/no-such-build'), 404, 'build_not_found');
+      expectEnvelope(await request(app()).get(`/api/builds/${unowned.id}`), 404, 'build_not_found');
+      expectEnvelope(await request(app()).get('/api/builds/no-such-build/download'), 404, 'build_not_found');
+      expectEnvelope(await request(app()).get(`/api/builds/${unowned.id}/download`), 404, 'build_not_found');
 
-      const notReady = await request(app()).get(`/api/builds/${failed.id}/download`);
-      expectEnvelope(notReady, 409, 'build_not_ready');
-      expect(notReady.body.error.details).toEqual({ status: 'failed' });
+      expectEnvelope(await request(app()).get(`/api/builds/${checking.id}/download`), 409, 'build_not_ready');
+      expectEnvelope(await request(app()).get(`/api/builds/${failed.id}/download`), 409, 'build_failed');
 
       const missingFiles = await request(app()).get(`/api/builds/${incomplete.id}/download`);
       expectEnvelope(missingFiles, 409, 'build_incomplete');

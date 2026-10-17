@@ -11,7 +11,7 @@ import type { Db } from '../db/index.js';
 import type { Build, Event } from '../db/schema.js';
 import { testDb } from '../db/test-db.js';
 import { createUsersRepo } from '../db/users.js';
-import { BuildIncomplete, BuildNotReady, NotFound } from '../errors.js';
+import { BuildFailed, BuildIncomplete, BuildNotFound } from '../errors.js';
 import { KIT_DIR } from '../kit.js';
 import { createEventService, type EventService } from '../pipeline/events.js';
 import { createBuildService, downloadFilename, type BuildService } from './builds.js';
@@ -257,11 +257,11 @@ describe('build service', () => {
       expect(builds.get(ownerId, build.id)).toEqual(build);
     });
 
-    it('throws NotFound for another owner’s build and for an unknown id', async () => {
+    it('throws BuildNotFound for another owner’s build and for an unknown id', async () => {
       const build = await builds.create(projectId);
 
-      expect(() => builds.get('someone-else', build.id)).toThrow(NotFound);
-      expect(() => builds.get(ownerId, 'no-such-build')).toThrow(NotFound);
+      expect(() => builds.get('someone-else', build.id)).toThrow(BuildNotFound);
+      expect(() => builds.get(ownerId, 'no-such-build')).toThrow(BuildNotFound);
     });
   });
 
@@ -278,11 +278,11 @@ describe('build service', () => {
       expect(names).not.toContain('qa.json');
     });
 
-    it('refuses a build that is not ready', async () => {
+    it('refuses a build that failed', async () => {
       await replaceOutput(BAD_SCORM);
       const build = await builds.create(projectId);
 
-      await expect(builds.download(ownerId, build.id)).rejects.toThrow(BuildNotReady);
+      await expect(builds.download(ownerId, build.id)).rejects.toThrow(BuildFailed);
     });
 
     it('refuses a build missing a file its manifest declares', async () => {
@@ -314,10 +314,10 @@ describe('build service', () => {
       );
     });
 
-    it('throws NotFound for another owner’s build', async () => {
+    it('throws BuildNotFound for another owner’s build', async () => {
       const build = await builds.create(projectId);
 
-      await expect(builds.download('someone-else', build.id)).rejects.toThrow(NotFound);
+      await expect(builds.download('someone-else', build.id)).rejects.toThrow(BuildNotFound);
     });
   });
 
@@ -346,7 +346,7 @@ describe('build service', () => {
       const build = await builds.create(projectId);
       await fs.mkdir(join(workspaces.buildPathFor(projectId, '1'), 'css'));
 
-      await expect(builds.previewFile(ownerId, build.id, path)).rejects.toThrow(NotFound);
+      await expect(builds.previewFile(ownerId, build.id, path)).rejects.toThrow(BuildNotFound);
     });
 
     it('refuses a file reached through a link out of the build', async () => {
@@ -356,7 +356,7 @@ describe('build service', () => {
       await fs.writeFile(join(outside, 'secret.txt'), 'not part of the build');
       await fs.symlink(outside, join(workspaces.buildPathFor(projectId, '1'), 'linked'), 'junction');
 
-      await expect(builds.previewFile(ownerId, build.id, ['linked', 'secret.txt'])).rejects.toThrow(NotFound);
+      await expect(builds.previewFile(ownerId, build.id, ['linked', 'secret.txt'])).rejects.toThrow(BuildNotFound);
     });
 
     it('refuses a link to a file outside the build', async (ctx) => {
@@ -371,21 +371,21 @@ describe('build service', () => {
         throw err;
       }
 
-      await expect(builds.previewFile(ownerId, build.id, ['secret.txt'])).rejects.toThrow(NotFound);
+      await expect(builds.previewFile(ownerId, build.id, ['secret.txt'])).rejects.toThrow(BuildNotFound);
     });
 
     it('refuses a build that is not ready', async () => {
       await replaceOutput(BAD_SCORM);
       const build = await builds.create(projectId);
 
-      await expect(builds.previewFile(ownerId, build.id, ['index.html'])).rejects.toThrow(NotFound);
+      await expect(builds.previewFile(ownerId, build.id, ['index.html'])).rejects.toThrow(BuildNotFound);
     });
 
-    it('throws NotFound for another owner’s build and for an unknown id', async () => {
+    it('throws BuildNotFound for another owner’s build and for an unknown id', async () => {
       const build = await builds.create(projectId);
 
-      await expect(builds.previewFile('someone-else', build.id, ['index.html'])).rejects.toThrow(NotFound);
-      await expect(builds.previewFile(ownerId, 'no-such-build', ['index.html'])).rejects.toThrow(NotFound);
+      await expect(builds.previewFile('someone-else', build.id, ['index.html'])).rejects.toThrow(BuildNotFound);
+      await expect(builds.previewFile(ownerId, 'no-such-build', ['index.html'])).rejects.toThrow(BuildNotFound);
     });
   });
 });

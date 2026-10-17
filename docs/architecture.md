@@ -121,7 +121,7 @@ POST   /api/builds/:buildId/deploy            { targetCourse?, confirm: true } â
 GET    /api/deployments/:deploymentId         â†’ { deployment }
 ```
 
-The download is an attachment named `<title>-v<version>.zip`, with the project's title folded to lowercase ASCII letters and digits joined by dashes (`build` when none are left). It is refused with `409 build_not_ready` unless the build is `ready`, and with `409 build_incomplete` when a file the manifest declares is missing.
+The download is an attachment named `<title>-v<version>.zip`, with the project's title folded to lowercase ASCII letters and digits joined by dashes (`build` when none are left). It is refused with `404 build_not_found` for a build that doesn't exist, `409 build_not_ready` while the build is `checking`, `409 build_failed` when it failed, and `409 build_incomplete` when a file the manifest declares is missing.
 
 A build always runs the QA gate. The pedagogy check is a separate step on a build, requested by the instructor here or by the agent through its tool, so an intermediate build costs nothing it does not need.
 
@@ -264,9 +264,11 @@ The envelope's `error`. `details`, where present, is for the front end's logic a
 | `invalid_request` | 400 | The request couldn't be read. | `send_again` |
 | `invalid_json` | 400 | The request couldn't be read. | `send_again` |
 | `payload_too_large` | 413 | The request is too large. | `smaller_request` |
-| `not_found` | 404 | This project or build doesn't exist. | `new_project` |
+| `not_found` | 404 | This project doesn't exist. | `new_project` |
+| `build_not_found` | 404 | This build doesn't exist. | `send_again` |
 | `turn_active` | 409 | A request is already running for this project. | `wait` |
 | `build_not_ready` | 409 | This build isn't ready to download. | `try_later` |
+| `build_failed` | 409 | This build failed, so it can't be downloaded. | `ask_for_fix` |
 | `build_incomplete` | 409 | This build is missing files it needs. | `send_again` |
 | `internal_error` | 500 | Something went wrong. | `try_later` |
 
