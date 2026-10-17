@@ -269,7 +269,7 @@ describe('GET /api/projects/:projectId/messages', () => {
   it("carries a failed turn's error on the instructor's message, with no reply", async () => {
     const { message, turn } = queueTurn('Build a self-check on mitosis');
     turnsRepo.start(turn.id);
-    const error = { code: 'agent_unavailable', message: 'The agent could not be reached. Try again in a moment.' };
+    const error = { code: 'agent_busy', message: "The agent's account is busy.", nextStep: 'try_later' } as const;
     turnsRepo.finish(turn.id, { status: 'failed', error });
 
     const res = await list();

@@ -8,14 +8,15 @@ import type {
   SendMessageResponse,
 } from '@cdk/contract';
 
-import { readFailure, type NextStep } from './failure';
+import { readFailure } from './failure';
+import type { NextStep } from '@cdk/contract';
 
 export class ApiError extends Error {
   constructor(
     readonly code: string,
     message: string,
     readonly details?: unknown,
-    readonly nextStep: NextStep = 'try_again_later',
+    readonly nextStep: NextStep = 'try_later',
   ) {
     super(message);
     this.name = 'ApiError';

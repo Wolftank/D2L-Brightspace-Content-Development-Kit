@@ -11,6 +11,8 @@
 
 'use strict';
 
+const vm = require('vm');
+
 /* ------------------------------------------------------------ helpers */
 
 function lineOf(text, offset) {
@@ -94,6 +96,43 @@ function finding(rule, file, line, message, extra) {
 /* Files that are actual code/markup, not assets. */
 const isCode = f => f.ext === '.html' || f.ext === '.htm' || f.ext === '.js';
 const isMarkup = f => f.ext === '.html' || f.ext === '.htm';
+
+/** The first syntax error in classic script `code`, compiled without running it, or null. */
+function syntaxError(code) {
+  try {
+    new vm.Script(code, { filename: 'script' });
+    return null;
+  } catch (e) {
+    if (e.name !== 'SyntaxError') return null;
+    const at = /^script:(\d+)/.exec(e.stack || '');
+    return { line: at ? Number(at[1]) : 1, message: e.message };
+  }
+}
+
+const CLASSIC_SCRIPT_TYPES = new Set(['', 'text/javascript', 'application/javascript']);
+
+/**
+ * The inline classic scripts in markup file `f`, each with the line its code
+ * starts on. Scripts with a `src`, modules, data blocks, and commented-out
+ * scripts are left out.
+ */
+function classicInlineScripts(f) {
+  const scripts = [];
+  for (const m of matches(f.text, /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
+    const attrs = m.groups[0];
+    if (/\bsrc\s*=/i.test(attrs)) continue;
+    const type = /\btype\s*=\s*["']?([^"'\s>]*)/i.exec(attrs);
+    if (!CLASSIC_SCRIPT_TYPES.has(type ? type[1].toLowerCase() : '')) continue;
+    const start = m.index + m.text.indexOf('>') + 1;
+    scripts.push({ code: f.raw.slice(start, start + m.groups[1].length), line: lineOf(f.raw, start) });
+  }
+  return scripts;
+}
+
+/** Whether markup `text` declares UTF-8, spelled `utf-8` or `utf8`, by `<meta charset>` or an `http-equiv` content type. */
+function declaresUtf8(text) {
+  return /<meta\b[^>]*\bcharset\s*=\s*["']?utf-?8\b/i.test(text);
+}
 
 /* ============================================================== rules */
 
@@ -710,6 +749,65 @@ const RULES = [
           if (!have.has(ref)) {
             out.push(finding(this, f.rel, m.line, `References "${m.groups[1]}" which is not in the build.`));
           }
+        }
+      }
+      return out;
+    }
+  },
+
+  {
+    id: 'shared/script-syntax',
+    avenues: ['scorm', 'topic', 'widget'],
+    severity: 'error',
+    because: 'A syntax error stops the whole script, so the activity never loads its content or reports ' +
+             'a score. The browser shows the error only in its console, which nobody sees in D2L.',
+    test(ctx) {
+      const out = [];
+      for (const f of ctx.files.filter(f => f.ext === '.js')) {
+        const error = syntaxError(f.raw);
+        if (error) out.push(finding(this, f.rel, error.line, `Script syntax error: ${error.message}`));
+      }
+      for (const f of ctx.files.filter(isMarkup)) {
+        for (const script of classicInlineScripts(f)) {
+          const error = syntaxError(script.code);
+          if (error) {
+            out.push(finding(this, f.rel, script.line + error.line - 1, `Script syntax error: ${error.message}`));
+          }
+        }
+      }
+      return out;
+    }
+  },
+
+  {
+    id: 'shared/text-encoding',
+    avenues: ['scorm', 'topic', 'widget'],
+    severity: 'error',
+    because: 'Bytes that are not valid UTF-8 show in the browser as the replacement character, so the ' +
+             'text reads as garbage in D2L. Save the file as UTF-8.',
+    test(ctx) {
+      const out = [];
+      for (const f of ctx.files.filter(f => f.raw)) {
+        const at = f.raw.indexOf('\uFFFD');
+        if (at >= 0) out.push(finding(this, f.rel, lineOf(f.raw, at), 'The file is not valid UTF-8 text.'));
+      }
+      return out;
+    }
+  },
+
+  {
+    id: 'shared/charset-declaration',
+    avenues: ['scorm', 'topic'],
+    severity: 'warn',
+    because: 'Without a UTF-8 declaration a browser can read UTF-8 text as another encoding and show ' +
+             '"â€¦" instead of "…". Add <meta charset="utf-8"> to the page head.',
+    test(ctx) {
+      const out = [];
+      for (const f of ctx.files.filter(isMarkup)) {
+        if (!/<html\b/i.test(f.text) || declaresUtf8(f.text)) continue;
+        const at = f.raw.search(/[^\x00-\x7F]/);
+        if (at >= 0) {
+          out.push(finding(this, f.rel, lineOf(f.raw, at), 'The page has non-ASCII text but does not declare charset="utf-8".'));
         }
       }
       return out;

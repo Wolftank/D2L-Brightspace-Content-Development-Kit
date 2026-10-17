@@ -7,15 +7,21 @@ import type { ProjectEventState } from './hooks/useProjectEvents';
 import { WorkingIndicator } from './WorkingIndicator';
 import { StatusFeed } from './StatusFeed';
 import './App.css';
+import { readFailure } from './api/failure';
 import { ErrorNotice } from './ErrorNotice';
 import { PreviewPanel } from './preview/PreviewPanel';
 
-function BuildPanel({ build, turn, statusLines, connection, outcome }: {
+function BuildPanel({ build, turn, statusLines, connection, outcome, disabled, onAskForFix, onSendAgain, onEdit, onNewProject }: {
   build: Build | null;
   turn: ProjectEventState['turn'];
   statusLines: ProjectEventState['statusLines'];
   connection: ConnectionStatus;
   outcome?: string;
+  disabled: boolean;
+  onAskForFix: () => void;
+  onSendAgain: () => void;
+  onEdit: () => void;
+  onNewProject: () => void;
 }) {
   return <section className="card build-panel" aria-labelledby="build-title" tabIndex={0}>
     <p className="eyebrow">02 / BUILD</p><h2 id="build-title">Build panel</h2>
@@ -27,7 +33,7 @@ function BuildPanel({ build, turn, statusLines, connection, outcome }: {
         <p className="result-label">BUILD {build.version}</p>
         <h3 id="build-result-title">{build.status === 'ready' ? 'Ready to download' : build.status === 'failed' ? 'QA needs attention' : 'Build is being checked'}</h3>
         {build.qa && <p>{build.qa.passed ? 'The QA gate passed.' : 'The QA gate needs attention.'}</p>}
-        {build.error && <p>The build could not be prepared. Ask CDK to check the activity and try again.</p>}
+        {build.error && <ErrorNotice failure={readFailure(build.error)} disabled={disabled} onAskForFix={onAskForFix} onSendAgain={onSendAgain} onEdit={onEdit} onNewProject={onNewProject} />}
         {!!build.qa?.findings.length && <ul className="findings">{build.qa.findings.map((finding, index) =>
           <li key={index}><strong>{finding.severity === 'warn' ? 'WARNING' : 'ERROR'}</strong> {finding.message}{finding.because && <p>{finding.because}</p>}</li>)}</ul>}
         {build.status === 'ready' && <a className="download" href={buildDownloadUrl(build.id)}>Download SCORM package</a>}
@@ -74,6 +80,11 @@ export function App() {
     messageBox.current?.focus();
   }
 
+  function askForFix() {
+    setRequestText(current => current.trim() ? current : 'Please fix the problems reported by the QA check' + (latestBuild ? ' in build ' + latestBuild.version : '') + '.');
+    messageBox.current?.focus();
+  }
+
   async function handleSend(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await submitRequest(requestText);
@@ -115,10 +126,10 @@ export function App() {
             <p className="speaker">{message.role === 'instructor' ? 'You' : 'CDK'}</p>
             <p>{message.content.filter(block => block.type === 'text').map(block => block.text).join('\n')}</p>
             {message.role === 'instructor' && message.turnId && ['failed', 'cancelled'].includes(outcomes[message.turnId]?.status ?? '') &&
-              <ErrorNotice failure={outcomes[message.turnId]?.failure ?? { message: 'This request could not be completed.', nextStep: 'try_again_later' }} disabled={isBuilding}
+              <ErrorNotice failure={outcomes[message.turnId]?.failure ?? { message: 'This request could not be completed.', nextStep: 'try_later' }} disabled={isBuilding}
                 onSendAgain={() => void submitRequest(message.content.filter(block => block.type === 'text').map(block => block.text).join('\n'))}
                 onEdit={() => { setRequestText(message.content.filter(block => block.type === 'text').map(block => block.text).join('\n')); messageBox.current?.focus(); }}
-                onNewProject={startNewProject} />}
+                onNewProject={startNewProject} onAskForFix={askForFix} />}
           </article>)}
           {streamingMessages.map(message => <article key={message.id} className="chat-message message-agent"><p className="speaker">CDK</p><p>{message.text}</p></article>)}
         </div>
@@ -133,7 +144,9 @@ export function App() {
           {error && <ErrorNotice failure={error} disabled={isBuilding} onSendAgain={() => void submitRequest(requestText)} onEdit={() => messageBox.current?.focus()} onNewProject={startNewProject} />}
         </form>
       </section>
-      <BuildPanel build={latestBuild} turn={turn} statusLines={statusLines} connection={connection} outcome={outcomes[turn.id ?? '']?.message} />
+      <BuildPanel build={latestBuild} turn={turn} statusLines={statusLines} connection={connection} outcome={outcomes[turn.id ?? '']?.message} disabled={isBuilding} onAskForFix={askForFix}
+        onSendAgain={() => { const original = messages.find(message => message.role === 'instructor' && message.turnId === latestBuild?.turnId); if (original) void submitRequest(original.content.filter(block => block.type === 'text').map(block => block.text).join('\n')); }}
+        onEdit={() => messageBox.current?.focus()} onNewProject={startNewProject} />
       <PreviewPanel build={readyBuild} />
     </div>
   </main>;

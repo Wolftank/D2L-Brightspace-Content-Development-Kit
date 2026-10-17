@@ -36,7 +36,11 @@ import { createWorkspaceService, type WorkspaceService } from '../services/works
 
 const STARTER = join(KIT_DIR, 'skills', 'd2l-scorm-package', 'assets', 'starter');
 const BAD_SCORM = join(KIT_DIR, 'harness', 'lint', 'fixtures', 'bad-scorm');
-const WORKSPACE_MISSING_MESSAGE = "This project's files are missing, so the request could not run.";
+const WORKSPACE_MISSING_ERROR = {
+  code: 'workspace_missing',
+  message: "This project's files are missing, so the request couldn't run.",
+  nextStep: 'new_project',
+};
 
 type TurnStatus = NonNullable<ChatMessage['turn']>['status'];
 
@@ -166,7 +170,7 @@ describe('R8 regression: project, message and build routes', () => {
     workspaces = createWorkspaceService({ dataDir });
     builds = createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces, events });
     agent = fakeAgent();
-    sessions = createSessionService({ projects: projectsRepo, workspaces, driver: agent.driver });
+    sessions = createSessionService({ projects: projectsRepo, workspaces, driver: agent.driver, tools: () => ({ name: 'cdk', tools: [] }) });
     const runner = createRunner({
       turns: turnsRepo,
       messages: messagesRepo,
@@ -263,7 +267,7 @@ describe('R8 regression: project, message and build routes', () => {
 
       for (const res of [unknown, notMine]) {
         expect(res.status).toBe(404);
-        expect(res.body.error.code).toBe('not_found');
+        expect(res.body.error.code).toBe('build_not_found');
       }
       expect(notMine.body).toEqual(unknown.body);
     });
@@ -299,9 +303,9 @@ describe('R8 regression: project, message and build routes', () => {
 
       const turn = await runTurn(projectId, 'Create a practice set on cell division.');
 
-      expect(turn).toMatchObject({ status: 'failed', error: { code: 'workspace_missing', message: WORKSPACE_MISSING_MESSAGE } });
+      expect(turn).toMatchObject({ status: 'failed', error: WORKSPACE_MISSING_ERROR });
       const failed = events.after(projectId, 0).find((event) => event.kind === 'turn.failed');
-      expect(failed?.payload).toEqual({ turnId: turn.id, error: { code: 'workspace_missing', message: WORKSPACE_MISSING_MESSAGE } });
+      expect(failed?.payload).toEqual({ turnId: turn.id, error: WORKSPACE_MISSING_ERROR });
       await expect(fs.access(workspaceDir)).rejects.toThrow();
       expect(await latestBuild(projectId)).toBeUndefined();
       expect(consoleError).toHaveBeenCalledWith(`Turn ${turn.id} failed (workspace_missing):`, expect.anything());
@@ -332,7 +336,7 @@ describe('R8 regression: project, message and build routes', () => {
       expect(items.filter((message) => message.role === 'instructor').map((message) => message.turn)).toEqual([
         { id: completed.id, status: 'completed', error: null },
         { id: qaFailed.id, status: 'completed', error: null },
-        { id: failed.id, status: 'failed', error: { code: 'workspace_missing', message: WORKSPACE_MISSING_MESSAGE } },
+        { id: failed.id, status: 'failed', error: WORKSPACE_MISSING_ERROR },
       ]);
       for (const reply of items.filter((message) => message.role === 'agent')) {
         expect(reply).not.toHaveProperty('turn');
@@ -358,7 +362,7 @@ describe('R8 regression: project, message and build routes', () => {
   });
 
   describe('builds', () => {
-    it('refuses to download a build the QA gate failed, with 409 build_not_ready', async () => {
+    it('refuses to download a build the QA gate failed, with 409 build_failed', async () => {
       const projectId = await createProject();
       await runTurn(projectId, '[qa-fail] Create a practice set on cell division.');
       const build = await latestBuild(projectId);
@@ -367,8 +371,8 @@ describe('R8 regression: project, message and build routes', () => {
       const res = await request(app()).get(`/api/builds/${build.id}/download`);
 
       expect(res.status).toBe(409);
-      expect(res.body.error.code).toBe('build_not_ready');
-      expect(res.body.error.details).toEqual({ status: 'failed' });
+      expect(res.body.error.code).toBe('build_failed');
+      expect(res.body.error.nextStep).toBe('ask_for_fix');
     });
 
     it('downloads a ready build as a zip with imsmanifest.xml at its root and every file the manifest declares', async () => {

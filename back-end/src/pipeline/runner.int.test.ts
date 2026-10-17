@@ -138,7 +138,7 @@ describe('runner, end to end', () => {
 
   /** Runs turns with `driver`'s agent, capped by `turnLimits`. */
   function useAgent(driver: Pick<AgentDriver, 'open'>, turnLimits: TurnLimits): void {
-    sessions = createSessionService({ projects, workspaces, driver });
+    sessions = createSessionService({ projects, workspaces, driver, tools: () => ({ name: 'cdk', tools: [] }) });
     const builds = createBuildService({ builds: createBuildsRepo(db), projects, workspaces, events });
     runner = createRunner({ turns: createTurnsRepo(db), messages, events, sessions, workspaces, builds, turnLimits });
   }
@@ -242,16 +242,17 @@ describe('runner, end to end', () => {
   });
 
   it.each([
-    ['step', { maxSteps: 3, maxBudgetUsd: 10 }, 'max_steps_exceeded', 'The request needed more steps than allowed. Try a smaller request.'],
-    ['spending', { maxSteps: 60, maxBudgetUsd: 2.5 }, 'max_budget_exceeded', 'The request reached its spending limit. Try a smaller request.'],
-  ] as const)('ends a turn at its %s limit with the plain message, then runs the next request', async (_limit, turnLimits, code, message) => {
+    ['step', { maxSteps: 3, maxBudgetUsd: 10 }, 'max_steps_exceeded', 'The request needed more steps than allowed.'],
+    ['spending', { maxSteps: 60, maxBudgetUsd: 2.5 }, 'max_budget_exceeded', 'The request reached its spending limit.'],
+  ] as const)('ends a turn at its %s limit with the plain message and a smaller request as the next step, then runs the next request', async (_limit, turnLimits, code, message) => {
     useAgent(steppingDriver(), turnLimits);
     queueTurn('too-big', 'queued', 'Take 5 steps');
 
     await runner.executeTurn('too-big');
 
-    expect(turnRow('too-big')).toMatchObject({ status: 'failed', error: { code, message } });
-    expect(events.after(projectId, 0).at(-1)).toMatchObject({ kind: 'turn.failed', payload: { error: { code, message } } });
+    const error = { code, message, nextStep: 'smaller_request' };
+    expect(turnRow('too-big')).toMatchObject({ status: 'failed', error });
+    expect(events.after(projectId, 0).at(-1)).toMatchObject({ kind: 'turn.failed', payload: { error } });
 
     queueTurn('smaller', 'queued', 'Take 2 steps');
     await runner.executeTurn('smaller');

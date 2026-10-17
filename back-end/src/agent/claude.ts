@@ -1,11 +1,14 @@
 import { cp, lstat, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
-import { platform } from 'node:os';
+import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import {
+  createSdkMcpServer,
   query,
+  tool,
   type EffortLevel,
   type HookCallback,
   type HookJSONOutput,
+  type McpSdkServerConfigWithInstance,
   type Options,
   type SDKAssistantMessageError,
   type SDKMessage,
@@ -20,6 +23,7 @@ import type {
   AgentTurn,
   ProbeResult,
   SessionRequest,
+  ToolServerSpec,
   TurnErrorCode,
   TurnInput,
   TurnLimits,
@@ -27,31 +31,28 @@ import type {
 } from './AgentDriver.js';
 
 /**
- * Built-in file-editing tools that `.claude/settings.json` allows for the
- * whole workspace. Confirmed 2026-09-15 (docs/drivers.md, "Permissions,
+ * Built-in file-editing tools that `.claude/settings.json` allows inside the
+ * workspace's `out/`. Confirmed 2026-09-15 (docs/drivers.md, "Permissions,
  * confirmed"): `dontAsk` does not honor these from settings alone — the
  * identical scoped pattern must also be listed in `options.allowedTools`,
  * so `MUTATING_TOOL_RULES` is mirrored into both places. `Read` is not
  * included here: it auto-approves from settings.json alone.
  */
-export const MUTATING_TOOL_RULES = ['Edit(/**)', 'Write(/**)'];
+export const MUTATING_TOOL_RULES = ['Edit(/out/**)', 'Write(/out/**)'];
 
-/** The agent's shell: PowerShell on Windows, so instructors need no Git for
- *  Windows, and Bash elsewhere. */
-const SHELL_TOOL = platform() === 'win32' ? 'PowerShell' : 'Bash';
+/** The built-in tools that change files, which may write only inside the workspace's `out/`. */
+const MUTATING_TOOLS = new Set(['Edit', 'Write']);
 
 /**
- * Claude's built-in tools the agent loads: the file tools, the shell, and the
- * Skill tool for the kit's skills. Passed as `options.tools`, which sets the
- * whole built-in tool set.
+ * Claude's built-in tools the agent loads: the file tools and the Skill tool
+ * for the kit's skills. Passed as `options.tools`, which sets the whole
+ * built-in tool set, so the agent has no shell.
  */
-export const BUILT_IN_TOOLS = ['Read', 'Write', 'Edit', 'Glob', 'Grep', SHELL_TOOL, 'Skill'];
+export const BUILT_IN_TOOLS = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Skill'];
 
 /**
  * Variables the agent's process takes from the back end's environment: what
- * the OS, the shell, the network, and the agent's own sign-in need, and
- * `ELECTRON_RUN_AS_NODE`, which lets the desktop app's executable run the QA
- * gate as Node.
+ * the OS, the network, and the agent's own sign-in need.
  */
 export const INHERITED_ENV = [
   'PATH',
@@ -72,7 +73,6 @@ export const INHERITED_ENV = [
   'windir',
   'ComSpec',
   'PATHEXT',
-  'PSModulePath',
   'HTTPS_PROXY',
   'HTTP_PROXY',
   'NO_PROXY',
@@ -80,25 +80,35 @@ export const INHERITED_ENV = [
   'ANTHROPIC_API_KEY',
   'CLAUDE_CODE_OAUTH_TOKEN',
   'CLAUDE_CONFIG_DIR',
-  'ELECTRON_RUN_AS_NODE',
 ];
 
 /**
  * Variables the driver sets for the agent: no bundled skills, no built-in
- * subagents, no auto memory, and PowerShell as the shell on Windows
- * (docs/drivers.md, "What the agent can use").
+ * subagents, and no auto memory (docs/drivers.md, "What the agent can use").
  */
 export const AGENT_SETTINGS_ENV: Record<string, string> = {
   CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: '1',
   CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS: '1',
   CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1',
-  ...(SHELL_TOOL === 'PowerShell' ? { CLAUDE_CODE_USE_POWERSHELL_TOOL: '1' } : {}),
 };
 
+/**
+ * The plugins built into the Claude CLI. Each loads, on by default, whenever a
+ * server-side feature flag for the signed-in account makes it available.
+ */
+export const BUILT_IN_PLUGINS = ['sec-default', 'agents-md', 'plugin-authoring', 'tips', 'diff', 'claude-test'];
+
+/**
+ * The workspace's `.claude/settings.json`: reads and searches allowed inside
+ * the workspace and refused outside it, edits allowed inside `out/`, and every
+ * built-in plugin off.
+ */
 export const WORKSPACE_SETTINGS = {
   permissions: {
     allow: ['Read(/**)', ...MUTATING_TOOL_RULES],
+    blockReadsOutsideWorkingDirectories: true,
   },
+  enabledPlugins: Object.fromEntries(BUILT_IN_PLUGINS.map((name) => [`${name}@builtin`, false])),
 };
 
 const RESULT_ERROR_CODES: Record<string, TurnErrorCode> = {
@@ -117,12 +127,34 @@ const ASSISTANT_ERROR_CODES: Partial<Record<SDKAssistantMessageError, TurnErrorC
   overloaded: 'agent_busy',
 };
 
-/** Builds `options.allowedTools`: the mirrored file-tool patterns, every
- *  command in `SHELL_TOOL`, then the MCP tool names as-is. File tools are
- *  never listed by bare name: a bare name would override settings.json's
- *  path-scoped rules, including denies. */
+/** Builds `options.allowedTools`: the mirrored file-tool patterns, then the
+ *  MCP tool names as-is. File tools are never listed by bare name: a bare
+ *  name would override settings.json's path-scoped rules, including denies. */
 export function buildAllowedTools(mcpToolNames: string[]): string[] {
-  return [...MUTATING_TOOL_RULES, SHELL_TOOL, ...mcpToolNames];
+  return [...MUTATING_TOOL_RULES, ...mcpToolNames];
+}
+
+/** `spec`'s tools by the names Claude calls them: `mcp__<server>__<tool>`. */
+function qualifiedToolNames(spec: ToolServerSpec): string[] {
+  return spec.tools.map((def) => `mcp__${spec.name}__${def.name}`);
+}
+
+/** Serves `spec`'s tools to the agent in-process, as the MCP server named `spec.name`. */
+function toolServer(spec: ToolServerSpec): McpSdkServerConfigWithInstance {
+  return createSdkMcpServer({
+    name: spec.name,
+    tools: spec.tools.map((def) =>
+      tool(def.name, def.description, def.input, async (input) => {
+        try {
+          const result = await def.handler(input);
+          return { content: [{ type: 'text', text: result.content }], isError: result.isError ?? false };
+        } catch (err) {
+          console.error(`The ${spec.name} tool ${def.name} failed:`, err);
+          return { content: [{ type: 'text', text: 'The tool failed to run.' }], isError: true };
+        }
+      }),
+    ),
+  });
 }
 
 /**
@@ -150,7 +182,7 @@ export interface AllowedCapabilities {
 /** The tools, skills, and MCP servers a session for `req` may load. */
 export function allowedCapabilities(req: Pick<SessionRequest, 'tools' | 'skills'>): AllowedCapabilities {
   return {
-    tools: [...BUILT_IN_TOOLS, ...req.tools.tools.map((tool) => `mcp__${req.tools.name}__${tool.name}`)],
+    tools: [...BUILT_IN_TOOLS, ...qualifiedToolNames(req.tools)],
     skills: req.skills,
     mcpServers: [req.tools.name],
   };
@@ -238,7 +270,7 @@ function pathsInFileToolCall(toolName: string, input: unknown, workspaceDir: str
   const fields = (typeof input === 'object' && input !== null ? input : {}) as Record<string, unknown>;
   const field = (name: string) => {
     const value = fields[name];
-    return typeof value === 'string' ? value : undefined;
+    return typeof value === 'string' ? cliPath(value) : undefined;
   };
   const searchDir = resolve(workspaceDir, field('path') ?? '.');
   switch (toolName) {
@@ -257,6 +289,13 @@ function pathsInFileToolCall(toolName: string, input: unknown, workspaceDir: str
     default:
       return [];
   }
+}
+
+/** `raw` the way the CLI reads a path argument: trimmed, with a leading `~` meaning the home directory. */
+function cliPath(raw: string): string {
+  const path = raw.trim();
+  if (path === '~') return homedir();
+  return path.startsWith('~/') || path.startsWith('~\\') ? join(homedir(), path.slice(2)) : path;
 }
 
 /**
@@ -292,20 +331,27 @@ function denyToolCall(reason: string): HookJSONOutput {
 
 /**
  * A pre-tool hook that denies any file tool call naming a path outside
- * `workspaceDir`, compared by real path so `..` and links cannot leave it.
- * Calls to other tools pass through.
+ * `workspaceDir`, and any `Edit` or `Write` naming a path outside its `out/`,
+ * compared by real path so `..` and links cannot leave them. Calls to other
+ * tools pass through.
  */
 export function confineToWorkspace(workspaceDir: string): HookCallback {
   return async (input) => {
     if (input.hook_event_name !== 'PreToolUse') return {};
     const paths = pathsInFileToolCall(input.tool_name, input.tool_input, workspaceDir);
     if (paths.length === 0) return {};
+    const outDir = join(workspaceDir, 'out');
+    const mutating = MUTATING_TOOLS.has(input.tool_name);
     try {
-      const root = await realpath(workspaceDir);
+      const root = await realpath(mutating ? outDir : workspaceDir);
       for (const path of paths) {
         const real = await realPathOf(path);
         if (real === undefined || !isInside(root, real)) {
-          return denyToolCall(`${path} is outside the project workspace. Use files inside ${workspaceDir}.`);
+          return denyToolCall(
+            mutating
+              ? `${path} is outside out/. Write the activity's files inside ${outDir}.`
+              : `${path} is outside the project workspace. Use files inside ${workspaceDir}.`,
+          );
         }
       }
       return {};
@@ -345,17 +391,9 @@ const FILE_TOOL_VERBS: Record<string, string> = { Read: 'Reading', Write: 'Writi
  *   The line, or `undefined` while `input` lacks the field the line is
  *   built from. A line returned here never changes as more input arrives.
  */
-function knownSummary(name: string, input: unknown): string | undefined {
-  const fields = (typeof input === 'object' && input !== null ? input : {}) as {
-    description?: unknown;
-    file_path?: unknown;
-  };
+function knownSummary(name: string, input: unknown, toolSummaries: ReadonlyMap<string, string>): string | undefined {
+  const fields = (typeof input === 'object' && input !== null ? input : {}) as { file_path?: unknown };
   switch (name) {
-    case 'PowerShell':
-    case 'Bash':
-      return typeof fields.description === 'string' && fields.description.trim() !== ''
-        ? fields.description
-        : undefined;
     case 'Read':
     case 'Write':
     case 'Edit':
@@ -364,13 +402,17 @@ function knownSummary(name: string, input: unknown): string | undefined {
     case 'Grep':
       return 'Searching the files';
     default:
-      return `Using ${name}`;
+      return toolSummaries.get(name) ?? `Using ${name}`;
   }
 }
 
-/** A plain-language line for the instructor describing one of Claude's tool calls, given its complete input. */
-export function summarizeTool(name: string, input: unknown): string {
-  return knownSummary(name, input) ?? (FILE_TOOL_VERBS[name] ? `${FILE_TOOL_VERBS[name]} a file` : 'Running a command');
+/**
+ * A plain-language line for the instructor describing one of Claude's tool
+ * calls, given its complete input. `toolSummaries` holds the lines for the
+ * session's own tools, by the names Claude calls them.
+ */
+export function summarizeTool(name: string, input: unknown, toolSummaries: ReadonlyMap<string, string> = new Map()): string {
+  return knownSummary(name, input, toolSummaries) ?? `${FILE_TOOL_VERBS[name]} a file`;
 }
 
 /** The last segment of a Windows or POSIX path. */
@@ -450,6 +492,7 @@ export async function* mapClaudeStream(
   signal: AbortSignal,
   resolveResult: (result: TurnResult) => void,
   onSessionId: (sessionId: string) => void,
+  toolSummaries: ReadonlyMap<string, string> = new Map(),
 ): AsyncGenerator<AgentEvent> {
   let textBuf = '';
   let assistantError: SDKAssistantMessageError | undefined;
@@ -493,7 +536,7 @@ export async function* mapClaudeStream(
             if (block.type === 'thinking' || block.type === 'redacted_thinking') {
               yield { kind: 'status', text: THINKING };
             } else if (block.type === 'tool_use') {
-              const summary = knownSummary(block.name, block.input);
+              const summary = knownSummary(block.name, block.input, toolSummaries);
               if (summary) yield toolStart(block.id, block.name, summary);
               else streamingCalls.set(event.index, { callId: block.id, name: block.name, inputJson: '' });
             }
@@ -505,7 +548,7 @@ export async function* mapClaudeStream(
               const call = streamingCalls.get(event.index);
               if (!call) break;
               call.inputJson += event.delta.partial_json;
-              const summary = knownSummary(call.name, parseCompleteFields(call.inputJson));
+              const summary = knownSummary(call.name, parseCompleteFields(call.inputJson), toolSummaries);
               if (summary) {
                 streamingCalls.delete(event.index);
                 yield toolStart(call.callId, call.name, summary);
@@ -519,7 +562,7 @@ export async function* mapClaudeStream(
           if (message.parent_tool_use_id) break;
           for (const block of message.message.content) {
             if (block.type === 'tool_use' && !startedCallIds.has(block.id)) {
-              yield toolStart(block.id, block.name, summarizeTool(block.name, block.input));
+              yield toolStart(block.id, block.name, summarizeTool(block.name, block.input, toolSummaries));
             }
           }
           break;
@@ -590,6 +633,8 @@ function modelOptions({ model, effort }: ClaudeSettings): Pick<Options, 'model' 
 
 function createClaudeSession(req: SessionRequest, settings: ClaudeSettings): AgentSession {
   let sessionId = req.sessionId;
+  const toolNames = qualifiedToolNames(req.tools);
+  const toolSummaries = new Map(req.tools.tools.map((def, i) => [toolNames[i]!, def.summary]));
 
   return {
     get sessionId() {
@@ -608,13 +653,14 @@ function createClaudeSession(req: SessionRequest, settings: ClaudeSettings): Age
         settingSources: ['project'],
         tools: BUILT_IN_TOOLS,
         skills: req.skills,
+        mcpServers: { [req.tools.name]: toolServer(req.tools) },
         strictMcpConfig: true,
         env: agentEnv(),
         hooks: { PreToolUse: [{ hooks: [confineToWorkspace(req.workspaceDir)] }] },
         maxTurns: limits.maxSteps,
         maxBudgetUsd: limits.maxBudgetUsd,
         includePartialMessages: true,
-        allowedTools: buildAllowedTools(req.allowedTools),
+        allowedTools: buildAllowedTools(toolNames),
         ...modelOptions(settings),
         abortController: controller,
       };
@@ -628,9 +674,15 @@ function createClaudeSession(req: SessionRequest, settings: ClaudeSettings): Age
       // generator); a spawn failure surfaces from the first `for await` step.
       const stream = query({ prompt: buildPrompt(input), options });
       const checked = enforceCapabilities(stream, allowedCapabilities(req), controller);
-      const events = mapClaudeStream(checked, signal, resolveResult, (id) => {
-        sessionId = id;
-      });
+      const events = mapClaudeStream(
+        checked,
+        signal,
+        resolveResult,
+        (id) => {
+          sessionId = id;
+        },
+        toolSummaries,
+      );
 
       // Wrap the result so it always reports the session id we ended up
       // with, even though mapClaudeStream (shared with the fixture test,
@@ -769,6 +821,3 @@ export function createClaudeAgentDriver(settings: ClaudeSettings = {}): AgentDri
     },
   };
 }
-
-// The tools layer (back-end/src/tools/) adds `options.mcpServers` from
-// `req.tools` in a later phase; `allowedCapabilities` already expects them.

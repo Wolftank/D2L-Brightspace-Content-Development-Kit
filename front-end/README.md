@@ -50,10 +50,10 @@ Browser tests cover follow-ups on ready and failed builds, message order, reload
 
 Manual keyboard and NVDA check: send `[long-step]`, confirm focus returns to the message box and Send is disabled with an explanation. Draft a follow-up, reload, and confirm it stays. Confirm timer ticks are silent, progress updates are announced, and the completed agent reply is announced once. Tab through Conversation, history, the message box, Build panel, download, Preview, Restart preview, and the activity controls. At desktop and narrow widths, verify visible focus and no horizontal page scrolling. NVDA verification remains manual.
 
-## F11 draft integration
+## F11 recovery integration
 
-This PR is intentionally a draft pending B24 (#121). `src/api/failure.ts` defines the proposed next-step values: `send_again`, `sign_in_to_agent`, `try_again_later`, `try_smaller_request`, `wait_for_current_request`, and `start_new_project`. A failure is `{ message, nextStep }`; both the API error envelope and `turn.failed.error` must carry it, and history must preserve it. Until B24 lands, unrecognised errors show a generic message with guidance; the UI does not infer actions from internal error codes.
+Errors use the shared `NextStep` from `@cdk/contract`: `send_again`, `sign_in`, `try_later`, `smaller_request`, `wait`, `new_project`, and `ask_for_fix`. B24 supplies these on API, turn, history, and build errors. The UI validates incoming errors and does not infer actions from codes. Ask for a fix prepares a follow-up in the composer and preserves an existing draft.
 
-The sign-in link opens `/api/agent/sign-in` in a separate tab. The stub serves a demonstration page; a real host sign-in handler and Electron external-window integration still need agreement before this draft is ready. The PR does not implement B24 or initiate authentication automatically.
+The sign-in link still opens `/api/agent/sign-in`, implemented only by the stub. A real sign-in handler and Electron external-window integration remain outstanding, so F11 remains a draft. Manual NVDA verification also remains outstanding.
 
-Stub markers `[send_again]`, `[try_smaller_request]`, `[sign_in_to_agent]`, `[try_again_later]`, `[wait_for_current_request]`, `[start_new_project]`, and `[cancelled]` exercise the actions. `[drop-lost]` exercises explicit reconnect. Errors use alerts, action controls are keyboard accessible, and focus returns to the composer after resend/edit. Manual NVDA verification remains outstanding.
+Stub markers use each shared next-step identifier in brackets. `[qa-fail]` covers build recovery, `[cancelled]` covers cancellation, and `[drop-lost]` covers explicit reconnect.

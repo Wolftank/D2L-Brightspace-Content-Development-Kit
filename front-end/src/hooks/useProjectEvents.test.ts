@@ -270,7 +270,11 @@ it('handles build.updated by replacing the existing build', () => {
       kind: 'turn.failed',
       payload: {
         turnId: 'turn-1',
-        error: Object.assign({ code: 'build_failed', message: 'The build could not be completed' }, { nextStep: 'send_again' }),
+        error: {
+          code: 'build_failed',
+          message: 'The build could not be completed',
+          nextStep: 'send_again',
+        },
       },
     });
 

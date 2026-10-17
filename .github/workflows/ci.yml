@@ -4,6 +4,11 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version, such as 0.2.0
+        required: true
 
 jobs:
   front-end:
@@ -96,3 +101,75 @@ jobs:
         if: success() || failure()
         run: node builds/cdk/routing.test.js
         working-directory: back-end/kit
+
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    outputs:
+      installer: ${{ steps.installer.outputs.name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Set the release version
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [[ "$GITHUB_REF" != refs/heads/main ]]; then
+            echo "::error::Run the release from main."
+            exit 1
+          fi
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::The version must be three numbers, such as 0.2.0."
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" > /dev/null; then
+            echo "::error::v$VERSION is already released."
+            exit 1
+          fi
+          npm version "$VERSION" --no-git-tag-version --allow-same-version --workspace cdk-desktop
+      - run: npm run package
+      - name: Smoke test the packaged app
+        run: npm run test:e2e
+        working-directory: desktop
+      - name: Name the installer with its version and commit
+        id: installer
+        shell: bash
+        env:
+          COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          version=$(node -p "require('./desktop/package.json').version")
+          name="CDK-Setup-${version}-${COMMIT::7}.exe"
+          mv "desktop/release/CDK Setup ${version}.exe" "desktop/release/${name}"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+          echo "path=desktop/release/${name}" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v7
+        with:
+          path: ${{ steps.installer.outputs.path }}
+          archive: false
+          retention-days: 30
+          if-no-files-found: error
+
+  release:
+    if: github.event_name == 'workflow_dispatch'
+    needs: [front-end, e2e, back-end, desktop, kit, package]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.package.outputs.installer }}
+      - name: Publish the installer as a GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          INSTALLER: ${{ needs.package.outputs.installer }}
+        run: |
+          mv "$INSTALLER" "CDK-Setup-$VERSION.exe"
+          gh release create "v$VERSION" "CDK-Setup-$VERSION.exe" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "CDK $VERSION" --generate-notes

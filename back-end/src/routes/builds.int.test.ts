@@ -92,7 +92,7 @@ describe('build routes', () => {
       for (const id of [others.id, 'no-such-build']) {
         const res = await request(createApp(deps)).get(`/api/builds/${id}`);
         expect(res.status).toBe(404);
-        expect(res.body.error.code).toBe('not_found');
+        expect(res.body.error.code).toBe('build_not_found');
       }
     });
   });
@@ -174,7 +174,7 @@ describe('build routes', () => {
       const res = await request(createApp(deps)).get(`/api/builds/${others.id}/download`);
 
       expect(res.status).toBe(404);
-      expect(res.body.error.code).toBe('not_found');
+      expect(res.body.error.code).toBe('build_not_found');
     });
   });
 });
