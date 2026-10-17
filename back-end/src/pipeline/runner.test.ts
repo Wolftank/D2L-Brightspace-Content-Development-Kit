@@ -6,7 +6,7 @@ import type { FinishTurnInput } from '../db/turns.js';
 import { WorkspaceMissing } from '../errors.js';
 import type { Build as ApiBuild } from '@cdk/contract';
 import type { AppendEventInput } from './events.js';
-import { createRunner, type RunnerDeps } from './runner.js';
+import { createRunner, TURN_ERRORS, type RunnerDeps } from './runner.js';
 
 const INSTRUCTOR_MESSAGE: Message = {
   id: 'message-1',
@@ -114,11 +114,6 @@ function setup(options: { session?: AgentSession; hashes?: string[] } = {}) {
   const payloadsOf = (kind: string) => appended.filter((event) => event.kind === kind).map((event) => event.payload);
   return { deps, runner: createRunner(deps), appended, replies, finished, kinds, payloadsOf };
 }
-
-
-const RAW_ERROR = 'EPERM: operation not permitted, open out/index.html';
-
-type BreakTurn = (deps: ReturnType<typeof setup>['deps'], session: ReturnType<typeof scriptedSession>['session']) => void;
 
 beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -360,46 +355,6 @@ describe('runner', () => {
     expect(deps.sessions.release).not.toHaveBeenCalled();
   });
 
-
-  it.each<[string, string, string, BreakTurn]>([
-    [
-      'the agent cannot start',
-      'internal_error',
-      'Something went wrong while running this request. Send it again.',
-      (_deps, session) => {
-        session.send.mockImplementation(() => {
-          throw new Error(RAW_ERROR);
-        });
-      },
-    ],
-    [
-      'the build step throws',
-      'internal_error',
-      'Something went wrong while running this request. Send it again.',
-      (deps) => {
-        deps.builds.create.mockRejectedValue(new Error(RAW_ERROR));
-      },
-    ],
-    [
-      'the workspace is gone',
-      'workspace_missing',
-      "This project's files are missing, so the request could not run.",
-      (deps) => {
-        deps.workspaces.hashOutput.mockRejectedValue(new WorkspaceMissing());
-      },
-    ],
-  ])('sends only the plain message in turn.failed when %s', async (_case, code, message, breakTurn) => {
-    const { session } = scriptedSession([], COMPLETED);
-    const { deps, runner, finished, payloadsOf } = setup({ session });
-    breakTurn(deps, session);
-
-    await runner.executeTurn('turn-1');
-
-    expect(payloadsOf('turn.failed')).toEqual([{ turnId: 'turn-1', error: { code, message } }]);
-    expect(finished[0]!.input).toMatchObject({ error: { code, message } });
-    expect(JSON.stringify(payloadsOf('turn.failed'))).not.toMatch(/EPERM|\n\s+at /);
-  });
-
   it('reports a cancelled agent result as a cancelled turn and closes the session', async () => {
     const { session } = scriptedSession([], { status: 'cancelled', sessionId: null, text: '' });
     const { deps, runner, finished, kinds } = setup({ session });
@@ -412,7 +367,7 @@ describe('runner', () => {
   });
 
   it('fails with workspace_missing before acquiring a session when the workspace is gone', async () => {
-    const { deps, runner, finished, kinds } = setup();
+    const { deps, runner, finished, kinds, payloadsOf } = setup();
     deps.workspaces.hashOutput.mockRejectedValue(new WorkspaceMissing());
 
     await runner.executeTurn('turn-1');
@@ -420,6 +375,7 @@ describe('runner', () => {
     expect(finished[0]!.input).toMatchObject({ status: 'failed', error: { code: 'workspace_missing' } });
     expect(kinds()).toEqual(['turn.started', 'turn.failed']);
     expect(deps.sessions.acquire).not.toHaveBeenCalled();
+    expect(payloadsOf('turn.failed')).toEqual([{ turnId: 'turn-1', error: { code: 'workspace_missing', ...TURN_ERRORS.workspace_missing } }]);
   });
 
   it('keeps workspace_missing, the usage, and the reply when the output disappears after the agent finishes', async () => {
@@ -452,12 +408,13 @@ describe('runner', () => {
     session.send.mockImplementation(() => {
       throw new Error('spawn claude ENOENT');
     });
-    const { deps, runner, finished } = setup({ session });
+    const { deps, runner, finished, payloadsOf } = setup({ session });
 
     await runner.executeTurn('turn-1');
 
     expect(finished[0]!.input).toMatchObject({ status: 'failed', error: { code: 'internal_error' } });
     expect(deps.sessions.close).toHaveBeenCalledOnce();
+    expect(payloadsOf('turn.failed')).toEqual([{ turnId: 'turn-1', error: { code: 'internal_error', ...TURN_ERRORS.internal_error } }]);
   });
 
   it('aborts the agent and fails once when progress cannot be reported', async () => {
@@ -478,7 +435,7 @@ describe('runner', () => {
   });
 
   it('fails once and keeps the reply when the build step throws', async () => {
-    const { deps, runner, replies, finished, kinds } = setup();
+    const { deps, runner, replies, finished, kinds, payloadsOf } = setup();
     deps.builds.create.mockRejectedValue(new Error('EPERM'));
 
     await runner.executeTurn('turn-1');
@@ -489,12 +446,13 @@ describe('runner', () => {
         id: 'turn-1',
         input: {
           status: 'failed',
-          error: expect.objectContaining({ code: 'internal_error' }),
+          error: { code: 'internal_error', ...TURN_ERRORS.internal_error },
           usage: COMPLETED.usage,
           replyId: replies[0]!.id,
         },
       },
     ]);
+    expect(payloadsOf('turn.failed')).toEqual([{ turnId: 'turn-1', error: { code: 'internal_error', ...TURN_ERRORS.internal_error } }]);
   });
 
   it('does nothing for a turn that is not queued', async () => {
