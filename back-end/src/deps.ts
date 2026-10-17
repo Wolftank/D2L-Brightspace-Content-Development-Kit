@@ -17,4 +17,6 @@ export interface Deps {
   events: EventService;
   driver: Pick<AgentDriver, 'name' | 'probe'>;
   preview: PreviewSettings;
+  /** When set, the origin guard requires this token on every API request. */
+  launchToken?: string;
 }
