@@ -2,14 +2,13 @@
 name: d2l-tenant-qa
 description: >-
   Use this skill to check a D2L build against what our tenant actually does,
-  BEFORE deploying it. Runs the static lint and the SCORM run-time emulator and
+  BEFORE deploying it. Runs the QA gate through CDK's check_output tool and
   interprets the findings. Reach for it whenever someone is about to upload
   something to D2L, asks whether a build is ready, asks why a D2L activity is
-  behaving strangely, or says a D2L activity "worked locally". Also use it after
-  changing the tenant profile, and after running the probes, to keep the
-  measured findings and the enforced rules in step. Every rule it enforces
-  traces to a measured tenant behaviour, and every one of them fails SILENTLY in
-  D2L, which is why running this is worth more than reading the code.
+  behaving strangely, or says a D2L activity "worked locally". Every rule it
+  enforces traces to a measured tenant behaviour, and every one of them fails
+  SILENTLY in D2L, which is why running this is worth more than reading the
+  code.
 ---
 
 # D2L Tenant QA
@@ -21,28 +20,14 @@ strict as the tenant**, so a build that passes here works when deployed.
 
 ## Run it
 
-```bash
-node harness/lint/lint.js <build-folder> --avenue scorm|topic|widget|external
-```
-
-Exit code 0 with no errors, 1 otherwise, so it can gate a pipeline. Add `--json`
-for machine-readable output.
-
-```bash
-node harness/emulator.test.js      # run-time emulator, 50 assertions
-node harness/lint/lint.test.js     # lint rules, 51 assertions
-```
+Call the `mcp__cdk__check_output` tool. It runs the gate on `out/` as it is
+now, against the rules for the project's avenue, and returns `passed` and the
+findings. Each finding names its rule, severity, file, line, and message, and
+explains why the rule exists. It records nothing: CDK builds and checks `out/`
+again after your turn.
 
 **Zero errors to deploy.** Warnings are advisory but each one is a real
 behaviour, not style.
-
-`emulator.test.js` only exercises hand-authored scenarios against `D2LEmulator`
-directly. To get build-specific runtime coverage against a real SCORM build's
-`index.html` — not just the library — serve `harness/` over http(s) and open
-`harness/emulator-harness.html`: it installs the emulator as the page's own
-API, loads your build in an iframe at the same parent depth the real player
-uses, and gives you `report()` on demand. Pick "Instructor (preview)" to
-confirm your build's credit-guard actually holds when writes are discarded.
 
 ---
 
@@ -52,11 +37,12 @@ Findings are grouped by rule, and every rule prints a **why** quoting what we
 observed on the tenant. That is the point: the goal is for someone to learn the
 constraint, not just silence the check.
 
-### The header matters too
+### Unverified constraints matter too
 
-The lint opens by listing every constraint in `tenant-profile.json` that is
-still marked `verified: false`. Those are **conservative guesses**, not
-measurements. A rule leaning on one is doing its best, not stating fact.
+The tenant limits from `mcp__cdk__get_project` mark each constraint with a
+`verified` flag. Those still marked `verified: false` are **conservative
+guesses**, not measurements. A rule leaning on one is doing its best, not
+stating fact.
 
 This exists because assuming an unverified behaviour is exactly how this project
 started: a widget that read gradebook data was described as a SCORM object, and
@@ -82,17 +68,19 @@ themselves in D2L.
 | `topic/no-storage-for-grades` | A record the institution relies on, kept somewhere the student can edit. |
 | `shared/no-viewport-units` | Layout is wrong, because the iframe sizes to content. |
 | `shared/missing-assets` | Silent 404 in D2L. |
+| `shared/script-syntax` | The whole script stops, so the activity never loads its content or reports a score. |
+| `shared/text-encoding` | Characters that are not valid UTF-8 show as garbage. |
+| `a11y/alt` | A screen reader user gets nothing, or a file name, for the image. |
+| `a11y/lang` | A screen reader reads the page in the wrong language. |
 | `widget/unscoped-css` | A bare selector restyles D2L's chrome and every other widget. A widget is not iframed. |
 | `widget/global-scope-leak` | A top-level declaration collides with the next widget that picks the same name. |
 
 ### The avenues are not the same rule set
 
-`--avenue` is not cosmetic. The clearest example: **viewport units are an error
-for a content topic and perfectly fine for a widget**, because a topic is
-iframed and auto-resizes while a widget renders directly in the page.
-
-Running the wrong avenue therefore both misses real problems and invents fake
-ones. The lint asserts this difference in its own tests.
+The gate checks each build against its own avenue's rules. The clearest
+example: **viewport units are an error for a content topic and perfectly fine
+for a widget**, because a topic is iframed and auto-resizes while a widget
+renders directly in the page.
 
 Warnings worth taking seriously:
 
@@ -114,9 +102,9 @@ Static analysis cannot catch everything. In order of likelihood:
    preview discards every write. Have someone enrolled as a student open it. Note
    that a TA is only useful here if their enrolment is a student one — anyone with
    instructor-level permissions in the course gets the same inert preview.
-2. **The tenant changed.** Re-run the probes in `probes/` and update
-   `harness/tenant-profile.json`. The static-script-tag behaviour has already
-   differed between two courses on this tenant.
+2. **The tenant changed.** The static-script-tag behaviour has already
+   differed between two courses on this tenant. Tell the instructor, so the
+   probes can be re-run and the tenant profile updated.
 3. **The topic was renamed or opened in D2L's HTML editor.** Both re-serialize
    the page and silently corrupt inline JS and SVG. Not recoverable; redeploy.
 4. **A data-contract naming mismatch between an authoring script and the
@@ -125,27 +113,9 @@ Static analysis cannot catch everything. In order of likelihood:
    sets* versus what the page reads. A generator that writes
    `window.MY_PROJECT_DATA` while `init()` reads `window.MY_PROJ_DATA` passes
    the gate clean — the script tag itself loaded fine and fired `onload`, the
-   lint has no way to see the name drift. This only surfaces by actually
-   running the build: serve it locally, then read the verification global back
-   in the console and confirm the data it references (e.g. `.items.length`)
-   is real, not `undefined`. **Always do this once after the lint passes and
-   before deploying** — a clean lint result proves the loading mechanism is
-   sound, not that the data arrived under the name the page expects.
-5. **A behaviour we have not measured.** Add a probe rather than guessing, then
-   add the rule so nobody hits it twice.
-
----
-
-## Keeping the profile honest
-
-`harness/tenant-profile.json` is the single source of truth for what the tenant
-allows. Rules read their thresholds from it.
-
-When you learn something new about the tenant:
-
-1. Record it in `probes/RESULTS.md` with how it was measured.
-2. Update the profile entry and set `verified: true`.
-3. Add or adjust a lint rule if the finding is something a build can get wrong.
-4. Add an assertion to the relevant test suite.
-
-A finding that is not in the profile will be rediscovered by the next person.
+   lint has no way to see the name drift. **After the gate passes, read both
+   files and confirm the page reads the same global the script sets** — a clean
+   lint result proves the loading mechanism is sound, not that the data arrived
+   under the name the page expects.
+5. **A behaviour we have not measured.** Say so plainly rather than guessing,
+   so a probe and a rule can be added and nobody hits it twice.

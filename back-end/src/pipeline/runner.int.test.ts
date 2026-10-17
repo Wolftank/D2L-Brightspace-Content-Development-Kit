@@ -138,7 +138,7 @@ describe('runner, end to end', () => {
 
   /** Runs turns with `driver`'s agent, capped by `turnLimits`. */
   function useAgent(driver: Pick<AgentDriver, 'open'>, turnLimits: TurnLimits): void {
-    sessions = createSessionService({ projects, workspaces, driver });
+    sessions = createSessionService({ projects, workspaces, driver, tools: () => ({ name: 'cdk', tools: [] }) });
     const builds = createBuildService({ builds: createBuildsRepo(db), projects, workspaces, events });
     runner = createRunner({ turns: createTurnsRepo(db), messages, events, sessions, workspaces, builds, turnLimits });
   }

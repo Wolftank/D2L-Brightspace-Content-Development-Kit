@@ -46,7 +46,7 @@ Copy-Item .env.example .env
 | `APP_ORIGIN` | `http://127.0.0.1:5173` | The origin the app is opened at, and the only one allowed to frame build previews: an http or https origin with no path. The default is the Vite dev server; set it to the back end's own origin when it serves the built app |
 | `APP_DIR` | unset | The built front end (`front-end/dist`) to serve at `/` on the back end's own origin, as the desktop app does. Set `APP_ORIGIN` to `http://127.0.0.1:<PORT>` with it. A relative path is resolved against `back-end/` |
 
-`ANTHROPIC_API_KEY` is read by the Claude CLI, not by the back end. The agent's shell commands can read it too.
+`ANTHROPIC_API_KEY` is read by the Claude CLI, not by the back end.
 
 ## Scripts
 

@@ -105,7 +105,16 @@ export interface BuildService {
 
   /** Fails every build left `checking` with code `interrupted`, emitting `build.updated` for each. Call once at startup, after the back end holds its port and before it handles a request. */
   failInterrupted(): void;
+
+  /**
+   * Runs the QA gate on the project's output in place, recording nothing.
+   * Throws `WorkspaceMissing` when the project has no workspace.
+   */
+  checkOutput(projectId: string): Promise<OutputCheck>;
 }
+
+/** The QA gate's report on a folder, or the plain error that kept it from reporting. */
+export type OutputCheck = { qa: QaReport } | { error: BuildError };
 
 interface GateRun {
   exitCode: number | null;
@@ -140,12 +149,13 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
     });
   }
 
-  async function check(buildDir: string): Promise<Verdict> {
-    const run = await runGate(buildDir);
+  /** Runs the QA gate on `dir` and reads its report. */
+  async function inspect(dir: string): Promise<OutputCheck> {
+    const run = await runGate(dir);
     const detail = run.failure ?? firstLine(run.stderr) ?? `exited with code ${run.exitCode}`;
 
     if (run.exitCode !== 0 && run.exitCode !== 1) {
-      return failure('gate_crashed', `The QA gate did not finish: ${detail}`);
+      return { error: loggedError('gate_crashed', `The QA gate did not finish: ${detail}`) };
     }
 
     let output: unknown;
@@ -153,29 +163,46 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
       output = JSON.parse(run.stdout);
     } catch {
       return run.exitCode === 0
-        ? failure('gate_invalid_output', 'The QA gate did not print a JSON report')
-        : failure('gate_crashed', `The QA gate did not finish: ${detail}`);
+        ? { error: loggedError('gate_invalid_output', 'The QA gate did not print a JSON report') }
+        : { error: loggedError('gate_crashed', `The QA gate did not finish: ${detail}`) };
     }
 
     const parsed = gateReportSchema.safeParse(output);
     if (!parsed.success) {
-      return failure('gate_invalid_output', 'The QA gate printed a report in an unexpected shape');
+      return { error: loggedError('gate_invalid_output', 'The QA gate printed a report in an unexpected shape') };
     }
 
     const { pass, findings } = parsed.data;
     const errorCount = findings.filter((f) => f.severity === 'error').length;
     if (pass !== (run.exitCode === 0) || pass !== (errorCount === 0)) {
-      return failure(
-        'gate_inconsistent',
-        `The QA gate's report (pass: ${pass}, ${errorCount} error(s)) contradicts its exit code ${run.exitCode}`,
-      );
+      return {
+        error: loggedError(
+          'gate_inconsistent',
+          `The QA gate's report (pass: ${pass}, ${errorCount} error(s)) contradicts its exit code ${run.exitCode}`,
+        ),
+      };
     }
+    return { qa: { passed: pass, findings } };
+  }
 
-    const qa: QaReport = { passed: pass, findings };
-    await fs.writeFile(join(buildDir, QA_REPORT_FILE), JSON.stringify(qa, null, 2));
-    return pass
-      ? { status: 'ready', qa, error: null }
-      : { status: 'failed', qa, error: buildError('qa_failed') };
+  /** Checks a build's copy of the output and stores the QA report beside it. */
+  async function check(buildDir: string): Promise<Verdict> {
+    const result = await inspect(buildDir);
+    if ('error' in result) return { status: 'failed', qa: null, error: result.error };
+
+    await fs.writeFile(join(buildDir, QA_REPORT_FILE), JSON.stringify(result.qa, null, 2));
+    return result.qa.passed
+      ? { status: 'ready', qa: result.qa, error: null }
+      : { status: 'failed', qa: result.qa, error: buildError('qa_failed') };
+  }
+
+  async function checkOutput(projectId: string): Promise<OutputCheck> {
+    const outDir = join(await deps.workspaces.locate(projectId), 'out');
+    try {
+      return await inspect(outDir);
+    } catch (err) {
+      return { error: loggedError('gate_crashed', `The QA gate could not run: ${(err as Error).message}`) };
+    }
   }
 
   /** The build and its project, if the project is `ownerId`'s; otherwise throws `BuildNotFound`. */
@@ -281,6 +308,7 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
     download,
     previewFile,
     failInterrupted,
+    checkOutput,
   };
 }
 
@@ -324,10 +352,15 @@ export function downloadFilename(title: string, version: number): string {
   return `${slug || 'build'}-v${version}.zip`;
 }
 
+/** `code`'s plain error. The technical `detail` goes to the server log. */
+function loggedError(code: BuildErrorCode, detail: string): BuildError {
+  console.error(`Build service error (${code}): ${detail}`);
+  return buildError(code);
+}
+
 /** A failed build with `code`'s plain error. The technical `detail` goes to the server log. */
 function failure(code: BuildErrorCode, detail: string): Verdict {
-  console.error(`Build failed (${code}): ${detail}`);
-  return { status: 'failed', qa: null, error: buildError(code) };
+  return { status: 'failed', qa: null, error: loggedError(code, detail) };
 }
 
 function firstLine(text: string): string | undefined {
