@@ -49,7 +49,9 @@ export const BUILT_IN_TOOLS = ['Read', 'Write', 'Edit', 'Glob', 'Grep', SHELL_TO
 
 /**
  * Variables the agent's process takes from the back end's environment: what
- * the OS, the shell, the network, and the agent's own sign-in need.
+ * the OS, the shell, the network, and the agent's own sign-in need, and
+ * `ELECTRON_RUN_AS_NODE`, which lets the desktop app's executable run the QA
+ * gate as Node.
  */
 export const INHERITED_ENV = [
   'PATH',
@@ -78,6 +80,7 @@ export const INHERITED_ENV = [
   'ANTHROPIC_API_KEY',
   'CLAUDE_CODE_OAUTH_TOKEN',
   'CLAUDE_CONFIG_DIR',
+  'ELECTRON_RUN_AS_NODE',
 ];
 
 /**

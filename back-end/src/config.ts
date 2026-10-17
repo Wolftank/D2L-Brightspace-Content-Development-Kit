@@ -28,6 +28,8 @@ export interface Config {
   previewOrigin: string;
   /** When set, every API request must carry this token in `X-CDK-Token`. The packaged app sets it on each launch. */
   launchToken?: string;
+  /** The built front end the back end serves on its own origin. Always absolute when set. */
+  appDir?: string;
 }
 
 /** A setting is invalid or unusable. The message names the setting and what it must be. */
@@ -88,6 +90,7 @@ const settingsSchema = z.object({
     .refine((origin) => new URL(origin).hostname !== PREVIEW_HOSTNAME, `must not be the preview origin (${PREVIEW_HOSTNAME})`)
     .default('http://127.0.0.1:5173'),
   LAUNCH_TOKEN: z.string().trim().min(1, 'must not be blank').optional(),
+  APP_DIR: z.string().trim().min(1, 'must not be blank').optional(),
 });
 
 /** Loads `path` into `process.env`, keeping variables that are already set. A missing file is skipped. */
@@ -116,6 +119,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     appOrigin: settings.APP_ORIGIN,
     previewOrigin: `http://${PREVIEW_HOSTNAME}:${settings.PORT}`,
     launchToken: settings.LAUNCH_TOKEN,
+    appDir: settings.APP_DIR === undefined ? undefined : resolve(BACK_END_DIR, settings.APP_DIR),
   };
 }
 

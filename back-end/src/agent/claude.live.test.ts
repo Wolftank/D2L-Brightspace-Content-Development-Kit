@@ -185,6 +185,7 @@ describe('ClaudeAgentDriver, live SDK, in a provisioned SCORM workspace', () => 
         project,
         workspaceDir,
         shell: process.platform === 'win32' ? 'powershell' : 'bash',
+        runtime: process.execPath,
       }),
       skillsDir: join(workspaceDir, 'kit', 'skills'),
       skills: SCORM_SKILLS,

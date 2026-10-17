@@ -71,10 +71,13 @@ describe('PreviewPanel', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('handles missing configuration', () => {
+  it("uses preview.localhost on the app's own port when no preview origin is configured", () => {
     vi.stubEnv('VITE_PREVIEW_ORIGIN', '');
-    render(<PreviewPanel build={{ id: 'saved-3', version: 3 }} />);
-    expect(screen.getByRole('alert')).toHaveTextContent('has not been configured');
+    const session = previewSession('saved-3');
+    const expected = new URL(window.location.origin);
+    expected.hostname = 'preview.localhost';
+    expect(session.origin).toBe(expected.origin);
+    expect(new URL(session.url).searchParams.get('parentOrigin')).toBe(window.location.origin);
   });
 
   it('refuses a player hosted on the application origin', () => {
