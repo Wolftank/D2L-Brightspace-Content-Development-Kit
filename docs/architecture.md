@@ -360,7 +360,7 @@ A workspace is the directory where the agent works on one project. It holds the 
 **Confinement, in layers.** The agent runs with the instructor's own permissions in local mode and as the service account in hosted mode, so its file tools are kept inside its workspace by construction rather than by trust. The layers are cumulative; each stays in place when the next is added.
 
 1. **Run inside the workspace, with a deny-by-default permission mode.** The driver starts the agent in the workspace with a mode that approves the allowlist and denies everything else without prompting.
-2. **Permission rules**, delivered by the driver the way its agent takes them. Allow reads and searches under the workspace and edits under its `out/`, and refuse reads outside the workspace. Deny reads of the home directory's credentials and agent configuration and of the app's data directory outside this project.
+2. **Permission rules**, delivered by the driver the way its agent takes them. Allow reads and searches under the workspace and edits under its `out/`, and refuse reads outside the workspace, which keeps the home directory's credentials and agent configuration, and the app's data directory outside this project, out of reach.
 3. **A pre-tool hook** in the driver, running in-process, that resolves every path in a file tool's input the way the agent reads it, then denies anything outside the workspace's real path, and any edit outside the real path of its `out/`. This backstops the rules against `..`, a leading `~`, surrounding whitespace, and symlinks.
 4. **The agent's own OS sandbox**, which confines shell commands to the workspace and blocks network access except an allowlist. The agent has no shell, so this layer has nothing to confine unless a later tool runs commands. Which agent supports which operating system is in [drivers.md](drivers.md).
 5. **Containers.** If hosted mode must isolate instructors from each other more strongly than the sandbox does, the driver runs each session in a container with the workspace mounted, a network allowlist (the model API and the D2L tenant), and CPU, memory, and disk limits. The driver then spawns the agent inside the container; nothing above the driver changes.
@@ -406,7 +406,7 @@ How `back-end/src` is laid out, so that each concern above has exactly one home.
 | `src/tilt-udl/` | The pedagogy check |
 | `src/deploy/` | The D2L client and verification |
 | `src/db/` | SQLite schema and repositories |
-| `kit/harness/` | The QA gate and the emulator, called by `tools/` and `builds` |
+| `kit/harness/` | The QA gate, run by `builds`; the emulator and the tenant profile, served by `preview/`; the tenant profile is also read by `tools/` |
 
 Wiring lives in one `createApp(deps)` function. `server.js` calls it with real drivers; tests call it with fakes.
 

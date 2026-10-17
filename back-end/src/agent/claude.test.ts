@@ -71,7 +71,7 @@ function toolResult(id: string, parentToolUseId: string | null = null) {
 describe('buildAllowedTools', () => {
   it('never contains a bare file or web tool name', async () => {
     const { buildAllowedTools } = await import('./claude.js');
-    const result = buildAllowedTools(['mcp__cdk__create_build', 'mcp__cdk__get_project']);
+    const result = buildAllowedTools(['mcp__cdk__check_output', 'mcp__cdk__get_project']);
 
     for (const bareName of BARE_FILE_AND_WEB_TOOL_NAMES) {
       expect(result).not.toContain(bareName);
@@ -80,13 +80,13 @@ describe('buildAllowedTools', () => {
 
   it('mirrors every mutating rule from settings.json and appends MCP tool names as-is', async () => {
     const { buildAllowedTools, MUTATING_TOOL_RULES, WORKSPACE_SETTINGS } = await import('./claude.js');
-    const result = buildAllowedTools(['mcp__cdk__create_build']);
+    const result = buildAllowedTools(['mcp__cdk__check_output']);
 
     for (const rule of MUTATING_TOOL_RULES) {
       expect(WORKSPACE_SETTINGS.permissions.allow).toContain(rule);
       expect(result).toContain(rule);
     }
-    expect(result).toContain('mcp__cdk__create_build');
+    expect(result).toContain('mcp__cdk__check_output');
   });
 
   it("does not mirror settings.json's Read rule, which auto-approves on its own", async () => {
@@ -181,16 +181,16 @@ type InitMessage = Awaited<ReturnType<typeof initMessage>>;
 describe('allowedCapabilities', () => {
   it("allows the built-in tools, each cdk tool by its qualified name, the request's skills, and the cdk server", async () => {
     const { BUILT_IN_TOOLS, allowedCapabilities } = await import('./claude.js');
-    const createBuild = {
-      name: 'create_build',
-      description: 'Copies out/ and runs the QA gate',
-      summary: 'Building the activity',
+    const checkOutput = {
+      name: 'check_output',
+      description: 'Runs the QA checker on out/',
+      summary: 'Checking the activity',
       input: {},
       handler: async () => ({ content: '' }),
     };
 
-    expect(allowedCapabilities({ tools: { name: 'cdk', tools: [createBuild] }, skills: SKILLS })).toEqual({
-      tools: [...BUILT_IN_TOOLS, 'mcp__cdk__create_build'],
+    expect(allowedCapabilities({ tools: { name: 'cdk', tools: [checkOutput] }, skills: SKILLS })).toEqual({
+      tools: [...BUILT_IN_TOOLS, 'mcp__cdk__check_output'],
       skills: SKILLS,
       mcpServers: ['cdk'],
     });
