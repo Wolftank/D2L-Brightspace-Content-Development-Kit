@@ -1,6 +1,7 @@
 import type { ApiErrorBody, NextStep } from '@cdk/contract';
 import type { ErrorRequestHandler, Response } from 'express';
 import { ZodError } from 'zod';
+import { log } from './log.js';
 
 /** The requested project or route does not exist, or the project is not owned by the caller. */
 export class NotFound extends Error {
@@ -92,6 +93,6 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   if (err instanceof BuildFailed) return send(res, 'build_failed');
   if (err instanceof BuildIncomplete) return send(res, 'build_incomplete', { missing: err.missing });
 
-  console.error(err);
+  log.error({ err }, 'Request failed');
   send(res, 'internal_error');
 };

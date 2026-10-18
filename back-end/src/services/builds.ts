@@ -10,6 +10,7 @@ import type { ProjectsRepo } from '../db/projects.js';
 import type { Build, Project } from '../db/schema.js';
 import { BuildFailed, BuildIncomplete, BuildNotFound, BuildNotReady } from '../errors.js';
 import { KIT_DIR } from '../kit.js';
+import { log } from '../log.js';
 import type { EventService } from '../pipeline/events.js';
 import type { WorkspaceService } from './workspaces.js';
 
@@ -354,7 +355,7 @@ export function downloadFilename(title: string, version: number): string {
 
 /** `code`'s plain error. The technical `detail` goes to the server log. */
 function loggedError(code: BuildErrorCode, detail: string): BuildError {
-  console.error(`Build service error (${code}): ${detail}`);
+  log.error({ code, detail }, 'Build failed');
   return buildError(code);
 }
 

@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { createAgentDriver } from './agent/drivers.js';
 import { createApp } from './app.js';
-import { checkDataDir, type Config, ConfigError, loadConfig, loadEnvFile } from './config.js';
+import { checkDataDir, type Config, ConfigError, loadConfig, loadEnvFile, loggedSettings } from './config.js';
 import type { Deps } from './deps.js';
 import { createBuildsRepo } from './db/builds.js';
 import { openDb } from './db/index.js';
@@ -10,6 +10,7 @@ import { createMessagesRepo } from './db/messages.js';
 import { createProjectsRepo } from './db/projects.js';
 import { createTurnsRepo } from './db/turns.js';
 import { createUsersRepo } from './db/users.js';
+import { log, startLogging } from './log.js';
 import { createEventService } from './pipeline/events.js';
 import { createRunner, type Runner } from './pipeline/runner.js';
 import { createSessionService } from './pipeline/sessions.js';
@@ -72,7 +73,7 @@ function listenFailure(err: NodeJS.ErrnoException, port: number): string {
   }
 }
 
-function start(): void {
+async function start(): Promise<void> {
   let cfg: Config;
   try {
     loadEnvFile();
@@ -80,20 +81,27 @@ function start(): void {
     checkDataDir(cfg.dataDir);
   } catch (err) {
     if (!(err instanceof ConfigError)) throw err;
+    // Without valid settings there is no log file; the desktop app shows standard error when the back end fails to start.
     console.error(err.message);
     process.exit(1);
   }
 
+  await startLogging(join(cfg.dataDir, 'logs'), cfg.logLevel);
+  process.on('uncaughtExceptionMonitor', (err) => log.fatal({ err }, 'The back end crashed'));
+  log.info({ settings: loggedSettings(cfg) }, 'back-end starting');
+
   const { deps, runner, builds } = buildDeps(cfg);
   createApp(deps).listen(cfg.port, '127.0.0.1', (err) => {
     if (err) {
-      console.error(listenFailure(err, cfg.port));
+      const message = listenFailure(err, cfg.port);
+      log.fatal({ err }, message);
+      console.error(message);
       process.exit(1);
     }
     runner.failInterrupted();
     builds.failInterrupted();
-    console.log(`back-end listening on http://127.0.0.1:${cfg.port}, previews on ${cfg.previewOrigin} (data in ${cfg.dataDir})`);
+    log.info({ url: `http://127.0.0.1:${cfg.port}`, previewOrigin: cfg.previewOrigin }, 'back-end listening');
   });
 }
 
-start();
+await start();

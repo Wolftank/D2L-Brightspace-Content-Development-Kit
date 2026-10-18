@@ -5,6 +5,7 @@ import type { ProjectsRepo } from '../db/projects.js';
 import type { Project } from '../db/schema.js';
 import type { TurnsRepo } from '../db/turns.js';
 import { NotFound } from '../errors.js';
+import { log } from '../log.js';
 import type { WorkspaceService } from './workspaces.js';
 
 export interface CreateProjectInput {
@@ -39,7 +40,7 @@ export function createProjectService(deps: ProjectServiceDeps): ProjectService {
         return toApi(deps.projects.create({ id, ownerId, title, avenue }));
       } catch (err) {
         await deps.workspaces.remove(id).catch((removeErr: unknown) => {
-          console.error(`Failed to remove the workspace of project ${id} after its setup failed:`, removeErr);
+          log.error({ projectId: id, err: removeErr }, 'Failed to remove the workspace after project setup failed');
         });
         throw err;
       }

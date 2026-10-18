@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CreateProjectInput as CreateProjectRow } from '../db/projects.js';
 import type { Build, Project, Turn } from '../db/schema.js';
 import { NotFound } from '../errors.js';
 import { createProjectService, type ProjectServiceDeps } from './projects.js';
+import { captureLog } from '../test/log.js';
 
 function setup() {
   const rows = new Map<string, Project>();
@@ -31,10 +32,6 @@ function setup() {
   } satisfies ProjectServiceDeps;
   return { deps, service: createProjectService(deps), steps };
 }
-
-beforeEach(() => {
-  vi.spyOn(console, 'error').mockImplementation(() => {});
-});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -74,11 +71,12 @@ describe('project service', () => {
 
     it('rethrows the setup error when removing the workspace also fails', async () => {
       const { deps, service } = setup();
+      const logRecords = captureLog();
       deps.workspaces.create.mockRejectedValue(new Error('ENOSPC'));
       deps.workspaces.remove.mockRejectedValue(new Error('EBUSY'));
 
       await expect(service.create('owner-1', { title: 'T', avenue: 'scorm' })).rejects.toThrow('ENOSPC');
-      expect(console.error).toHaveBeenCalled();
+      expect(logRecords).toContainEqual(expect.objectContaining({ level: 50, err: expect.objectContaining({ message: 'EBUSY' }) }));
     });
   });
 

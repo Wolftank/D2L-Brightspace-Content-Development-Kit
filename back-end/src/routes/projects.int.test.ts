@@ -108,7 +108,6 @@ describe('project routes', () => {
     });
 
     it('leaves no project or workspace behind when workspace setup fails', async () => {
-      vi.spyOn(console, 'error').mockImplementation(() => {});
       const brokenKit = createWorkspaceService({ dataDir, kitDir: join(dataDir, 'no-such-kit') });
 
       const res = await request(app(brokenKit)).post('/api/projects').send({ title: 'Cell division practice' });

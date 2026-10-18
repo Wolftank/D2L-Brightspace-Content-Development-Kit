@@ -2,6 +2,7 @@ import { finished } from 'node:stream';
 import { Router } from 'express';
 import type { BuildResponse } from '@cdk/contract';
 import type { Deps } from '../deps.js';
+import { log } from '../log.js';
 
 export function buildsRouter(deps: Deps): Router {
   const router = Router();
@@ -14,7 +15,7 @@ export function buildsRouter(deps: Deps): Router {
     const { filename, stream, cancel } = await deps.builds.download(req.user.id, req.params.buildId);
     res.attachment(filename);
     stream.on('error', (err) => {
-      console.error(`Failed to stream the zip of build ${req.params.buildId}:`, err);
+      log.error({ buildId: req.params.buildId, err }, 'Failed to stream the build zip');
       res.destroy(err);
     });
     stream.pipe(res);

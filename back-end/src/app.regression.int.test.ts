@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import request from 'supertest';
-import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from './app.js';
 import { createBuildsRepo, type BuildsRepo } from './db/builds.js';
 import { createEventsRepo } from './db/events.js';
@@ -21,6 +21,7 @@ import { createMessageService } from './services/messages.js';
 import { createProjectService } from './services/projects.js';
 import { createTurnService } from './services/turns.js';
 import { createWorkspaceService, type WorkspaceService } from './services/workspaces.js';
+import { captureLog, type LogRecord } from './test/log.js';
 
 /**
  * R3 (#63): the app, identity, and the error envelope, rerun through the real
@@ -64,7 +65,7 @@ describe('R3 regression: app, identity, error envelope', () => {
   let buildsRepo: BuildsRepo;
   let workspaces: WorkspaceService;
   let deps: Deps;
-  let consoleError: MockInstance<typeof console.error>;
+  let logRecords: LogRecord[];
 
   function app() {
     return createApp(deps);
@@ -82,7 +83,7 @@ describe('R3 regression: app, identity, error envelope', () => {
   }
 
   beforeEach(async () => {
-    consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    logRecords = captureLog();
     dataDir = await fs.mkdtemp(join(tmpdir(), 'cdk-r3-'));
     db = testDb();
     projectsRepo = createProjectsRepo(db);
@@ -179,7 +180,7 @@ describe('R3 regression: app, identity, error envelope', () => {
       expect(res.body.error).toEqual({ code: 'internal_error', message: 'Something went wrong.', nextStep: 'try_later' });
       expect(res.text).not.toContain('SQLITE_CORRUPT');
       expect(res.text).not.toContain('cdk.db');
-      expect(consoleError).toHaveBeenCalledWith(unexpected);
+      expect(logRecords).toContainEqual(expect.objectContaining({ level: 50, err: expect.objectContaining({ message: unexpected.message }) }));
     });
 
     it('returns 500 internal_error for an unexpected rejection in an async route, logged on the server only (F23, NF6)', async () => {
@@ -196,7 +197,7 @@ describe('R3 regression: app, identity, error envelope', () => {
       expectEnvelope(res, 500, 'internal_error');
       expect(res.body.error).toEqual({ code: 'internal_error', message: 'Something went wrong.', nextStep: 'try_later' });
       expect(res.text).not.toContain('ENOENT');
-      expect(consoleError).toHaveBeenCalledWith(unexpected);
+      expect(logRecords).toContainEqual(expect.objectContaining({ level: 50, err: expect.objectContaining({ message: unexpected.message }) }));
     });
   });
 

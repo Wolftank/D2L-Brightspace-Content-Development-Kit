@@ -5,6 +5,7 @@ import type { MessagesRepo } from '../db/messages.js';
 import type { Turn } from '../db/schema.js';
 import type { FinishedTurnDetails, FinishTurnInput, RunningTurn, TurnsRepo } from '../db/turns.js';
 import { WorkspaceMissing } from '../errors.js';
+import { log } from '../log.js';
 import type { BuildService } from '../services/builds.js';
 import type { WorkspaceService } from '../services/workspaces.js';
 import type { EventService } from './events.js';
@@ -80,7 +81,7 @@ export function createRunner(deps: RunnerDeps): Runner {
   }
 
   function failure(turn: Turn, code: RunnerErrorCode, detail: unknown, rest: FinishedTurnDetails = {}): FinishTurnInput {
-    console.error(`Turn ${turn.id} failed (${code}):`, detail);
+    log.error({ projectId: turn.projectId, turnId: turn.id, code, err: detail }, 'Turn failed');
     return { ...rest, status: 'failed', error: { code, ...TURN_ERRORS[code] } };
   }
 
@@ -181,7 +182,7 @@ export function createRunner(deps: RunnerDeps): Runner {
         deps.sessions.release(turn.projectId);
       } else {
         await deps.sessions.close(turn.projectId).catch((err: unknown) => {
-          console.error(`Failed to close the session for project ${turn.projectId}:`, err);
+          log.error({ projectId: turn.projectId, err }, 'Failed to close the session');
         });
       }
     }
@@ -265,7 +266,7 @@ export function createRunner(deps: RunnerDeps): Runner {
         }
         finish(turn, outcome);
       } catch (err) {
-        console.error(`Failed to run turn ${turnId}:`, err);
+        log.error({ turnId, err }, 'Failed to run the turn');
       }
     },
 

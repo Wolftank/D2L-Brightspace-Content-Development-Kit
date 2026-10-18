@@ -29,6 +29,7 @@ import type {
   TurnLimits,
   TurnResult,
 } from './AgentDriver.js';
+import { log } from '../log.js';
 
 /**
  * Built-in file-editing tools that `.claude/settings.json` allows inside the
@@ -149,7 +150,7 @@ function toolServer(spec: ToolServerSpec): McpSdkServerConfigWithInstance {
           const result = await def.handler(input);
           return { content: [{ type: 'text', text: result.content }], isError: result.isError ?? false };
         } catch (err) {
-          console.error(`The ${spec.name} tool ${def.name} failed:`, err);
+          log.error({ tool: `mcp__${spec.name}__${def.name}`, err }, 'A CDK tool failed');
           return { content: [{ type: 'text', text: 'The tool failed to run.' }], isError: true };
         }
       }),

@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Readable } from 'node:stream';
-import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fromBufferPromise } from 'yauzl';
 import { createBuildsRepo, type BuildsRepo } from '../db/builds.js';
 import { createEventsRepo } from '../db/events.js';
@@ -16,6 +16,7 @@ import { KIT_DIR } from '../kit.js';
 import { createEventService, type EventService } from '../pipeline/events.js';
 import { createBuildService, downloadFilename, type BuildService } from './builds.js';
 import { createWorkspaceService, type WorkspaceService } from './workspaces.js';
+import { captureLog, type LogRecord } from '../test/log.js';
 
 const BAD_SCORM = join(KIT_DIR, 'harness', 'lint', 'fixtures', 'bad-scorm');
 
@@ -28,7 +29,7 @@ describe('build service', () => {
   let builds: BuildService;
   let ownerId: string;
   let projectId: string;
-  let consoleError: MockInstance<typeof console.error>;
+  let logRecords: LogRecord[];
 
   /** A build service whose QA gate is `lint.js` with the given source. */
   async function withStubGate(source: string, gateTimeoutMs?: number): Promise<BuildService> {
@@ -55,7 +56,7 @@ describe('build service', () => {
   }
 
   beforeEach(async () => {
-    consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    logRecords = captureLog();
     dataDir = await fs.mkdtemp(join(tmpdir(), 'cdk-builds-'));
     db = testDb();
     buildsRepo = createBuildsRepo(db);
@@ -213,7 +214,7 @@ describe('build service', () => {
 
       expect(build).toMatchObject({ status: 'failed', qa: null });
       expect(build.error).toEqual({ code: 'gate_crashed', message: "The QA check couldn't finish on this build.", nextStep: 'send_again' });
-      expect(consoleError).toHaveBeenCalledWith(expect.stringContaining('Could not read tenant-profile.json'));
+      expect(logRecords).toContainEqual(expect.objectContaining({ code: 'gate_crashed', detail: expect.stringContaining('Could not read tenant-profile.json') }));
     });
 
     it('fails with an error when the gate runs past its timeout', async () => {

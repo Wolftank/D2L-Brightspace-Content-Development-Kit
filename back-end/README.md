@@ -45,6 +45,8 @@ Copy-Item .env.example .env
 | `DATA_DIR` | `%LOCALAPPDATA%\CDK` on Windows, `~/.cdk` elsewhere | Where the database, workspaces, and builds are stored. A relative path is resolved against `back-end/` |
 | `APP_ORIGIN` | `http://127.0.0.1:5173` | The origin the app is opened at, and the only one allowed to frame build previews: an http or https origin with no path. The default is the Vite dev server; set it to the back end's own origin when it serves the built app |
 | `APP_DIR` | unset | The built front end (`front-end/dist`) to serve at `/` on the back end's own origin, as the desktop app does. Set `APP_ORIGIN` to `http://127.0.0.1:<PORT>` with it. A relative path is resolved against `back-end/` |
+| `LOG_LEVEL` | `info` | The least severe level written to the log: `fatal`, `error`, `warn`, `info`, `debug`, or `trace`. Instructor messages and agent replies are logged only at `debug` |
+| `APP_VERSION` | unset | The Windows app's version, written to the log at startup. The app sets it |
 
 `ANTHROPIC_API_KEY` is read by the Claude CLI, not by the back end.
 

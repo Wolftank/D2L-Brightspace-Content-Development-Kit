@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AgentEvent, AgentSession, TurnResult } from '../agent/AgentDriver.js';
 import type { CreateMessageInput } from '../db/messages.js';
 import type { Event, Message, Turn } from '../db/schema.js';
@@ -7,6 +7,7 @@ import { WorkspaceMissing } from '../errors.js';
 import type { Build as ApiBuild } from '@cdk/contract';
 import type { AppendEventInput } from './events.js';
 import { createRunner, TURN_ERRORS, type RunnerDeps } from './runner.js';
+import { captureLog } from '../test/log.js';
 
 const INSTRUCTOR_MESSAGE: Message = {
   id: 'message-1',
@@ -114,10 +115,6 @@ function setup(options: { session?: AgentSession; hashes?: string[] } = {}) {
   const payloadsOf = (kind: string) => appended.filter((event) => event.kind === kind).map((event) => event.payload);
   return { deps, runner: createRunner(deps), appended, replies, finished, kinds, payloadsOf };
 }
-
-beforeEach(() => {
-  vi.spyOn(console, 'error').mockImplementation(() => {});
-});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -468,12 +465,13 @@ describe('runner', () => {
 
   it('resolves even when the outcome cannot be stored', async () => {
     const { deps, runner } = setup();
+    const logRecords = captureLog();
     deps.turns.finish.mockImplementation(() => {
       throw new Error('database is locked');
     });
 
     await expect(runner.executeTurn('turn-1')).resolves.toBeUndefined();
-    expect(console.error).toHaveBeenCalled();
+    expect(logRecords).toContainEqual(expect.objectContaining({ level: 50, msg: 'Failed to run the turn', turnId: 'turn-1' }));
   });
 
   it('fails every interrupted turn with code interrupted', () => {
