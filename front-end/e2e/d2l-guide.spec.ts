@@ -18,6 +18,9 @@ test('download opens the SCORM guide with keyboard containment, focus return, an
   const close = guide.getByRole('button', { name: 'Close instructions' });
   await expect(guide.getByRole('heading', { name: 'Add to D2L', level: 2 })).toBeFocused();
   await expect(guide.locator('ol > li')).toHaveCount(5);
+  await expect(guide.getByRole('heading', { name: 'Open your course' })).toBeInViewport();
+  await page.keyboard.press('Shift+Tab');
+  await expect(close).toBeFocused();
   const save = guide.getByRole('link', { name: 'Save instructions as text' });
   await save.focus();
   await page.keyboard.press('Tab');

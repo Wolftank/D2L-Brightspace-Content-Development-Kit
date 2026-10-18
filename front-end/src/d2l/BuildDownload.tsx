@@ -27,7 +27,7 @@ export function BuildDownload({ build }: { build: Pick<Build, 'id' | 'version' |
         const controls = [...event.currentTarget.querySelectorAll<HTMLElement>('button, a[href]')];
         const first = controls[0];
         const last = controls.at(-1);
-        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        if (event.shiftKey && (document.activeElement === first || document.activeElement === heading.current)) { event.preventDefault(); last?.focus(); }
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
       }}
       onClose={() => { if (opener.current?.isConnected) opener.current.focus(); }}>
