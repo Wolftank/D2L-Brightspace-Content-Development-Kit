@@ -36,7 +36,7 @@ Copy-Item .env.example .env
 
 | Setting | Default | Rule |
 |---|---|---|
-| `AGENT_DRIVER` | `claude` | The agent that runs turns. Supported: `claude` |
+| `AGENT_DRIVER` | `claude` | The agent that runs turns: `claude`, or `scripted` for development and tests (see [The scripted agent](#the-scripted-agent)) |
 | `AGENT_MODEL` | the agent's default for the account | A model name, such as `claude-sonnet-5`. The agent checks the name on each turn and on `GET /api/me`, not at startup |
 | `AGENT_EFFORT` | the agent's default | `low`, `medium`, `high`, `xhigh`, or `max` |
 | `AGENT_MAX_STEPS` | `60` | The most model calls one request may make: a whole number, 1 or more. A request that needs more stops with a plain message. `.env.example` explains the default |
@@ -47,6 +47,21 @@ Copy-Item .env.example .env
 | `APP_DIR` | unset | The built front end (`front-end/dist`) to serve at `/` on the back end's own origin, as the desktop app does. Set `APP_ORIGIN` to `http://127.0.0.1:<PORT>` with it. A relative path is resolved against `back-end/` |
 
 `ANTHROPIC_API_KEY` is read by the Claude CLI, not by the back end.
+
+### The scripted agent
+
+`AGENT_DRIVER=scripted` replaces the agent with fixed turns that make no AI calls, so the real runner, build service, QA gate, and event stream run end to end for free. A marker in the instructor's message picks the scenario, and the same scenario always gives the same events and files. Markers shared with the front end's stub behave the same in both, so a browser spec runs against either.
+
+| Marker | Turn |
+|---|---|
+| none | Writes a workplace safety quiz that passes the QA gate |
+| `[qa-fail]` | Writes a quiz that marks itself completed on load, which the QA gate rejects |
+| `[follow-up]` | Adds two questions to the quiz, so the next build is a new version |
+| `[turn-fail]` | Fails with `agent_error` |
+| `[signed-out]` | Fails with `agent_signed_out` |
+| `[busy]` | Fails with `agent_busy` |
+| `[long-step]` | Goes silent for 20 seconds, then finishes like the default turn |
+| `[cancelled]` | Ends as `cancelled` |
 
 ## Scripts
 
