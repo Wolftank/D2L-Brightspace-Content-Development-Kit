@@ -44,7 +44,10 @@ npm run lint
 npm run typecheck
 npx playwright install chromium firefox
 npm run test:e2e
+npm run test:e2e:real
 ```
+
+`test:e2e` runs against the stub. `test:e2e:real` runs the main flows (a passing build and its download, a QA failure, a failed turn, and a follow-up's version 2) against the real back end with the scripted agent, so nothing is billed; it starts both servers itself, on ports 3010 and 5180, clear of the stub and the dev server.
 
 Browser tests cover follow-ups on ready and failed builds, message order, reload, reopening with empty session storage, preview replacement and restart, retained ready previews, mobile stacking, focus and automated WCAG checks.
 

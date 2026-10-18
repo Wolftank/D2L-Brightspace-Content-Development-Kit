@@ -1,8 +1,8 @@
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { app, BrowserWindow, dialog, Menu, shell } from 'electron';
+import { type BackEnd, LAUNCH_COOKIE, startBackEnd } from './back-end.js';
 import { isGuideUrl } from './help-links.js';
-import { type BackEnd, startBackEnd } from './back-end.js';
 
 /** The compiled back end, from the `cdk-back-end` workspace packaged with the app. */
 const SERVER = createRequire(import.meta.url).resolve('cdk-back-end/dist/server.js');
@@ -35,6 +35,14 @@ async function open(): Promise<void> {
     return { action: 'deny' };
   });
   window.once('ready-to-show', showWindow);
+  await window.webContents.session.cookies.set({
+    url: backEnd.url,
+    name: LAUNCH_COOKIE,
+    value: backEnd.launchToken,
+    path: '/',
+    httpOnly: true,
+    sameSite: 'strict',
+  });
   await window.loadURL(backEnd.url);
 }
 

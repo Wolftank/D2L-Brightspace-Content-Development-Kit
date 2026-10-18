@@ -17,6 +17,8 @@ export interface Deps {
   events: EventService;
   driver: Pick<AgentDriver, 'name' | 'probe'>;
   preview: PreviewSettings;
+  /** When set, the origin guard requires this token in the `cdk_launch` cookie on every API request. */
+  launchToken?: string;
   /** The built front end to serve on the app origin, when the back end serves the app. */
   appDir?: string;
 }

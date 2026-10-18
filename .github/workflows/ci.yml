@@ -53,6 +53,32 @@ jobs:
             front-end/test-results/
           retention-days: 7
 
+  e2e-real:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+        working-directory: front-end
+      - run: npm run test:e2e:real
+        working-directory: front-end
+        env:
+          CI: true
+      - name: Upload Playwright report and traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-real
+          path: |
+            front-end/playwright-report/
+            front-end/test-results/
+          retention-days: 7
+
   back-end:
     runs-on: ubuntu-latest
     steps:
@@ -157,7 +183,7 @@ jobs:
 
   release:
     if: github.event_name == 'workflow_dispatch'
-    needs: [front-end, e2e, back-end, desktop, kit, package]
+    needs: [front-end, e2e, e2e-real, back-end, desktop, kit, package]
     runs-on: ubuntu-latest
     permissions:
       contents: write

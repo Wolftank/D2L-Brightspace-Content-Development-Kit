@@ -55,6 +55,7 @@ function buildDeps(cfg: Config): { deps: Deps; runner: Runner; builds: BuildServ
     events,
     driver,
     preview: { origin: cfg.previewOrigin, appOrigin: cfg.appOrigin },
+    launchToken: cfg.launchToken,
     appDir: cfg.appDir,
   };
   return { deps, runner, builds };
