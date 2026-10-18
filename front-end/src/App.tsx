@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ApiError, buildDownloadUrl, createProject, getProject, sendMessage } from './api/client';
+import { ApiError, createProject, getProject, sendMessage } from './api/client';
 import type { Build, Project } from '@cdk/contract';
 import { useProjectEvents } from './hooks/useProjectEvents';
 import type { ConnectionStatus } from './WorkingIndicator';
@@ -7,6 +7,7 @@ import type { ProjectEventState } from './hooks/useProjectEvents';
 import { WorkingIndicator } from './WorkingIndicator';
 import { StatusFeed } from './StatusFeed';
 import './App.css';
+import { BuildDownload } from './d2l/BuildDownload';
 import { PreviewPanel } from './preview/PreviewPanel';
 
 function BuildPanel({ build, turn, statusLines, connection, outcome }: {
@@ -29,7 +30,7 @@ function BuildPanel({ build, turn, statusLines, connection, outcome }: {
         {build.error && <p>{build.error.message}</p>}
         {!!build.qa?.findings.length && <ul className="findings">{build.qa.findings.map((finding, index) =>
           <li key={index}><strong>{finding.severity === 'warn' ? 'WARNING' : 'ERROR'}</strong> {finding.message}{finding.because && <p>{finding.because}</p>}</li>)}</ul>}
-        {build.status === 'ready' && <a className="download" href={buildDownloadUrl(build.id)}>Download SCORM package</a>}
+        {build.status === 'ready' && <BuildDownload key={build.id} build={build} />}
       </article>}
   </section>;
 }
