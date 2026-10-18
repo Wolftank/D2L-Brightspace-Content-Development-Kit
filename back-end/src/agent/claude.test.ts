@@ -325,14 +325,15 @@ describe('mapClaudeStream: progress', () => {
     ]);
   });
 
-  it('ends the thinking phase when its content block stops', async () => {
+  it('reports a user update when text starts after thinking', async () => {
     const { events } = await replay([
       streamEvent({ type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '' } }),
       streamEvent({ type: 'content_block_stop', index: 0 }),
+      streamEvent({ type: 'content_block_start', index: 1, content_block: { type: 'text', text: '' } }),
     ]);
     expect(events).toEqual([
       { kind: 'status', text: 'Thinking…', category: 'thinking' },
-      { kind: 'status', text: 'Preparing next step', category: 'other' },
+      { kind: 'status', text: 'Updating you', category: 'other' },
     ]);
   });
 
@@ -352,6 +353,16 @@ describe('mapClaudeStream: progress', () => {
       { kind: 'tool_end', callId: 'call-1', ok: true, output: 'ok' },
     ]);
     expect(readAt[0]).toBe(3);
+  });
+
+  it('names a skill once its streamed name is complete', async () => {
+    const { events } = await replay([
+      toolUseStart(0, 'skill-1', 'Skill'),
+      inputDelta(0, '{"skill":"course-'),
+      inputDelta(0, 'design"}'),
+      assistantToolUse('skill-1', 'Skill', { skill: 'course-design' }),
+    ]);
+    expect(events).toEqual([{ kind: 'tool_start', callId: 'skill-1', name: 'Skill', summary: 'Using skill course-design', category: 'reading' }]);
   });
 
   it('sends a line that needs no input when the call starts', async () => {

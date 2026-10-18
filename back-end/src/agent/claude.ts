@@ -393,12 +393,14 @@ const FILE_TOOL_VERBS: Record<string, string> = { Read: 'Reading', Write: 'Writi
  *   built from. A line returned here never changes as more input arrives.
  */
 function knownSummary(name: string, input: unknown, toolSummaries: ReadonlyMap<string, string>): string | undefined {
-  const fields = (typeof input === 'object' && input !== null ? input : {}) as { file_path?: unknown };
+  const fields = (typeof input === 'object' && input !== null ? input : {}) as { file_path?: unknown; skill?: unknown };
   switch (name) {
     case 'Read':
     case 'Write':
     case 'Edit':
       return typeof fields.file_path === 'string' ? `${FILE_TOOL_VERBS[name]} ${fileName(fields.file_path)}` : undefined;
+    case 'Skill':
+      return typeof fields.skill === 'string' && fields.skill.trim() ? `Using skill ${fields.skill}` : undefined;
     case 'Glob':
     case 'Grep':
       return 'Searching the files';
@@ -413,7 +415,7 @@ function knownSummary(name: string, input: unknown, toolSummaries: ReadonlyMap<s
  * session's own tools, by the names Claude calls them.
  */
 export function summarizeTool(name: string, input: unknown, toolSummaries: ReadonlyMap<string, string> = new Map()): string {
-  return knownSummary(name, input, toolSummaries) ?? `${FILE_TOOL_VERBS[name]} a file`;
+  return knownSummary(name, input, toolSummaries) ?? (name === 'Skill' ? 'Using a skill' : `${FILE_TOOL_VERBS[name]} a file`);
 }
 
 /** The last segment of a Windows or POSIX path. */
@@ -499,7 +501,6 @@ export async function* mapClaudeStream(
   let assistantError: SDKAssistantMessageError | undefined;
   const startedCallIds = new Set<string>();
   const streamingCalls = new Map<number, StreamingToolCall>();
-  const thinkingBlocks = new Set<number>();
 
   function toolStart(callId: string, name: string, summary: string, input: unknown): AgentEvent {
     startedCallIds.add(callId);
@@ -532,20 +533,18 @@ export async function* mapClaudeStream(
           if (event.type === 'message_start') {
             textBuf = '';
             streamingCalls.clear();
-            thinkingBlocks.clear();
             yield { kind: 'message_start' };
           } else if (event.type === 'content_block_start') {
             const block = event.content_block;
             if (block.type === 'thinking' || block.type === 'redacted_thinking') {
-              thinkingBlocks.add(event.index);
               yield { kind: 'status', text: THINKING, category: 'thinking' };
+            } else if (block.type === 'text') {
+              yield { kind: 'status', text: 'Updating you', category: 'other' };
             } else if (block.type === 'tool_use') {
               const summary = knownSummary(block.name, block.input, toolSummaries);
               if (summary) yield toolStart(block.id, block.name, summary, block.input);
               else streamingCalls.set(event.index, { callId: block.id, name: block.name, inputJson: '' });
             }
-          } else if (event.type === 'content_block_stop' && thinkingBlocks.delete(event.index)) {
-            yield { kind: 'status', text: 'Preparing next step', category: 'other' };
           } else if (event.type === 'content_block_delta') {
             if (event.delta.type === 'text_delta') {
               textBuf += event.delta.text;

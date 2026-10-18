@@ -384,7 +384,6 @@ describe('mapClaudeStream: recorded fixture replay', () => {
       { kind: 'status', text: 'Thinking…', category: 'thinking' as const },
       { kind: 'message_start' },
       { kind: 'status', text: 'Thinking…', category: 'thinking' as const },
-      { kind: 'status', text: 'Preparing next step', category: 'other' },
       {
         kind: 'tool_start',
         callId: 'toolu_018tyabejV94NG5tssLuXjyE',
@@ -401,6 +400,7 @@ describe('mapClaudeStream: recorded fixture replay', () => {
       },
       { kind: 'status', text: 'Thinking…', category: 'thinking' as const },
       { kind: 'message_start' },
+      { kind: 'status', text: 'Updating you', category: 'other' },
       { kind: 'text_delta', text: 'Created' },
       { kind: 'text_delta', text: ' h' },
       { kind: 'text_delta', text: 'ello' },
