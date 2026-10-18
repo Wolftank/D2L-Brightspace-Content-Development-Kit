@@ -4,12 +4,14 @@
 .d2l-guide::backdrop { background: #18242cb3; }
 .guide-header { display: flex; align-items: start; justify-content: space-between; gap: 20px; }
 .guide-header h2 { margin: 8px 0 16px; }
-.guide-header button { margin: 0; }
 .d2l-guide ol { padding-left: 24px; }
 .d2l-guide ol > li { padding-left: 8px; margin: 24px 0; }
 .d2l-guide h3 { font: 700 18px/1.4 ui-sans-serif, system-ui, sans-serif; }
 .d2l-guide p { font-size: 15px; line-height: 1.6; }
 .d2l-guide a { color: #7b2338; overflow-wrap: anywhere; }
 .d2l-guide nav ul { padding-left: 20px; line-height: 1.8; }
-.guide-save { display: inline-block; margin-top: 12px; }
+.guide-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 24px; padding-top: 20px; border-top: 1px solid #d8ddd9; }
+.guide-actions button { margin: 0 0 0 auto; }
+.guide-save { display: inline-block; padding: 10px 14px; border: 1px solid #aab6b0; border-radius: 6px; background: #f5f7f5; font-size: 14px; font-weight: 600; text-decoration: none; }
+.guide-save:hover { background: #e9eeea; }
 @media (max-width: 480px) { .d2l-guide { padding: 20px; } .guide-header { flex-direction: column; gap: 4px; } }

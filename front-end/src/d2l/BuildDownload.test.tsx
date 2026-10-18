@@ -31,7 +31,7 @@ it('keeps the package URL, opens instructions, closes and restores focus, and re
   const guide = screen.getByRole('dialog', { name: 'Add to D2L' });
   expect(within(guide).getByText(/SCORM ZIP from build 3/)).toBeVisible();
   expect(within(guide).getAllByRole('heading', { level: 3 })).toHaveLength(5);
-  expect(within(guide).getByRole('button', { name: 'Close instructions' })).toHaveFocus();
+  expect(within(guide).getByRole('heading', { name: 'Add to D2L', level: 2 })).toHaveFocus();
   fireEvent.click(within(guide).getByRole('button', { name: 'Close instructions' }));
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   expect(download).toHaveFocus();
