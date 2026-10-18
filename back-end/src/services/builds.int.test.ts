@@ -214,7 +214,10 @@ describe('build service', () => {
 
       expect(build).toMatchObject({ status: 'failed', qa: null });
       expect(build.error).toEqual({ code: 'gate_crashed', message: "The QA check couldn't finish on this build.", nextStep: 'send_again' });
-      expect(logRecords).toContainEqual(expect.objectContaining({ code: 'gate_crashed', detail: expect.stringContaining('Could not read tenant-profile.json') }));
+      expect(logRecords).toContainEqual(
+        expect.objectContaining({ projectId, buildId: build.id, code: 'gate_crashed', detail: expect.stringContaining('Could not read tenant-profile.json') }),
+      );
+      expect(logRecords).toContainEqual(expect.objectContaining({ projectId, buildId: build.id, msg: 'Build checked', status: 'failed', errorCode: 'gate_crashed' }));
     });
 
     it('fails with an error when the gate runs past its timeout', async () => {

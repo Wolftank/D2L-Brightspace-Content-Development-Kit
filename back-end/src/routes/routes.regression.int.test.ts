@@ -312,6 +312,36 @@ describe('R8 regression: project, message and build routes', () => {
       expect(logRecords).toContainEqual(expect.objectContaining({ msg: 'Turn failed', turnId: turn.id, code: 'workspace_missing' }));
     });
 
+    it('links a request, the turn it queued, and the build the turn made by their IDs in the log', async () => {
+      const projectId = await createProject();
+
+      const res = await request(app())
+        .post(`/api/projects/${projectId}/messages`)
+        .send({ content: [{ type: 'text', text: 'Create a practice set on cell division.' }] });
+      const requestId = res.headers['x-request-id'];
+      const turnId = res.body.turn.id;
+      await waitForTurn(projectId, turnId, (status) => status === 'completed');
+      const buildId = (await latestBuild(projectId)).id;
+
+      expect(logRecords.filter((record) => record.reqId === requestId)).toEqual([
+        expect.objectContaining({ msg: 'Turn queued', projectId, turnId }),
+        expect.objectContaining({ msg: 'Request completed', method: 'POST', path: `/api/projects/${projectId}/messages`, status: 202 }),
+      ]);
+      expect(logRecords.filter((record) => record.turnId === turnId).map(({ msg }) => msg)).toEqual([
+        'Turn queued',
+        'Turn started',
+        'Instructor message',
+        'Agent reply',
+        'Build created',
+        'Build checked',
+        'Turn completed',
+      ]);
+      expect(logRecords.filter((record) => record.buildId === buildId)).toEqual([
+        expect.objectContaining({ msg: 'Build created', projectId, turnId }),
+        expect.objectContaining({ msg: 'Build checked', projectId, turnId }),
+      ]);
+    });
+
     it("lists messages oldest first, each instructor message carrying its turn's status and error, paging with nextCursor", async () => {
       const projectId = await createProject();
       const completed = await runTurn(projectId, 'Create a practice set on cell division.');

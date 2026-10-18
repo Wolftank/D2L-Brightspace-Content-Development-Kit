@@ -185,6 +185,18 @@ describe('Claude turns', () => {
     );
   });
 
+  it('logs what the agent process writes to standard error, with its workspace', async () => {
+    const { captureLog } = await import('../test/log.js');
+    const logRecords = captureLog();
+    const { options } = await runTurn();
+
+    (options.stderr as (output: string) => void)('Error: spawn EPERM\n');
+
+    expect(logRecords).toContainEqual(
+      expect.objectContaining({ level: 40, msg: 'Agent process error output', workspaceDir: join(dir, 'workspace'), output: 'Error: spawn EPERM' }),
+    );
+  });
+
   it('confines the file tools with a pre-tool hook that refuses a path outside the workspace', async () => {
     const { options } = await runTurn();
     const hooks = options.hooks as { PreToolUse: Array<{ hooks: HookCallback[] }> };

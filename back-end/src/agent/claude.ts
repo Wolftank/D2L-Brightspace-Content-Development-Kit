@@ -657,6 +657,7 @@ function createClaudeSession(req: SessionRequest, settings: ClaudeSettings): Age
         mcpServers: { [req.tools.name]: toolServer(req.tools) },
         strictMcpConfig: true,
         env: agentEnv(),
+        stderr: (output) => log.warn({ workspaceDir: req.workspaceDir, output: output.trimEnd() }, 'Agent process error output'),
         hooks: { PreToolUse: [{ hooks: [confineToWorkspace(req.workspaceDir)] }] },
         maxTurns: limits.maxSteps,
         maxBudgetUsd: limits.maxBudgetUsd,

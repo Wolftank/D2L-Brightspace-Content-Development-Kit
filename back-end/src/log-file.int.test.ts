@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { addLogDestination, LOG_RETENTION_DAYS, log, openLogFile, removeExpiredLogs } from './log.js';
+import { addLogDestination, log } from './log.js';
+import { LOG_RETENTION_DAYS, openLogFile, removeExpiredLogs } from './log-file.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
