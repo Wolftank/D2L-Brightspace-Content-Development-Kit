@@ -20,11 +20,7 @@ export function createApp(deps: Deps): Express {
   app.use(identity(deps));
   app.use(previewOrigin(deps));
 
-  app.use('/api', originGuard({
-    appOrigin: deps.preview.appOrigin,
-    previewOrigin: deps.preview.origin,
-    launchToken: deps.launchToken,
-  }));
+  app.use('/api', originGuard({ appOrigin: deps.preview.appOrigin, launchToken: deps.launchToken }));
   app.use('/api', healthRouter());
   app.use('/api', meRouter(deps));
   app.use('/api', projectsRouter(deps));
