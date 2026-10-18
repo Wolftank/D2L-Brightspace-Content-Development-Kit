@@ -45,8 +45,8 @@ async function firstRequest() {
 describe('F10 conversation', () => {
   it('starts from the chat and requires a title and request', () => {
     render(<App />);
-    expect(screen.getByRole('region', { name: 'Conversation' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Preview' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Design' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Preview' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));
     expect(screen.getByRole('alert')).toHaveTextContent('Enter a project title and a request');
   });
@@ -55,9 +55,9 @@ describe('F10 conversation', () => {
     const draft = screen.getByLabelText('Describe a change');
     expect(draft).toHaveFocus();
     fireEvent.change(draft, { target: { value: 'Make buttons larger.' } });
-    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Working…' })).toBeDisabled();
     expect(draft).toHaveValue('Make buttons larger.');
-    expect(screen.getByText(/You can draft your next message/)).toBeVisible();
+    expect(draft).toHaveAccessibleName('Describe a change');
     emit({ seq: 2, kind: 'message.delta', payload: { turnId: 't1', messageId: 'a1', text: 'Building your quiz…' } });
     expect(screen.getByText('Building your quiz…')).toBeVisible();
     emit({ seq: 3, kind: 'message.completed', payload: { message: message('a1', 2, 'agent', 'Your quiz is ready.') } });
@@ -74,8 +74,8 @@ describe('F10 conversation', () => {
   });
   it('shows progress in the build panel and separate streamed agent messages after tool calls', async () => {
     const view = render(<App />); await firstRequest();
-    const chat = screen.getByRole('region', { name: 'Conversation' });
-    const panel = screen.getByRole('region', { name: 'Build panel' });
+    const chat = screen.getByRole('region', { name: 'Design' });
+    const panel = screen.getByRole('region', { name: 'Build' });
     expect(within(panel).getByLabelText('Request progress')).toBeVisible();
     expect(within(chat).queryByLabelText('Request progress')).not.toBeInTheDocument();
     emit({ seq: 2, kind: 'message.delta', payload: { turnId: 't1', messageId: 'a1', text: 'I will ' } });
@@ -103,7 +103,7 @@ describe('F10 conversation', () => {
     emit({ seq: 1, kind: 'message.completed', payload: { message: history[1]! } });
     expect(within(screen.getByLabelText('Conversation history')).getAllByRole('article')).toHaveLength(2);
     emit({ seq: 2, kind: 'turn.started', payload: { turnId: 't2', startedAt: Date.now() } });
-    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Working…' })).toBeDisabled();
   });
   it('restores the thread, streaming reply, running turn and draft after reload', async () => {
     const view = render(<App />); await firstRequest();
@@ -114,7 +114,7 @@ describe('F10 conversation', () => {
     expect(within(screen.getByLabelText('Conversation history')).getByText('Create a quiz.')).toBeVisible();
     expect(screen.getByText('I am building the quiz.')).toBeVisible();
     expect(screen.getByLabelText('Describe a change')).toHaveValue('Make it shorter next.');
-    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Working…' })).toBeDisabled();
   });
   it('shows a cancelled request in the conversation', async () => {
     render(<App />); await firstRequest();
@@ -127,7 +127,7 @@ describe('F10 conversation', () => {
     emit({ seq: 2, kind: 'build.updated', payload: { build: build(1) } });
     expect(screen.getByTitle('Interactive preview of build 1')).toHaveAttribute('src', expect.stringContaining('buildId=b1'));
     emit({ seq: 3, kind: 'build.updated', payload: { build: build(2, 'failed') } });
-    expect(screen.getByText('BUILD 2')).toBeVisible();
+    expect(screen.getByText('Version 2')).toBeVisible();
     expect(screen.queryByRole('link', { name: 'Download SCORM package' })).not.toBeInTheDocument();
     expect(screen.getByTitle('Interactive preview of build 1')).toBeInTheDocument();
     emit({ seq: 4, kind: 'build.updated', payload: { build: build(3) } });

@@ -21,7 +21,7 @@ describe('PreviewPanel', () => {
   it('loads the latest ready version in an isolated, titled frame', () => {
     render(<PreviewPanel build={{ id: 'saved-3', version: 3 }} />);
     expect(screen.getByRole('heading')).not.toHaveFocus();
-    expect(screen.getByText('Local preview — results are not sent to Brightspace.')).toBeInTheDocument();
+    expect(screen.queryByText('Local preview — results are not sent to Brightspace.')).not.toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Loading preview');
     expect(new URL(frame().src).searchParams.get('buildId')).toBe('saved-3');
     expect(frame()).toHaveAttribute('sandbox', 'allow-scripts allow-same-origin');
