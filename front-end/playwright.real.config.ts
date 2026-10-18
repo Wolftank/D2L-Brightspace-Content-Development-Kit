@@ -6,8 +6,8 @@ import { defineConfig, devices } from '@playwright/test';
 const tsxCli = fileURLToPath(import.meta.resolve('tsx/cli'));
 const viteCli = fileURLToPath(new URL('bin/vite.js', import.meta.resolve('vite/package.json')));
 
-const BACK_END_PORT = 3002;
-const APP_PORT = 5174;
+const BACK_END_PORT = 3010;
+const APP_PORT = 5180;
 const APP_ORIGIN = `http://127.0.0.1:${APP_PORT}`;
 
 /** The main flows against the real back end, with the scripted agent in place of an AI, so nothing is billed. */

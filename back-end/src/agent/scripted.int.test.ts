@@ -123,7 +123,7 @@ describe('scripted agent driver', () => {
     controller.abort();
     await drained;
 
-    expect(silent.at(-1)).toEqual({ kind: 'status', text: 'Building from the SCORM starter' });
+    expect(silent.at(-1)).toEqual({ kind: 'status', text: 'Building from the SCORM starter', category: 'building' });
     expect((await turn.result).status).toBe('cancelled');
   });
 

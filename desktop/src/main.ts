@@ -1,7 +1,8 @@
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
-import { app, BrowserWindow, dialog, Menu } from 'electron';
+import { app, BrowserWindow, dialog, Menu, shell } from 'electron';
 import { type BackEnd, LAUNCH_COOKIE, startBackEnd } from './back-end.js';
+import { isGuideUrl } from './help-links.js';
 
 /** The compiled back end, from the `cdk-back-end` workspace packaged with the app. */
 const SERVER = createRequire(import.meta.url).resolve('cdk-back-end/dist/server.js');
@@ -29,7 +30,10 @@ async function open(): Promise<void> {
   });
 
   window = new BrowserWindow({ width: 1280, height: 860, title: 'CDK', show: false });
-  window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (isGuideUrl(url)) void shell.openExternal(url).catch(() => dialog.showErrorBox('Could not open help', 'Open the guide link in your browser.'));
+    return { action: 'deny' };
+  });
   window.once('ready-to-show', showWindow);
   await window.webContents.session.cookies.set({
     url: backEnd.url,

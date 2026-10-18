@@ -7,14 +7,13 @@ type Selection = Pick<Build, 'id' | 'version'>;
 
 export function PreviewPanel({ build }: { build: Selection | null }) {
   const [attempt, setAttempt] = useState(0);
+  if (!build) return null;
   return <section className="card preview-panel" aria-labelledby="preview-title" tabIndex={0}>
     <div className="preview-header">
-      <div><p className="eyebrow">03 / PREVIEW</p><h2 id="preview-title">{build ? 'Preview · Version ' + build.version : 'Preview'}</h2>
-        <p>Local preview — results are not sent to Brightspace.</p></div>
-      {build && <button type="button" onClick={() => setAttempt(value => value + 1)}>Restart preview</button>}
+      <div><h2 id="preview-title">{'Preview · Version ' + build.version}</h2></div>
+      <button type="button" onClick={() => setAttempt(value => value + 1)}>Restart preview</button>
     </div>
-    {build ? <PreviewAttempt key={build.id + ':' + attempt} build={build} onRetry={() => setAttempt(value => value + 1)} /> :
-      <p className="preview-placeholder">Your activity will appear here when the first build is ready.</p>}
+    <PreviewAttempt key={build.id + ':' + attempt} build={build} onRetry={() => setAttempt(value => value + 1)} />
   </section>;
 }
 
@@ -50,7 +49,7 @@ function PreviewAttempt({ build, onRetry }: { build: Selection; onRetry: () => v
 
   return <div className="preview-stage">
     {status === 'loading' && <p role="status">Loading preview…</p>}
-    {status === 'ready' && <p role="status">Preview ready.</p>}
+    {status === 'ready' && <p className="sr-only" role="status">Preview ready.</p>}
     {status === 'error' ? <div><p role="alert">{error}</p><button type="button" onClick={onRetry}>Retry preview</button></div>
       : <iframe ref={frame} src={session.url} title={`Interactive preview of build ${build.version}`}
         sandbox="allow-scripts allow-same-origin" referrerPolicy="no-referrer" hidden={status !== 'ready'}

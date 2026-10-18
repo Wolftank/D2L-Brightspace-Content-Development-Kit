@@ -91,8 +91,8 @@ describe('R7 regression: event stream and reconnect', () => {
     db.insert(usersTable).values({ id: 'someone-else', displayName: 'Someone Else', email: null, role: 'instructor' }).run();
     projectsRepo.create({ id: 'not-mine', ownerId: 'someone-else', title: 'Not yours', avenue: 'scorm' });
 
-    const mine = (text: string) => events.append({ projectId: 'mine', kind: 'turn.status', payload: { turnId: 'turn-1', text } });
-    const notMine = () => events.append({ projectId: 'not-mine', kind: 'turn.status', payload: { turnId: 'turn-9', text: 'Not yours' } });
+    const mine = (text: string) => events.append({ projectId: 'mine', kind: 'turn.status', payload: { turnId: 'turn-1', text, category: 'other' as const } });
+    const notMine = () => events.append({ projectId: 'not-mine', kind: 'turn.status', payload: { turnId: 'turn-9', text: 'Not yours', category: 'other' as const } });
     stored = [
       events.append({ projectId: 'mine', kind: 'turn.started', payload: { turnId: 'turn-1', startedAt: 1 } }),
       mine('Reading your request'),

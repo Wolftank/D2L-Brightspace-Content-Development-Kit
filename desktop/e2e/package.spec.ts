@@ -75,7 +75,7 @@ test("the packaged back end runs on the app's runtime and serves the app, projec
 test('the app opens the CDK window and leaves no processes when closed', async () => {
   const app = await electron.launch({ executablePath: EXE, args: [`--user-data-dir=${join(dataDir, 'window')}`] });
   const window = await app.firstWindow();
-  await expect(window.getByRole('heading', { name: 'Describe what you want to build.' })).toBeVisible();
+  await expect(window.getByRole('heading', { name: 'Create an activity' })).toBeVisible();
   expect(await window.evaluate(() => fetch('/api/me').then((res) => res.status))).toBe(200);
 
   await app.close();

@@ -21,7 +21,7 @@ test('a request becomes a build that passes the QA gate and downloads with its m
 
   const card = buildCard(page, 'Ready to download');
   await expect(card).toBeVisible({ timeout: TURN_TIMEOUT });
-  await expect(card).toContainText('BUILD 1');
+  await expect(card).toContainText('Version 1');
   await expect(page.getByLabel('Conversation history')).toContainText('practice set on workplace safety');
 
   const downloadEvent = page.waitForEvent('download');
@@ -47,16 +47,16 @@ test('a failed turn shows its plain message and makes no build', async ({ page }
     timeout: TURN_TIMEOUT,
   });
   await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled();
-  await expect(page.getByRole('region', { name: 'Build panel' }).getByRole('article')).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Build', exact: true }).getByRole('article')).toHaveCount(0);
 });
 
 test('a follow-up request makes version 2', async ({ page }) => {
   await submitRequest(page, 'Create a five-question practice set on workplace safety.');
-  await expect(buildCard(page, 'Ready to download')).toContainText('BUILD 1', { timeout: TURN_TIMEOUT });
+  await expect(buildCard(page, 'Ready to download')).toContainText('Version 1', { timeout: TURN_TIMEOUT });
   await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled({ timeout: TURN_TIMEOUT });
 
   await page.getByLabel('Describe a change').fill('[follow-up] Add two more questions.');
   await page.getByRole('button', { name: 'Send' }).click();
 
-  await expect(buildCard(page, 'Ready to download')).toContainText('BUILD 2', { timeout: TURN_TIMEOUT });
+  await expect(buildCard(page, 'Ready to download')).toContainText('Version 2', { timeout: TURN_TIMEOUT });
 });

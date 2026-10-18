@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { KIT_DIR } from '../kit.js';
+import { toolCategory } from './progress.js';
 import type {
   AgentDriver,
   AgentEvent,
@@ -154,36 +155,36 @@ async function* runScenario(
   try {
     const failure = FAILURES[scenario];
     if (failure) {
-      yield { kind: 'status', text: 'Connecting to the agent' };
+      yield { kind: 'status', text: 'Connecting to the agent', category: 'other' };
       await delay(300, signal);
       resolveResult({ status: 'failed', sessionId, text: '', error: failure, usage: { inputTokens: 0, outputTokens: 0, costUsd: 0, steps: 0 } });
       return;
     }
 
     yield { kind: 'message_start' };
-    yield { kind: 'status', text: 'Reading the request' };
+    yield { kind: 'status', text: 'Reading the request', category: 'reading' };
     await delay(400, signal);
 
     if (scenario === 'cancelled') {
-      yield { kind: 'status', text: 'Building from the SCORM starter' };
+      yield { kind: 'status', text: 'Building from the SCORM starter', category: 'building' };
       await delay(200, signal);
       resolveResult({ status: 'cancelled', sessionId, text: '', usage: { inputTokens: 800, outputTokens: 100, costUsd: 0.005, steps: 1 } });
       return;
     }
 
-    yield { kind: 'status', text: 'Building from the SCORM starter' };
+    yield { kind: 'status', text: 'Building from the SCORM starter', category: 'building' };
     await delay(scenario === 'long-step' ? LONG_STEP_MS : 800, signal);
 
     const building: BuildingScenario = scenario === 'qa-fail' || scenario === 'follow-up' ? scenario : 'ok';
     const { html, manifest } = (await scenarioFiles())[building];
     await mkdir(outDir, { recursive: true });
 
-    yield { kind: 'tool_start', callId: 'write-index', name: 'Write', summary: 'Writing index.html' };
+    yield { kind: 'tool_start', callId: 'write-index', name: 'Write', summary: 'Writing index.html', category: toolCategory('Write', {}) };
     await writeFile(join(outDir, 'index.html'), html, 'utf8');
     await delay(200, signal);
     yield { kind: 'tool_end', callId: 'write-index', ok: true };
 
-    yield { kind: 'tool_start', callId: 'write-manifest', name: 'Write', summary: 'Writing imsmanifest.xml' };
+    yield { kind: 'tool_start', callId: 'write-manifest', name: 'Write', summary: 'Writing imsmanifest.xml', category: toolCategory('Write', {}) };
     await writeFile(join(outDir, 'imsmanifest.xml'), manifest, 'utf8');
     await delay(200, signal);
     yield { kind: 'tool_end', callId: 'write-manifest', ok: true };
