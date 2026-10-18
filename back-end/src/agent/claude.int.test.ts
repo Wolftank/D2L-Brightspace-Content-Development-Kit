@@ -381,14 +381,15 @@ describe('mapClaudeStream: recorded fixture replay', () => {
     }
 
     expect(events).toEqual([
-      { kind: 'status', text: 'Thinking…' },
+      { kind: 'status', text: 'Thinking…', category: 'thinking' as const },
       { kind: 'message_start' },
-      { kind: 'status', text: 'Thinking…' },
+      { kind: 'status', text: 'Thinking…', category: 'thinking' as const },
       {
         kind: 'tool_start',
         callId: 'toolu_018tyabejV94NG5tssLuXjyE',
         name: 'Write',
         summary: 'Writing hello.txt',
+        category: 'writing' as const,
       },
       {
         kind: 'tool_end',
@@ -397,8 +398,9 @@ describe('mapClaudeStream: recorded fixture replay', () => {
         output:
           'File created successfully at: C:\\Users\\benja\\AppData\\Local\\Temp\\cdk-fixture-workspace-fGQ0EP\\hello.txt (file state is current in your context — no need to Read it back)',
       },
-      { kind: 'status', text: 'Thinking…' },
+      { kind: 'status', text: 'Thinking…', category: 'thinking' as const },
       { kind: 'message_start' },
+      { kind: 'status', text: 'Updating you', category: 'other' },
       { kind: 'text_delta', text: 'Created' },
       { kind: 'text_delta', text: ' h' },
       { kind: 'text_delta', text: 'ello' },

@@ -4,6 +4,7 @@ import { readFailure, type Failure } from '../api/failure';
 import { getMessages, projectEventsUrl } from '../api/client';
 import type {
   Build,
+  ProgressCategory,
   ChatMessage,
   Message,
   ProjectEvent,
@@ -13,6 +14,8 @@ export interface StatusLine {
   seq: number;
   text: string;
   callId?: string;
+  category?: Exclude<ProgressCategory, 'thinking'>;
+  failed?: boolean;
 }
 
 export interface ProjectEventState {
@@ -110,12 +113,14 @@ export function projectEventReducer(
       };
 
     case 'turn.status':
+      if (!event.payload.category) return state;
+      if (event.payload.category === 'thinking') return { ...state, turn: { ...state.turn, currentStep: 'Thinking…' } };
       return {
         ...state,
         turn: { ...state.turn, currentStep: event.payload.text },
         statusLines: [
           ...state.statusLines,
-          { seq: event.seq, text: event.payload.text },
+          { seq: event.seq, text: event.payload.text, category: event.payload.category },
         ],
       };
 
@@ -123,6 +128,7 @@ export function projectEventReducer(
       if (state.messages.some(message => message.id === event.payload.messageId)) return state;
       return {
         ...state,
+        turn: { ...state.turn, currentStep: 'Writing your reply' },
         streamingMessages: state.streamingMessages.some(message => message.id === event.payload.messageId)
           ? state.streamingMessages.map(message => message.id === event.payload.messageId ? { ...message, text: message.text + event.payload.text } : message)
           : [...state.streamingMessages, { id: event.payload.messageId, turnId: event.payload.turnId, text: event.payload.text }],
@@ -131,6 +137,7 @@ export function projectEventReducer(
     case 'message.completed':
   return {
     ...state,
+    turn: { ...state.turn, currentStep: 'Preparing your result' },
     messages: mergeMessages(state.messages, [event.payload.message]),
     streamingMessages: state.streamingMessages.filter(message => message.id !== event.payload.message.id),
   };
@@ -141,7 +148,7 @@ export function projectEventReducer(
         turn: { ...state.turn, currentStep: event.payload.summary },
         statusLines: [
           ...state.statusLines,
-          { seq: event.seq, text: event.payload.summary, callId: event.payload.callId },
+          { seq: event.seq, text: event.payload.summary, callId: event.payload.callId, category: event.payload.category },
         ],
       };
 
@@ -151,7 +158,7 @@ export function projectEventReducer(
         turn: { ...state.turn, currentStep: event.payload.summary },
         statusLines: state.statusLines.map((line) =>
           line.callId === event.payload.callId && !event.payload.ok
-            ? { ...line, text: event.payload.summary }
+            ? { ...line, text: event.payload.summary, failed: true }
             : line,
         ),
       };
@@ -223,7 +230,7 @@ export function useProjectEvents(projectId: string | null) {
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [connection, setConnection] = useState<ConnectionStatus>('reconnecting');
   const storageStateKey = projectId
-  ? `recovery-${projectId}-event-state`
+  ? `progress-${projectId}-event-state`
   : null;
 
 const [state, dispatch] = useReducer(
@@ -313,7 +320,7 @@ useEffect(() => {
   useEffect(() => {
     if (!projectId) return;
 
-    const storageKey = `recovery-${projectId}-last-seq`;
+    const storageKey = `progress-${projectId}-last-seq`;
     const lastSeq = sessionStorage.getItem(storageKey);
 
     let url = projectEventsUrl(projectId);

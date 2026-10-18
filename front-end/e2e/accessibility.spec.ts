@@ -56,7 +56,7 @@ test.describe('accessibility baseline', () => {
 
   test('empty form', async ({ page }, testInfo) => {
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'Describe what you want to build.' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Create an activity' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
     await scan(page, testInfo, 'empty form');
   });
@@ -64,7 +64,7 @@ test.describe('accessibility baseline', () => {
   test('turn running', async ({ page }, testInfo) => {
     // [long-step] holds the turn for about 20 seconds, so the scan sees the running state
     await startRequest(page, '[long-step] Create a practice quiz.');
-    const progress = page.getByRole('region', { name: 'Build panel' }).getByLabel('Request progress');
+    const progress = page.getByRole('region', { name: 'Build' }).getByLabel('Request progress');
     await expect(progress).toContainText('Building from the SCORM starter');
     await expect(page.getByRole('log', { name: 'Build progress' })).toBeVisible();
     await scan(page, testInfo, 'turn running');
@@ -74,7 +74,7 @@ test.describe('accessibility baseline', () => {
 
   test('build ready', async ({ page }, testInfo) => {
     await startRequest(page, 'Create a practice quiz.');
-    const panel = page.getByRole('region', { name: 'Build panel' });
+    const panel = page.getByRole('region', { name: 'Build' });
     await expect(panel.getByRole('heading', { name: 'Ready to download' })).toBeVisible({ timeout: TURN_TIMEOUT });
     await expect(panel.getByText('Request complete', { exact: true })).toBeVisible({ timeout: TURN_TIMEOUT });
     await expect(page.getByRole('region', { name: 'Preview · Version 1' }).getByRole('status')).toHaveText('Preview ready.', { timeout: TURN_TIMEOUT });

@@ -66,7 +66,7 @@ function fakeAgent(): { driver: Pick<AgentDriver, 'open'>; release(): void } {
           });
           const out = join(req.workspaceDir, 'out');
           const events = (async function* (): AsyncGenerator<AgentEvent> {
-            yield { kind: 'tool_start', callId: 'call-1', name: 'Write', summary: 'Writing the activity' };
+            yield { kind: 'tool_start', callId: 'call-1', name: 'Write', summary: 'Writing the activity', category: 'writing' as const };
             if (input.text.includes('[hold]')) await held;
             if (input.text.includes('[qa-fail]')) await fs.cp(BAD_SCORM, out, { recursive: true, force: true });
             else await fs.writeFile(join(out, 'notes.txt'), input.text);

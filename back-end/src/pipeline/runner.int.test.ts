@@ -19,6 +19,7 @@ import { createWorkspaceService, type WorkspaceService } from '../services/works
 import { createEventService, type EventService } from './events.js';
 import { createRunner, type Runner } from './runner.js';
 import { createSessionService, type SessionService } from './sessions.js';
+import type { Build as ApiBuild } from '@cdk/contract';
 
 /** A driver whose agent writes the request into out/notes.txt and replies "Done." */
 function writingDriver(): Pick<AgentDriver, 'open'> {
@@ -40,7 +41,7 @@ function writingDriver(): Pick<AgentDriver, 'open'> {
               yield { kind: 'message_start' };
               yield { kind: 'text_delta', text: 'I will write the notes.' };
             }
-            yield { kind: 'tool_start', callId: 'call-1', name: 'Write', summary: 'Writing notes.txt' };
+            yield { kind: 'tool_start', callId: 'call-1', name: 'Write', summary: 'Writing notes.txt', category: 'writing' as const };
             await fs.writeFile(notes, input.text);
             yield { kind: 'tool_end', callId: 'call-1', ok: true };
             yield { kind: 'message_start' };
@@ -91,7 +92,7 @@ function steppingDriver(): Pick<AgentDriver, 'open'> {
                 return;
               }
               steps++;
-              yield { kind: 'status', text: `Step ${steps}` };
+              yield { kind: 'status', text: `Step ${steps}`, category: 'other' as const };
               if (limits.maxBudgetUsd !== undefined && steps * STEP_COST_USD > limits.maxBudgetUsd) {
                 resolveResult(stopped('max_budget_exceeded', steps));
                 return;
@@ -183,10 +184,24 @@ describe('runner, end to end', () => {
     expect(turn).toMatchObject({ status: 'completed', usage: { steps: 2 } });
     expect(messages.get(turn.replyId!)?.content).toEqual([{ type: 'text', text: 'Done.' }]);
 
-    const build = (stored.at(-2)!.payload as { build: { turnId: string; outputHash: string } }).build;
+        const build = (stored.at(-2)!.payload as { build: ApiBuild }).build;
     expect(build.turnId).toBe('turn-1');
     expect(build.outputHash).toBe(await workspaces.hashOutput(projectId));
+    expect(build.qa).toMatchObject({ passed: expect.any(Boolean), findings: expect.any(Array) });
+    expect(createBuildsRepo(db).listByProject(projectId)).toHaveLength(1);
     expect(projects.getById(projectId)?.sessionId).toBe('agent-session-1');
+  });
+
+
+  it('creates no build for a turn that leaves the output unchanged', async () => {
+    useAgent(steppingDriver(), { maxSteps: 60, maxBudgetUsd: 10 });
+    queueTurn('reply-only', 'queued', 'Take 1 step');
+
+    await runner.executeTurn('reply-only');
+
+    expect(turnRow('reply-only').status).toBe('completed');
+    expect(createBuildsRepo(db).listByProject(projectId)).toEqual([]);
+    expect(events.after(projectId, 0).map((event) => event.kind)).not.toContain('build.created');
   });
 
   it('stores separate ordered replies around tool calls for history and event replay', async () => {
