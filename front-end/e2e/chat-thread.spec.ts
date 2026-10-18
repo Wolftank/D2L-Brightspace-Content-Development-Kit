@@ -40,7 +40,7 @@ for (const failedFirst of [false, true]) {
     await expect(page.getByText('Version 2', { exact: true })).toBeVisible();
     expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()).violations).toEqual([]);
     await page.setViewportSize({ width: 390, height: 844 });
-    const chat = await page.getByRole('region', { name: 'Conversation' }).boundingBox();
+    const chat = await page.getByRole('region', { name: 'Design' }).boundingBox();
     const build = await page.getByRole('region', { name: 'Build' }).boundingBox();
     const preview = await page.getByRole('region', { name: 'Preview · Version 2' }).boundingBox();
     expect(build!.y).toBeGreaterThan(chat!.y + chat!.height);
@@ -69,7 +69,7 @@ test('keeps progress in the build panel and distinct agent messages around a too
   await page.getByLabel('Project title').fill('Separate agent messages');
   await page.getByLabel('What should students learn or do?').fill('[multi-message] Update my activity');
   await page.getByRole('button', { name: 'Send' }).click();
-  const chat = page.getByRole('region', { name: 'Conversation' });
+  const chat = page.getByRole('region', { name: 'Design' });
   const panel = page.getByRole('region', { name: 'Build' });
   await expect(panel.getByLabel('Request progress')).toBeVisible();
   await expect(chat.getByLabel('Request progress')).toHaveCount(0);

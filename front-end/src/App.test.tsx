@@ -45,7 +45,7 @@ async function firstRequest() {
 describe('F10 conversation', () => {
   it('starts from the chat and requires a title and request', () => {
     render(<App />);
-    expect(screen.getByRole('region', { name: 'Conversation' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Design' })).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Preview' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));
     expect(screen.getByRole('alert')).toHaveTextContent('Enter a project title and a request');
@@ -74,7 +74,7 @@ describe('F10 conversation', () => {
   });
   it('shows progress in the build panel and separate streamed agent messages after tool calls', async () => {
     const view = render(<App />); await firstRequest();
-    const chat = screen.getByRole('region', { name: 'Conversation' });
+    const chat = screen.getByRole('region', { name: 'Design' });
     const panel = screen.getByRole('region', { name: 'Build' });
     expect(within(panel).getByLabelText('Request progress')).toBeVisible();
     expect(within(chat).queryByLabelText('Request progress')).not.toBeInTheDocument();

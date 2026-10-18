@@ -18,7 +18,7 @@ function BuildPanel({ build, turn, statusLines, connection, outcome }: {
   outcome?: string;
 }) {
   return <section className="card build-panel" aria-labelledby="build-title" tabIndex={0}>
-    <h2 id="build-title">Build</h2>
+    <h2 className="panel-heading" id="build-title">Build</h2>
     {turn.status === 'running' && turn.startedAt !== null && <WorkingIndicator startedAt={turn.startedAt} step={turn.currentStep} connection={connection} />}
     {turn.status === 'running' && statusLines.length > 0 && <StatusFeed lines={statusLines} turnId={turn.id} />}
     {turn.status !== 'running' && turn.status !== 'idle' && <p className="turn-summary">{turn.status === 'completed' ? 'Request complete' : outcome}</p>}
@@ -52,6 +52,7 @@ export function App() {
   const latestBuild = [...builds].sort((a, b) => b.version - a.version)[0] ?? null;
   const readyBuild = [...builds].filter(build => build.status === 'ready').sort((a, b) => b.version - a.version)[0] ?? null;
   const latestAgent = messages.filter(message => message.role === 'agent').at(-1);
+  const hasMessages = messages.length > 0 || streamingMessages.length > 0;
   const chatHistory = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -92,12 +93,13 @@ export function App() {
   return <main className="app-shell">
     <header className="topbar"><a className="brand" href="/" aria-label="D2L Content Development Kit home"><span aria-hidden="true">C</span>D2L Content Development Kit</a></header>
     <section className="intro" aria-labelledby="page-title">
+      <p className="workspace-eyebrow">{project ? 'Project:' : 'Course material workspace'}</p>
       <h1 id="page-title">{project?.title ?? 'Create an activity'}</h1>
     </section>
     <div className="workspace">
       <section className="card chat-panel" aria-labelledby="chat-title" tabIndex={0}>
-        <h2 id="chat-title">Conversation</h2>
-        <div ref={chatHistory} className="chat-history" role="group" tabIndex={0} aria-label="Conversation history">
+        <h2 className="panel-heading" id="chat-title">Design</h2>
+        <div ref={chatHistory} className="chat-history" hidden={!hasMessages} role="group" tabIndex={0} aria-label="Conversation history">
           {messages.map(message => <article className={`chat-message message-${message.role}`} key={message.id}>
             <p className="speaker">{message.role === 'instructor' ? 'You' : 'CDK'}</p>
             <p>{message.content.filter(block => block.type === 'text').map(block => block.text).join('\n')}</p>
@@ -108,7 +110,7 @@ export function App() {
         </div>
         <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{latestAgent ? `CDK: ${latestAgent.content.filter(block => block.type === 'text').map(block => block.text).join('')}` : ''}</div>
         {historyError && <p className="error" role="alert">{historyError}</p>}
-        <form onSubmit={handleSend} className="composer">
+        <form onSubmit={handleSend} className={hasMessages ? 'composer' : 'composer composer-empty'}>
           {!project && <><label htmlFor="project-title">Project title</label><input id="project-title" value={title} onChange={event => setTitle(event.target.value)} placeholder="e.g., Cell division practice" maxLength={160} disabled={sending} /></>}
           <label htmlFor="request-text" className={project ? 'sr-only' : undefined}>{project ? 'Describe a change' : 'What should students learn or do?'}</label>
           <textarea ref={messageBox} id="request-text" value={requestText} onChange={event => setRequestText(event.target.value)} placeholder={project ? 'Describe a change or ask a question…' : 'Create a ten-question practice quiz on cell division…'} rows={3} maxLength={20000} />
