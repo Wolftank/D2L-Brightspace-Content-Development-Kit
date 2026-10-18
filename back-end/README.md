@@ -46,6 +46,8 @@ Copy-Item .env.example .env
 | `APP_ORIGIN` | `http://127.0.0.1:5173` | The origin the app is opened at, and the only one allowed to frame build previews: an http or https origin with no path. The default is the Vite dev server; set it to the back end's own origin when it serves the built app |
 | `LAUNCH_TOKEN` | unset | Set by the desktop app at each launch. Every API request must then carry it in the `cdk_launch` cookie, which the app sets on its window. Leave unset in development |
 | `APP_DIR` | unset | The built front end (`front-end/dist`) to serve at `/` on the back end's own origin, as the desktop app does. Set `APP_ORIGIN` to `http://127.0.0.1:<PORT>` with it. A relative path is resolved against `back-end/` |
+| `LOG_LEVEL` | `info` | The least severe level written to the log: `fatal`, `error`, `warn`, `info`, `debug`, or `trace`. Instructor messages and agent replies are logged only at `debug` |
+| `APP_VERSION` | unset | The Windows app's version, written to the log at startup. The app sets it |
 
 `ANTHROPIC_API_KEY` is read by the Claude CLI, not by the back end.
 
@@ -63,6 +65,34 @@ Copy-Item .env.example .env
 | `[busy]` | Fails with `agent_busy` |
 | `[long-step]` | Goes silent for 20 seconds, then finishes like the default turn |
 | `[cancelled]` | Ends as `cancelled` |
+
+### Logs
+
+The back end writes its log to `DATA_DIR/logs/` (`%LOCALAPPDATA%\CDK\logs` by default), one JSON record per line, in files named `cdk.<yyyy-MM-dd>.<n>.log`. The same records also go to the terminal in a readable form. In the Windows app, **Help > Open logs folder** opens the folder. `LOG_LEVEL` sets the least severe level written.
+
+What is logged:
+
+| Records | Fields that link them |
+|---|---|
+| `back-end starting`, with the app version, the data folder, and the settings | |
+| `Request completed` for each response: method, path without the query, status, and duration | `reqId` |
+| `Unexpected error`, with the error and its stack, for each `internal_error` | `reqId` |
+| `Turn queued`, `Turn started`, `Turn completed`, `Turn cancelled`, and `Turn failed` with its code and the technical detail the instructor never sees | `reqId` on `Turn queued`, then `projectId` and `turnId` |
+| `Build created` and `Build checked`, with the status, the QA result, and any error code, and `Build error` with the technical detail of a failed copy or QA gate run | `projectId`, `turnId`, and `buildId` |
+| `A CDK tool failed`, and `Agent process error output` for what the agent process writes to standard error | the tool, or the workspace |
+| `Instructor message` and `Agent reply`, with their text, at `debug` only | `turnId` and `messageId` |
+
+Every response carries its request ID in `X-Request-Id`, and an `internal_error` body repeats it as `error.requestId`, so a failed request can be found by searching the log for its ID. From there, `turnId` and `buildId` lead to the turn the request queued and the build the turn made.
+
+What never reaches the log:
+
+- **Request headers.** A request record holds only the fields above, so authorization, cookie, and launch-token headers are never written.
+- **Secrets in the settings.** The startup record lists the validated settings field by field, never the environment, and leaves out `LAUNCH_TOKEN`. `LOGGED_SETTINGS` in `config.ts` must say for every setting whether it is logged, so a new setting can't be logged by accident. `ANTHROPIC_API_KEY` and the agent's sign-in are never read into the settings.
+- **Message text**, below `debug`.
+
+The folder stays small. A new file starts each day and whenever the current one reaches 10 MB. Each rotation keeps the 13 newest older files, and files last written more than 14 days ago are deleted at startup and after each rotation. The folder holds at most about 14 files of 10 MB, plus one file for each day the back end starts without rotating.
+
+**Why pino.** The log uses [pino](https://getpino.io) with [pino-http](https://github.com/pinojs/pino-http), and [pino-pretty](https://github.com/pinojs/pino-pretty) from the pino project, and [pino-roll](https://github.com/mcollina/pino-roll) from pino's author. pino writes structured JSON records by default, and pino-http gives every request an ID, a child logger, and its duration. [winston](https://github.com/winstonjs/winston) is the main alternative, with `winston-daily-rotate-file` for rotation, but its JSON output, request logging (through `express-winston` or `morgan`), and request IDs would each need extra setup. Neither rotation package deletes old files by age when a desktop app starts each morning and closes each evening: pino-roll deletes only by count and only when it rotates. So `log-file.ts` also deletes files older than 14 days itself. The file and console streams run in-process rather than as pino transports in worker threads, so they work unchanged in the packaged app. Writes are synchronous, so a record is on disk before the desktop app can end the back end's process.
 
 ## Scripts
 
@@ -83,7 +113,9 @@ Copy-Item .env.example .env
 - `app.ts` — `createApp(deps)`: the Express app, without listening
 - `deps.ts` — the `Deps` type: one field per service, repository, and driver the app needs
 - `identity.ts` — the auth middleware; sets `req.user` to the local-mode stub user
-- `errors.ts` — the error classes and the error-handling middleware, mapping to the `{ error: { code, message, details? } }` envelope
+- `errors.ts` — the error classes and the error-handling middleware, mapping to the `{ error: { code, message, nextStep, details?, requestId? } }` envelope
+- `log.ts` — the back end's logger, `log`; `log-file.ts` sends it to the rotating log file and the terminal, and deletes expired files ([Logs](#logs))
+- `request-log.ts` — gives each request its ID and `X-Request-Id`, and logs each response
 - `config.ts` — loads `back-end/.env` and validates the settings in the environment
 - `db/` — the Drizzle schema, migrations, `openDb`, and the repositories
 - `routes/` — one file per resource's routes, each calling one service

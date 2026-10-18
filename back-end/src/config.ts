@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import type { TurnLimits } from './agent/AgentDriver.js';
 import { AGENT_DRIVERS, AGENT_EFFORTS, type AgentSettings } from './agent/drivers.js';
+import { LOG_LEVELS, type LogLevel } from './log.js';
 
 /** `back-end/`, resolved from this file's own location so it never depends on the working directory. */
 export const BACK_END_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -30,6 +31,29 @@ export interface Config {
   launchToken?: string;
   /** The built front end the back end serves on its own origin. Always absolute when set. */
   appDir?: string;
+  /** The least severe level written to the log. */
+  logLevel: LogLevel;
+  /** The Windows app's version. Unset when the back end runs outside the app. */
+  appVersion?: string;
+}
+
+/** Whether the startup log record shows each setting. Every `Config` field is listed, so a new setting needs a decision here. */
+const LOGGED_SETTINGS = {
+  port: true,
+  dataDir: true,
+  agent: true,
+  turnLimits: true,
+  appOrigin: true,
+  previewOrigin: true,
+  launchToken: false,
+  appDir: true,
+  logLevel: true,
+  appVersion: true,
+} satisfies Record<keyof Config, boolean>;
+
+/** The settings in `config` that the startup log record shows. */
+export function loggedSettings(config: Config): Partial<Config> {
+  return Object.fromEntries(Object.entries(config).filter(([name]) => LOGGED_SETTINGS[name as keyof Config]));
 }
 
 /** A setting is invalid or unusable. The message names the setting and what it must be. */
@@ -91,6 +115,8 @@ const settingsSchema = z.object({
     .default('http://127.0.0.1:5173'),
   LAUNCH_TOKEN: z.string().trim().min(1, 'must not be blank').optional(),
   APP_DIR: z.string().trim().min(1, 'must not be blank').optional(),
+  LOG_LEVEL: z.enum(LOG_LEVELS, { error: `must be one of ${LOG_LEVELS.join(', ')}` }).default('info'),
+  APP_VERSION: z.string().trim().min(1, 'must not be blank').optional(),
 });
 
 /** Loads `path` into `process.env`, keeping variables that are already set. A missing file is skipped. */
@@ -120,6 +146,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     previewOrigin: `http://${PREVIEW_HOSTNAME}:${settings.PORT}`,
     launchToken: settings.LAUNCH_TOKEN,
     appDir: settings.APP_DIR === undefined ? undefined : resolve(BACK_END_DIR, settings.APP_DIR),
+    logLevel: settings.LOG_LEVEL,
+    appVersion: settings.APP_VERSION,
   };
 }
 

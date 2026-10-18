@@ -67,6 +67,8 @@ The agent uses the Claude sign-in on the laptop, like the development setup. If 
 
 Projects and builds are stored in `%LOCALAPPDATA%\CDK`, the same folder the development back end uses, so the app and a development back end on the same laptop share projects. The window's own browser data is in `%APPDATA%\CDK`.
 
+When something goes wrong, choose **Help > Open logs folder** in the app and send the team the newest `cdk.<date>.<n>.log` file from `%LOCALAPPDATA%\CDK\logs`. The log holds no API keys or tokens and, at the default level, none of the instructor's messages. [The back end's README](back-end/README.md#logs) says what is logged.
+
 ### Update and uninstall
 
 To update, run the newer installer. It closes CDK if it is open, replaces the app, keeps your projects, and opens CDK again. This can take several minutes.

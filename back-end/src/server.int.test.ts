@@ -44,6 +44,14 @@ describe('server startup', () => {
     });
   }
 
+  /** Every record in the back end's log files, oldest first. */
+  async function logRecords(): Promise<Record<string, unknown>[]> {
+    const logsDir = join(dataDir, 'logs');
+    const files = (await fs.readdir(logsDir)).sort();
+    const text = (await Promise.all(files.map((name) => fs.readFile(join(logsDir, name), 'utf8')))).join('');
+    return text.trim().split('\n').map((line) => JSON.parse(line));
+  }
+
   function closeBlocker(): Promise<void> {
     return new Promise((resolve) => blocker!.close(() => resolve()));
   }
@@ -97,6 +105,9 @@ describe('server startup', () => {
 
     expect(run.code).toBe(1);
     expect(run.stderr).toContain(`Port ${port} on 127.0.0.1 is already in use`);
+    expect(await logRecords()).toContainEqual(
+      expect.objectContaining({ level: 60, msg: expect.stringContaining(`Port ${port} on 127.0.0.1 is already in use`) }),
+    );
     expect(storedTurn()).toMatchObject({ status: 'running', error: null });
     expect(storedBuild()).toMatchObject({ status: 'checking', error: null });
   }, 30_000);
@@ -105,11 +116,32 @@ describe('server startup', () => {
     const port = await listenOnFreePort();
     await closeBlocker();
 
-    const run = await runServer(port);
+    await runServer(port);
 
-    expect(run.stdout).toContain(`back-end listening on http://127.0.0.1:${port}`);
+    expect(await logRecords()).toContainEqual(expect.objectContaining({ msg: 'back-end listening', url: `http://127.0.0.1:${port}` }));
     expect(storedTurn()).toMatchObject({ status: 'failed', error: { code: 'interrupted' } });
     expect(storedBuild()).toMatchObject({ status: 'failed', error: { code: 'interrupted' } });
+  }, 30_000);
+
+  it('logs its data folder and settings at startup, and no secret from the environment', async () => {
+    const port = await listenOnFreePort();
+    await closeBlocker();
+    const secrets = {
+      ANTHROPIC_API_KEY: 'sk-ant-test-api-key',
+      ANTHROPIC_AUTH_TOKEN: 'test-auth-token',
+      CLAUDE_CODE_OAUTH_TOKEN: 'test-oauth-token',
+      LAUNCH_TOKEN: 'test-launch-token',
+    };
+
+    await runServer(port, { ...secrets, APP_VERSION: '0.2.0' });
+
+    const [startup] = await logRecords();
+    expect(startup).toMatchObject({
+      msg: 'back-end starting',
+      settings: { port, dataDir, appVersion: '0.2.0', logLevel: 'info', agent: { driver: 'claude' } },
+    });
+    const logText = JSON.stringify(await logRecords());
+    for (const value of Object.values(secrets)) expect(logText).not.toContain(value);
   }, 30_000);
 
   it('exits naming each invalid turn limit', async () => {

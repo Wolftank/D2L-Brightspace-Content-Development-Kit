@@ -25,7 +25,7 @@ export function messagesRouter(deps: Deps): Router {
 
   router.post('/projects/:projectId/messages', (req, res) => {
     const { content } = sendMessageBody.parse(req.body);
-    res.status(202).json(deps.turns.start(req.user.id, req.params.projectId, content));
+    res.status(202).json(deps.turns.start(req.user.id, req.params.projectId, content, req.log));
   });
 
   return router;

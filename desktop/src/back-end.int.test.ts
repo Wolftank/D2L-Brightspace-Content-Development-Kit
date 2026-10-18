@@ -13,6 +13,7 @@ import { createServer } from 'node:http';
 const agent = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
 writeFileSync(new URL('pids.json', import.meta.url), JSON.stringify({ backEnd: process.pid, agent: agent.pid, env: {
   PORT: process.env.PORT, APP_ORIGIN: process.env.APP_ORIGIN, APP_DIR: process.env.APP_DIR, LAUNCH_TOKEN: process.env.LAUNCH_TOKEN,
+  APP_VERSION: process.env.APP_VERSION,
 } }));
 const healthy = (req) => req.url === '/api/health' && req.headers.cookie === 'cdk_launch=' + process.env.LAUNCH_TOKEN;
 createServer((req, res) => res.writeHead(healthy(req) ? 200 : 404).end()).listen(Number(process.env.PORT), '127.0.0.1');
@@ -53,23 +54,35 @@ describe('startBackEnd', () => {
   }
 
   it('starts the back end on a free port as the app origin, serving the built front end and requiring a new launch token', async () => {
-    backEnd = await startBackEnd(process.execPath, await script(FAKE_SERVER), join(dir, 'front-end'));
+    backEnd = await startBackEnd(process.execPath, await script(FAKE_SERVER), join(dir, 'front-end'), '0.2.0');
     const { env } = JSON.parse(await readFile(join(dir, 'pids.json'), 'utf8'));
     const origin = new URL(backEnd.url).origin;
 
     expect(origin).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
     expect(backEnd.launchToken).toMatch(/^[\w-]{43}$/);
-    expect(env).toEqual({ PORT: new URL(origin).port, APP_ORIGIN: origin, APP_DIR: join(dir, 'front-end'), LAUNCH_TOKEN: backEnd.launchToken });
+    expect(env).toEqual({
+      PORT: new URL(origin).port,
+      APP_ORIGIN: origin,
+      APP_DIR: join(dir, 'front-end'),
+      LAUNCH_TOKEN: backEnd.launchToken,
+      APP_VERSION: '0.2.0',
+    });
     expect((await fetch(new URL('/api/health', origin), { headers: { cookie: `cdk_launch=${backEnd.launchToken}` } })).status).toBe(200);
 
     const first = backEnd.launchToken;
     await backEnd.stop();
-    backEnd = await startBackEnd(process.execPath, await script(FAKE_SERVER), join(dir, 'front-end'));
+    backEnd = await startBackEnd(process.execPath, await script(FAKE_SERVER), join(dir, 'front-end'), '0.2.0');
     expect(backEnd.launchToken).not.toBe(first);
   });
 
+  it('resolves logsDir with the folder the back end reports', async () => {
+    backEnd = await startBackEnd(process.execPath, await script(`${FAKE_SERVER}\nprocess.send({ logsDir: 'C:/CDK/logs' });`), dir, '0.2.0');
+
+    await expect(backEnd.logsDir).resolves.toBe('C:/CDK/logs');
+  });
+
   it("stops the back end's whole process tree, including the processes it started", async () => {
-    backEnd = await startBackEnd(process.execPath, await script(FAKE_SERVER), dir);
+    backEnd = await startBackEnd(process.execPath, await script(FAKE_SERVER), dir, '0.2.0');
     const pids = JSON.parse(await readFile(join(dir, 'pids.json'), 'utf8'));
     expect(isRunning(pids.agent)).toBe(true);
 
@@ -80,13 +93,13 @@ describe('startBackEnd', () => {
   });
 
   it('settles exited when the back end stops on its own', async () => {
-    backEnd = await startBackEnd(process.execPath, await script(`${FAKE_SERVER}\nsetTimeout(() => process.exit(0), 300);`), dir);
+    backEnd = await startBackEnd(process.execPath, await script(`${FAKE_SERVER}\nsetTimeout(() => process.exit(0), 300);`), dir, '0.2.0');
 
     await expect(backEnd.exited).resolves.toBeUndefined();
   });
 
   it('reports the error output of a back end that stops while starting', async () => {
-    const start = startBackEnd(process.execPath, await script("process.stderr.write('Invalid back-end settings: PORT: must be a whole number'); process.exitCode = 1;"), dir);
+    const start = startBackEnd(process.execPath, await script("process.stderr.write('Invalid back-end settings: PORT: must be a whole number'); process.exitCode = 1;"), dir, '0.2.0');
 
     await expect(start).rejects.toThrow(BackEndStartError);
     await expect(start).rejects.toThrow(/stopped while starting[\s\S]*PORT: must be a whole number/);
@@ -99,7 +112,7 @@ describe('startBackEnd', () => {
       setInterval(() => {}, 1000);
     `);
 
-    await expect(startBackEnd(process.execPath, path, dir, 2_000)).rejects.toThrow('did not start within 2 seconds');
+    await expect(startBackEnd(process.execPath, path, dir, '0.2.0', 2_000)).rejects.toThrow('did not start within 2 seconds');
     const { backEnd: pid } = JSON.parse(await readFile(join(dir, 'pids.json'), 'utf8'));
     expect(await waitUntilStopped(pid)).toBe(true);
   });

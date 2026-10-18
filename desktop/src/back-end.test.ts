@@ -8,8 +8,8 @@ describe('appOrigin', () => {
 });
 
 describe('backEndEnv', () => {
-  it("runs the app's executable as Node, serves the built front end as the app origin, and requires the launch token", () => {
-    expect(backEndEnv({ PATH: 'C:\Windows', USERPROFILE: 'C:\Users\pat' }, 51234, 'C:\CDK\resources\front-end', 'token-1')).toEqual({
+  it("runs the app's executable as Node, serves the built front end as the app origin, requires the launch token, and logs the app's version", () => {
+    expect(backEndEnv({ PATH: 'C:\Windows', USERPROFILE: 'C:\Users\pat' }, 51234, 'C:\CDK\resources\front-end', 'token-1', '0.2.0')).toEqual({
       PATH: 'C:\Windows',
       USERPROFILE: 'C:\Users\pat',
       ELECTRON_RUN_AS_NODE: '1',
@@ -17,13 +17,20 @@ describe('backEndEnv', () => {
       APP_ORIGIN: 'http://127.0.0.1:51234',
       APP_DIR: 'C:\CDK\resources\front-end',
       LAUNCH_TOKEN: 'token-1',
+      APP_VERSION: '0.2.0',
     });
   });
 
   it('replaces a port and origin already set in the environment', () => {
-    const env = backEndEnv({ PORT: '3000', APP_ORIGIN: 'http://127.0.0.1:5173', APP_DIR: 'elsewhere', LAUNCH_TOKEN: 'old' }, 51234, 'front-end', 'token-1');
+    const env = backEndEnv(
+      { PORT: '3000', APP_ORIGIN: 'http://127.0.0.1:5173', APP_DIR: 'elsewhere', LAUNCH_TOKEN: 'old', APP_VERSION: '0.1.0' },
+      51234,
+      'front-end',
+      'token-1',
+      '0.2.0',
+    );
 
-    expect(env).toMatchObject({ PORT: '51234', APP_ORIGIN: 'http://127.0.0.1:51234', APP_DIR: 'front-end', LAUNCH_TOKEN: 'token-1' });
+    expect(env).toMatchObject({ PORT: '51234', APP_ORIGIN: 'http://127.0.0.1:51234', APP_DIR: 'front-end', LAUNCH_TOKEN: 'token-1', APP_VERSION: '0.2.0' });
   });
 });
 

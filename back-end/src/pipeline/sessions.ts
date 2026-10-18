@@ -4,6 +4,7 @@ import { renderProjectInstructions } from '../agent/instructions.js';
 import type { ProjectsRepo } from '../db/projects.js';
 import { NotFound } from '../errors.js';
 import { KIT_DIR, SCORM_SKILLS } from '../kit.js';
+import { log } from '../log.js';
 import type { WorkspaceService } from '../services/workspaces.js';
 
 /** How long a session stays open after its last turn before the service closes it. */
@@ -93,7 +94,7 @@ export function createSessionService(deps: SessionServiceDeps): SessionService {
 
   function closeIdle(projectId: string): void {
     close(projectId).catch((err: unknown) => {
-      console.error(`Failed to close the idle session for project ${projectId}:`, err);
+      log.error({ projectId, err }, 'Failed to close the idle session');
     });
   }
 

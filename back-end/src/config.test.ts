@@ -16,6 +16,8 @@ describe('loadConfig', () => {
       appOrigin: 'http://127.0.0.1:5173',
       previewOrigin: 'http://preview.localhost:3000',
       appDir: undefined,
+      logLevel: 'info',
+      appVersion: undefined,
     });
   });
 
@@ -34,6 +36,8 @@ describe('loadConfig', () => {
       DATA_DIR: resolve('/data/cdk'),
       APP_ORIGIN: 'http://127.0.0.1:4000',
       APP_DIR: resolve('/app/front-end'),
+      LOG_LEVEL: 'debug',
+      APP_VERSION: '0.2.0',
     });
 
     expect(config).toEqual({
@@ -44,6 +48,8 @@ describe('loadConfig', () => {
       appOrigin: 'http://127.0.0.1:4000',
       previewOrigin: 'http://preview.localhost:4000',
       appDir: resolve('/app/front-end'),
+      logLevel: 'debug',
+      appVersion: '0.2.0',
     });
   });
 
@@ -95,6 +101,8 @@ describe('loadConfig', () => {
     ['APP_ORIGIN', 'http://127.0.0.1:5173/?x=1', 'must be an http or https origin with no path'],
     ['APP_ORIGIN', 'http://user:pass@127.0.0.1:5173', 'must be an http or https origin with no path'],
     ['APP_ORIGIN', 'http://preview.localhost:3000', 'must not be the preview origin'],
+    ['LOG_LEVEL', 'verbose', 'must be one of fatal, error, warn, info, debug, trace'],
+    ['APP_VERSION', '  ', 'must not be blank'],
   ])('rejects %s=%j, naming the setting and the rule', (name, value, rule) => {
     expect(() => loadConfig({ [name]: value })).toThrow(ConfigError);
     expect(() => loadConfig({ [name]: value })).toThrow(`${name}: ${rule}`);

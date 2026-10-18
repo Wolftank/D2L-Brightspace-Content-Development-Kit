@@ -10,12 +10,14 @@ import { healthRouter } from './routes/health.js';
 import { meRouter } from './routes/me.js';
 import { messagesRouter } from './routes/messages.js';
 import { projectsRouter } from './routes/projects.js';
+import { requestLog } from './request-log.js';
 
 /** Builds the app from `deps` without listening. Real deps come from
  *  `server.ts`; tests pass fakes. */
 export function createApp(deps: Deps): Express {
   const app = express();
 
+  app.use(requestLog());
   app.use(express.json());
   app.use(identity(deps));
   app.use(previewOrigin(deps));

@@ -62,7 +62,9 @@ The HTTP API is the request/response contract between the front end and the back
 
 All routes are under `/api`, JSON in and out. One auth middleware runs before every route and sets `req.user`: in local mode it returns the single OS user, in hosted mode it reads the cookie set by the OIDC login. Every query below the middleware filters on `req.user.id`, so hosted mode is a WHERE clause, and local mode is the same code with one instructor.
 
-Errors use one envelope: `{ "error": { "code": "...", "message": "...", "nextStep": "...", "details"?: {} } }` with the usual status codes. [Errors](#errors) lists each code. Lists are cursor-paginated (`?cursor=&limit=`).
+Errors use one envelope: `{ "error": { "code": "...", "message": "...", "nextStep": "...", "details"?: {}, "requestId"?: "..." } }` with the usual status codes. [Errors](#errors) lists each code. Lists are cursor-paginated (`?cursor=&limit=`).
+
+Every response from the back end, on the app origin and the preview origin, carries an `X-Request-Id` header: a new ID the back end gives each request and writes on that request's records in the server log. An `X-Request-Id` sent by the client is ignored.
 
 Only the app may call the API. A request gets `403 forbidden` when its `Host` is anything but the back end's loopback names (`127.0.0.1`, `localhost`, `[::1]`) or the app origin's host, which stops DNS rebinding, or when it carries an `Origin` other than the app origin, which covers other websites and build previews. In the desktop app it also needs the launch token: the app makes a new one at each launch, gives it to the back end as `LAUNCH_TOKEN`, and sets it on its window as the `cdk_launch` cookie, HttpOnly and SameSite=Strict. Every request from the window carries it, the event stream and downloads included, and other programs on the computer don't have it.
 
@@ -230,7 +232,7 @@ Not every message produces a build. A question gets an answer. A request to chan
 
 ## Errors
 
-Every error an instructor can see has a `code`, a `message` that says in plain language what happened, and one `nextStep`, the thing to do about it. Technical detail never goes in `message`; it goes to the server log. The front end decides how each next step is shown.
+Every error an instructor can see has a `code`, a `message` that says in plain language what happened, and one `nextStep`, the thing to do about it. Technical detail never goes in `message`; it goes to the server log ([Logs](#logs)). The front end decides how each next step is shown.
 
 | `nextStep` | What the instructor does |
 | --- | --- |
@@ -263,7 +265,7 @@ A failed turn's `error`, stored on the turn and sent in `turn.failed`. The runne
 
 ### API errors
 
-The envelope's `error`. `details`, where present, is for the front end's logic and is never shown to the instructor.
+The envelope's `error`. `details`, where present, is for the front end's logic and is never shown to the instructor. `requestId` is set on `internal_error` only: it repeats the response's `X-Request-Id`, so the request can be found in the server log.
 
 | Code | Status | Message | Next step |
 | --- | --- | --- | --- |
@@ -291,6 +293,17 @@ A failed build's `error`. A build that fails its QA check also carries the findi
 | `gate_crashed` | The QA check couldn't finish on this build. | `send_again` |
 | `gate_invalid_output` | The QA check couldn't finish on this build. | `send_again` |
 | `gate_inconsistent` | The QA check couldn't finish on this build. | `send_again` |
+
+## Logs
+
+The back end keeps one log, in `DATA_DIR/logs/`. Each record is one line of JSON, and records about the same request, turn, or build share its ID, so the technical detail behind an instructor's error can be traced:
+
+- A request's records carry its `reqId`, the ID sent back in `X-Request-Id`. A 500's body repeats it as `requestId` ([API errors](#api-errors)).
+- Sending a message logs `Turn queued` with the `reqId`, the `projectId`, and the `turnId`. The runner's records for that turn carry `projectId` and `turnId`, and a failed turn's record holds the technical detail that `message` leaves out.
+- The build service's records carry `projectId`, `turnId`, and `buildId`: the build's creation, its QA result, and the detail of a failed copy or QA gate run.
+- What the agent process writes to standard error, and a failing `cdk` tool, are logged at `warn` and `error`.
+
+`LOG_LEVEL` sets the least severe level written, `info` by default. The instructor's messages and the agent's replies are logged only at `debug`. No request header is logged, and the startup record lists the settings field by field, leaving out the launch token, so no key, token, or cookie reaches the log. A new file starts each day and at 10 MB, each rotation keeps 13 older files, and files older than 14 days are deleted. The desktop app's **Help > Open logs folder** opens the folder; the back end reports it to the app at startup. The back-end README's Logs section lists every record and explains the choice of pino.
 
 ## Tools
 
@@ -381,7 +394,7 @@ Layers 1 to 3 ship with V1. Layer 5 is a driver-internal decision for hosted mod
 
 **Agent state.** Each agent keeps transcripts, settings, and sign-in under its own configuration directory, listed per agent in [drivers.md](drivers.md). In local mode, leave the defaults so the instructor's existing sign-in is used. In hosted mode, point each at a directory owned by the service account so state has one known home; transcripts are already separated per project because every agent keys them by workspace.
 
-**Windows.** Local mode runs on the instructor's Windows machine. Keep the data directory short, `%LOCALAPPDATA%\CDK`, to stay under path-length limits. Copy builds with a retry, because the preview server or antivirus can hold a file open for a moment. The desktop app (`desktop/`) is how instructors run local mode: its Electron main process starts the back end with the app's own executable as Node, opens one window on the back end's origin, and when the window closes ends the back end's whole process tree, the agent included.
+**Windows.** Local mode runs on the instructor's Windows machine. Keep the data directory short, `%LOCALAPPDATA%\CDK`, to stay under path-length limits. Copy builds with a retry, because the preview server or antivirus can hold a file open for a moment. The desktop app (`desktop/`) is how instructors run local mode: its Electron main process starts the back end with the app's own executable as Node, opens one window on the back end's origin, and when the window closes ends the back end's whole process tree, the agent included. The app's **Help > Open logs folder** opens `%LOCALAPPDATA%\CDK\logs`, where the back end writes its log.
 
 ## Modes
 

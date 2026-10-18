@@ -196,7 +196,6 @@ describe('session service', () => {
   });
 
   it('recovers from an idle close that fails and reopens on the next acquire', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
     await service.acquire('p1');
     sessions[0]!.close.mockRejectedValueOnce(new Error('close failed'));
     service.release('p1');

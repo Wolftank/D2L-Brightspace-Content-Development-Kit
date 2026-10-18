@@ -5,6 +5,7 @@ import type { MessagesRepo } from '../db/messages.js';
 import type { Turn } from '../db/schema.js';
 import type { FinishedTurnDetails, FinishTurnInput, RunningTurn, TurnsRepo } from '../db/turns.js';
 import { WorkspaceMissing } from '../errors.js';
+import { log } from '../log.js';
 import type { BuildService } from '../services/builds.js';
 import type { WorkspaceService } from '../services/workspaces.js';
 import type { EventService } from './events.js';
@@ -80,8 +81,12 @@ export function createRunner(deps: RunnerDeps): Runner {
     deps.events.append({ projectId: turn.projectId, turnId: turn.id, kind, payload });
   }
 
+  function turnLog(turn: Turn) {
+    return log.child({ projectId: turn.projectId, turnId: turn.id });
+  }
+
   function failure(turn: Turn, code: RunnerErrorCode, detail: unknown, rest: FinishedTurnDetails = {}): FinishTurnInput {
-    console.error(`Turn ${turn.id} failed (${code}):`, detail);
+    turnLog(turn).error({ code, err: detail }, 'Turn failed');
     return { ...rest, status: 'failed', error: { code, ...TURN_ERRORS[code] } };
   }
 
@@ -186,7 +191,7 @@ export function createRunner(deps: RunnerDeps): Runner {
         deps.sessions.release(turn.projectId);
       } else {
         await deps.sessions.close(turn.projectId).catch((err: unknown) => {
-          console.error(`Failed to close the session for project ${turn.projectId}:`, err);
+          log.error({ projectId: turn.projectId, err }, 'Failed to close the session');
         });
       }
     }
@@ -203,8 +208,10 @@ export function createRunner(deps: RunnerDeps): Runner {
 
   async function run(turn: RunningTurn): Promise<FinishTurnInput> {
     append(turn, 'turn.started', { turnId: turn.id, startedAt: turn.startedAt });
+    turnLog(turn).info('Turn started');
     const startHash = await deps.workspaces.hashOutput(turn.projectId);
     const input = instructorInput(turn);
+    turnLog(turn).debug({ messageId: turn.messageId, text: input.text }, 'Instructor message');
     let replyId: string = randomUUID();
     const feed = statusFeed(turn);
     const { result, replies } = await converseInSession(turn, input, replyId, feed);
@@ -228,6 +235,7 @@ export function createRunner(deps: RunnerDeps): Runner {
         content: [{ type: 'text', text: streamedReply.text }],
         turnId: turn.id,
       });
+      turnLog(turn).debug({ messageId: replyId, text: streamedReply.text }, 'Agent reply');
       try {
         append(turn, 'message.completed', { message: reply });
       } catch (err) {
@@ -246,12 +254,14 @@ export function createRunner(deps: RunnerDeps): Runner {
     deps.turns.finish(turn.id, outcome);
     switch (outcome.status) {
       case 'completed':
+        turnLog(turn).info({ usage: outcome.usage }, 'Turn completed');
         append(turn, 'turn.completed', { turnId: turn.id, usage: outcome.usage });
         return;
       case 'failed':
         append(turn, 'turn.failed', { turnId: turn.id, error: outcome.error });
         return;
       case 'cancelled':
+        turnLog(turn).info({ usage: outcome.usage }, 'Turn cancelled');
         append(turn, 'turn.cancelled', { turnId: turn.id });
         return;
     }
@@ -270,13 +280,14 @@ export function createRunner(deps: RunnerDeps): Runner {
         }
         finish(turn, outcome);
       } catch (err) {
-        console.error(`Failed to run turn ${turnId}:`, err);
+        log.error({ turnId, err }, 'Failed to run the turn');
       }
     },
 
     failInterrupted() {
       const error = { code: 'interrupted', ...TURN_ERRORS.interrupted };
       for (const turn of deps.turns.failActive(error)) {
+        turnLog(turn).warn({ code: error.code }, 'Turn failed: the back end stopped while it was running');
         append(turn, 'turn.failed', { turnId: turn.id, error });
       }
     },

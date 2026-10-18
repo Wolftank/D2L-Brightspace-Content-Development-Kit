@@ -18,6 +18,8 @@ export interface BackEnd {
   url: string;
   /** The secret this launch's back end requires on every API request, in the `LAUNCH_COOKIE` cookie. */
   launchToken: string;
+  /** Resolves with the folder the back end writes its log to, once the back end reports it. */
+  logsDir: Promise<string>;
   /** Settles when the back end's process exits, for any reason. */
   exited: Promise<void>;
   /** Ends the back end's whole process tree: the back end, the agent, and every command either started. */
@@ -40,10 +42,18 @@ export function appOrigin(port: number): string {
 /**
  * The back end's environment: the app's own, plus the settings that make the
  * app's executable run it as Node, serve the built front end in `appDir` on
- * `port`, and require `launchToken` on every API request.
+ * `port`, require `launchToken` on every API request, and log `appVersion`.
  */
-export function backEndEnv(env: NodeJS.ProcessEnv, port: number, appDir: string, launchToken: string): NodeJS.ProcessEnv {
-  return { ...env, ELECTRON_RUN_AS_NODE: '1', PORT: String(port), APP_ORIGIN: appOrigin(port), APP_DIR: appDir, LAUNCH_TOKEN: launchToken };
+export function backEndEnv(env: NodeJS.ProcessEnv, port: number, appDir: string, launchToken: string, appVersion: string): NodeJS.ProcessEnv {
+  return {
+    ...env,
+    ELECTRON_RUN_AS_NODE: '1',
+    PORT: String(port),
+    APP_ORIGIN: appOrigin(port),
+    APP_DIR: appDir,
+    LAUNCH_TOKEN: launchToken,
+    APP_VERSION: appVersion,
+  };
 }
 
 /** The `Cookie` header that carries `launchToken`. */
@@ -77,7 +87,7 @@ function killTree(pid: number): Promise<void> {
 /**
  * Starts the back end at `server` with `runtime` as its Node runtime, and
  * resolves once it answers `/api/health`. In the app, `runtime` is the app's
- * own executable.
+ * own executable, and `appVersion` is the app's version.
  *
  * Raises:
  *   BackEndStartError: when the back end exits or stays unhealthy for
@@ -87,21 +97,29 @@ export async function startBackEnd(
   runtime: string,
   server: string,
   appDir: string,
+  appVersion: string,
   timeoutMs = STARTUP_TIMEOUT_MS,
 ): Promise<BackEnd> {
   const port = await freePort();
   const launchToken = randomBytes(32).toString('base64url');
   const child = spawn(runtime, [server], {
-    env: backEndEnv(process.env, port, appDir, launchToken),
-    stdio: ['ignore', 'ignore', 'pipe'],
+    env: backEndEnv(process.env, port, appDir, launchToken, appVersion),
+    stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
     detached: process.platform !== 'win32',
     windowsHide: true,
   });
 
   let errorOutput = '';
-  child.stderr.setEncoding('utf8');
-  child.stderr.on('data', (chunk: string) => {
+  const stderr = child.stderr!;
+  stderr.setEncoding('utf8');
+  stderr.on('data', (chunk: string) => {
     errorOutput = (errorOutput + chunk).slice(-ERROR_OUTPUT_CHARS);
+  });
+
+  const logsDir = new Promise<string>((resolve) => {
+    child.on('message', (message: { logsDir?: unknown }) => {
+      if (typeof message.logsDir === 'string') resolve(message.logsDir);
+    });
   });
 
   let running = true;
@@ -117,6 +135,7 @@ export async function startBackEnd(
   const backEnd: BackEnd = {
     url: `${appOrigin(port)}/`,
     launchToken,
+    logsDir,
     exited,
     async stop() {
       if (!running || child.pid === undefined) return;

@@ -19,6 +19,7 @@ import { createWorkspaceService, type WorkspaceService } from '../services/works
 import { createEventService, type EventService } from './events.js';
 import { createRunner, type Runner } from './runner.js';
 import { createSessionService, type SessionService } from './sessions.js';
+import { captureLog } from '../test/log.js';
 import type { Build as ApiBuild } from '@cdk/contract';
 
 /** A driver whose agent writes the request into out/notes.txt and replies "Done." */
@@ -273,5 +274,82 @@ describe('runner, end to end', () => {
     await runner.executeTurn('smaller');
 
     expect(turnRow('smaller')).toMatchObject({ status: 'completed', usage: { steps: 2 } });
+  });
+
+  describe('its log', () => {
+    const REQUEST = 'Create a practice set on cell division for my biology students.';
+
+    /** A driver whose agent ends every turn with `result` and no events. */
+    function endingDriver(result: TurnResult): Pick<AgentDriver, 'open'> {
+      return {
+        async open(req) {
+          return {
+            sessionId: req.sessionId,
+            send: () => ({ events: (async function* (): AsyncGenerator<AgentEvent> {})(), result: Promise.resolve(result) }),
+            async close() {},
+          };
+        },
+      };
+    }
+
+    it("logs a completed turn and its build under the project's and turn's IDs, with message text only at debug", async () => {
+      const info = captureLog('info');
+      const debug = captureLog('debug');
+      queueTurn('turn-1', 'queued', REQUEST);
+
+      await runner.executeTurn('turn-1');
+
+      const ids = { projectId, turnId: 'turn-1' };
+      expect(info.map(({ msg }) => msg)).toEqual(['Turn started', 'Build created', 'Build checked', 'Turn completed']);
+      expect(info).toEqual([
+        expect.objectContaining({ ...ids, level: 30, msg: 'Turn started' }),
+        expect.objectContaining({ ...ids, buildId: expect.any(String), version: 1, msg: 'Build created' }),
+        expect.objectContaining({ ...ids, buildId: expect.any(String), status: expect.any(String), qaPassed: expect.any(Boolean), msg: 'Build checked' }),
+        expect.objectContaining({ ...ids, usage: { steps: 2 }, msg: 'Turn completed' }),
+      ]);
+      expect(JSON.stringify(info)).not.toContain(REQUEST);
+      expect(JSON.stringify(info)).not.toContain('Done.');
+      expect(debug).toContainEqual(expect.objectContaining({ ...ids, level: 20, msg: 'Instructor message', text: REQUEST }));
+      expect(debug).toContainEqual(expect.objectContaining({ ...ids, level: 20, msg: 'Agent reply', text: 'Done.' }));
+    });
+
+    it('logs a failed turn with its code and the technical detail the instructor does not see', async () => {
+      const records = captureLog('info');
+      useAgent(steppingDriver(), { maxSteps: 2, maxBudgetUsd: 10 });
+      queueTurn('limited', 'queued', 'Take 3 steps');
+
+      await runner.executeTurn('limited');
+
+      expect(records).toContainEqual(
+        expect.objectContaining({
+          level: 50,
+          msg: 'Turn failed',
+          projectId,
+          turnId: 'limited',
+          code: 'max_steps_exceeded',
+          err: 'The SDK stopped the turn after 2 steps',
+        }),
+      );
+    });
+
+    it('logs a cancelled turn', async () => {
+      const records = captureLog('info');
+      useAgent(endingDriver({ status: 'cancelled', sessionId: null, text: '', usage: { steps: 1 } }), { maxSteps: 60, maxBudgetUsd: 10 });
+      queueTurn('stopped');
+
+      await runner.executeTurn('stopped');
+
+      expect(records.map(({ msg }) => msg)).toEqual(['Turn started', 'Turn cancelled']);
+      expect(records.at(-1)).toMatchObject({ projectId, turnId: 'stopped', usage: { steps: 1 } });
+    });
+
+    it('logs each turn failed at startup because the back end stopped while it ran', () => {
+      const records = captureLog('info');
+      queueTurn('running', 'running');
+
+      runner.failInterrupted();
+
+      expect(records).toEqual([expect.objectContaining({ level: 40, projectId, turnId: 'running', code: 'interrupted' })]);
+    });
   });
 });

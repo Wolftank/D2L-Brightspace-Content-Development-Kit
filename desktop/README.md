@@ -5,7 +5,8 @@ The Windows app. Its Electron main process starts the back end, opens the CDK wi
 ## How it runs
 
 - `src/main.ts` takes the single-instance lock, starts the back end, and opens the window at the back end's own origin. A second launch restores and focuses the open window. Closing the window quits the app.
-- `src/back-end.ts` starts `cdk-back-end/dist/server.js` with the app's own executable as Node (`ELECTRON_RUN_AS_NODE=1`), on a port the OS picks, with `APP_ORIGIN=http://127.0.0.1:<port>` and `APP_DIR` set to the built front end. Previews are on `http://preview.localhost:<port>`. It waits for `/api/health` and reports the back end's error output if it stops while starting. `stop()` ends the back end with `taskkill /T /F`, which also ends the agent and every command either started.
+- `src/menu.ts` is the app's only menu: **Help > Open logs folder** opens the back end's logs folder in File Explorer with `shell.openPath`.
+- `src/back-end.ts` starts `cdk-back-end/dist/server.js` with the app's own executable as Node (`ELECTRON_RUN_AS_NODE=1`), on a port the OS picks, with `APP_ORIGIN=http://127.0.0.1:<port>` and `APP_DIR` set to the built front end. Previews are on `http://preview.localhost:<port>`. It passes the app's version as `APP_VERSION`, for the back end's startup log record. It waits for `/api/health` and reports the back end's error output if it stops while starting. Once its log file is open, the back end sends the logs folder back over a Node IPC channel, so the data folder's default stays in the back end's `config.ts` alone. `stop()` ends the back end with `taskkill /T /F`, which also ends the agent and every command either started.
 - If the back end stops while the window is open, the app says so and quits. The next launch marks any request that was running as interrupted.
 
 ## Packaging
@@ -30,7 +31,7 @@ There is no development mode that runs Electron against the repository: that wou
 
 - `npm run build` — compile `src/` to `dist/`
 - `npm run package` — build the installer and `release/win-unpacked/` from the already built packages
-- `npm run test:e2e` — smoke test the packaged app in `release/win-unpacked/` with Playwright: the back end on the app's own runtime, then the whole app from launch to close. Uses temporary data folders, never makes agent calls
+- `npm run test:e2e` — smoke test the packaged app in `release/win-unpacked/` with Playwright: the back end on the app's own runtime and the log file it writes, then the whole app from launch to close. Uses temporary data folders, never makes agent calls
 - `npm test` — unit (`*.test.ts`) and integration (`*.int.test.ts`) tests, with the back end's suffix rules
 - `npm run lint` — ESLint
 - `npm run typecheck` — `tsc --noEmit`

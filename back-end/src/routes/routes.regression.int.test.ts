@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { text } from 'node:stream/consumers';
 import type { ChatMessage } from '@cdk/contract';
 import request from 'supertest';
-import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fromBufferPromise } from 'yauzl';
 import type { AgentDriver, AgentEvent, TurnResult } from '../agent/AgentDriver.js';
 import { createApp } from '../app.js';
@@ -27,6 +27,7 @@ import { createMessageService } from '../services/messages.js';
 import { createProjectService } from '../services/projects.js';
 import { createTurnService } from '../services/turns.js';
 import { createWorkspaceService, type WorkspaceService } from '../services/workspaces.js';
+import { captureLog, type LogRecord } from '../test/log.js';
 
 /**
  * R8 (#68): the project, message and build routes, including every error
@@ -102,7 +103,7 @@ describe('R8 regression: project, message and build routes', () => {
   let sessions: SessionService;
   let agent: ReturnType<typeof fakeAgent>;
   let deps: Deps;
-  let consoleError: MockInstance<typeof console.error>;
+  let logRecords: LogRecord[];
 
   function app() {
     return createApp(deps);
@@ -159,7 +160,7 @@ describe('R8 regression: project, message and build routes', () => {
   }
 
   beforeEach(async () => {
-    consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    logRecords = captureLog();
     dataDir = await fs.mkdtemp(join(tmpdir(), 'cdk-r8-'));
     db = testDb();
     projectsRepo = createProjectsRepo(db);
@@ -308,7 +309,37 @@ describe('R8 regression: project, message and build routes', () => {
       expect(failed?.payload).toEqual({ turnId: turn.id, error: WORKSPACE_MISSING_ERROR });
       await expect(fs.access(workspaceDir)).rejects.toThrow();
       expect(await latestBuild(projectId)).toBeUndefined();
-      expect(consoleError).toHaveBeenCalledWith(`Turn ${turn.id} failed (workspace_missing):`, expect.anything());
+      expect(logRecords).toContainEqual(expect.objectContaining({ msg: 'Turn failed', turnId: turn.id, code: 'workspace_missing' }));
+    });
+
+    it('links a request, the turn it queued, and the build the turn made by their IDs in the log', async () => {
+      const projectId = await createProject();
+
+      const res = await request(app())
+        .post(`/api/projects/${projectId}/messages`)
+        .send({ content: [{ type: 'text', text: 'Create a practice set on cell division.' }] });
+      const requestId = res.headers['x-request-id'];
+      const turnId = res.body.turn.id;
+      await waitForTurn(projectId, turnId, (status) => status === 'completed');
+      const buildId = (await latestBuild(projectId)).id;
+
+      expect(logRecords.filter((record) => record.reqId === requestId)).toEqual([
+        expect.objectContaining({ msg: 'Turn queued', projectId, turnId }),
+        expect.objectContaining({ msg: 'Request completed', method: 'POST', path: `/api/projects/${projectId}/messages`, status: 202 }),
+      ]);
+      expect(logRecords.filter((record) => record.turnId === turnId).map(({ msg }) => msg)).toEqual([
+        'Turn queued',
+        'Turn started',
+        'Instructor message',
+        'Agent reply',
+        'Build created',
+        'Build checked',
+        'Turn completed',
+      ]);
+      expect(logRecords.filter((record) => record.buildId === buildId)).toEqual([
+        expect.objectContaining({ msg: 'Build created', projectId, turnId }),
+        expect.objectContaining({ msg: 'Build checked', projectId, turnId }),
+      ]);
     });
 
     it("lists messages oldest first, each instructor message carrying its turn's status and error, paging with nextCursor", async () => {

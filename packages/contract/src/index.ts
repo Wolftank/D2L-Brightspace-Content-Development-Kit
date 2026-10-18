@@ -173,6 +173,8 @@ export interface ApiErrorBody {
     message: string;
     nextStep: NextStep;
     details?: unknown;
+    /** The response's `X-Request-Id`, on `internal_error` only, to find the request in the server log. */
+    requestId?: string;
   };
 }
 

@@ -35,7 +35,6 @@ describe('CDK tools', () => {
   let db: ReturnType<typeof testDb>;
 
   beforeEach(async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
     dataDir = await fs.mkdtemp(join(tmpdir(), 'cdk-tools-'));
     db = testDb();
     projects = createProjectsRepo(db);

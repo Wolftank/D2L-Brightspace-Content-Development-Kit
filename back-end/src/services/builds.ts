@@ -5,11 +5,13 @@ import type { Readable } from 'node:stream';
 import { ZipArchive } from 'archiver';
 import { z } from 'zod';
 import type { Build as ApiBuild, BuildError, QaReport } from '@cdk/contract';
+import type { Logger } from 'pino';
 import type { BuildsRepo, FinishBuildInput } from '../db/builds.js';
 import type { ProjectsRepo } from '../db/projects.js';
 import type { Build, Project } from '../db/schema.js';
 import { BuildFailed, BuildIncomplete, BuildNotFound, BuildNotReady } from '../errors.js';
 import { KIT_DIR } from '../kit.js';
+import { log } from '../log.js';
 import type { EventService } from '../pipeline/events.js';
 import type { WorkspaceService } from './workspaces.js';
 
@@ -149,13 +151,13 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
     });
   }
 
-  /** Runs the QA gate on `dir` and reads its report. */
-  async function inspect(dir: string): Promise<OutputCheck> {
+  /** Runs the QA gate on `dir` and reads its report. The technical detail of a gate failure goes to `logger`. */
+  async function inspect(dir: string, logger: Logger): Promise<OutputCheck> {
     const run = await runGate(dir);
     const detail = run.failure ?? firstLine(run.stderr) ?? `exited with code ${run.exitCode}`;
 
     if (run.exitCode !== 0 && run.exitCode !== 1) {
-      return { error: loggedError('gate_crashed', `The QA gate did not finish: ${detail}`) };
+      return { error: loggedError(logger, 'gate_crashed', `The QA gate did not finish: ${detail}`) };
     }
 
     let output: unknown;
@@ -163,13 +165,13 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
       output = JSON.parse(run.stdout);
     } catch {
       return run.exitCode === 0
-        ? { error: loggedError('gate_invalid_output', 'The QA gate did not print a JSON report') }
-        : { error: loggedError('gate_crashed', `The QA gate did not finish: ${detail}`) };
+        ? { error: loggedError(logger, 'gate_invalid_output', 'The QA gate did not print a JSON report') }
+        : { error: loggedError(logger, 'gate_crashed', `The QA gate did not finish: ${detail}`) };
     }
 
     const parsed = gateReportSchema.safeParse(output);
     if (!parsed.success) {
-      return { error: loggedError('gate_invalid_output', 'The QA gate printed a report in an unexpected shape') };
+      return { error: loggedError(logger, 'gate_invalid_output', 'The QA gate printed a report in an unexpected shape') };
     }
 
     const { pass, findings } = parsed.data;
@@ -177,6 +179,7 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
     if (pass !== (run.exitCode === 0) || pass !== (errorCount === 0)) {
       return {
         error: loggedError(
+          logger,
           'gate_inconsistent',
           `The QA gate's report (pass: ${pass}, ${errorCount} error(s)) contradicts its exit code ${run.exitCode}`,
         ),
@@ -186,8 +189,8 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
   }
 
   /** Checks a build's copy of the output and stores the QA report beside it. */
-  async function check(buildDir: string): Promise<Verdict> {
-    const result = await inspect(buildDir);
+  async function check(buildDir: string, logger: Logger): Promise<Verdict> {
+    const result = await inspect(buildDir, logger);
     if ('error' in result) return { status: 'failed', qa: null, error: result.error };
 
     await fs.writeFile(join(buildDir, QA_REPORT_FILE), JSON.stringify(result.qa, null, 2));
@@ -199,9 +202,9 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
   async function checkOutput(projectId: string): Promise<OutputCheck> {
     const outDir = join(await deps.workspaces.locate(projectId), 'out');
     try {
-      return await inspect(outDir);
+      return await inspect(outDir, log.child({ projectId }));
     } catch (err) {
-      return { error: loggedError('gate_crashed', `The QA gate could not run: ${(err as Error).message}`) };
+      return { error: loggedError(log.child({ projectId }), 'gate_crashed', `The QA gate could not run: ${(err as Error).message}`) };
     }
   }
 
@@ -215,20 +218,20 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
     return { build, project };
   }
 
-  async function copyAndCheck(projectId: string, version: number): Promise<FinishBuildInput> {
+  async function copyAndCheck(projectId: string, version: number, logger: Logger): Promise<FinishBuildInput> {
     let buildDir: string;
     let outputHash: string;
     try {
       outputHash = await deps.workspaces.hashOutput(projectId);
       buildDir = await deps.workspaces.copyOutput(projectId, String(version));
     } catch (err) {
-      const verdict = failure('copy_failed', `The output could not be copied into the build: ${(err as Error).message}`);
+      const verdict = failure(logger, 'copy_failed', `The output could not be copied into the build: ${(err as Error).message}`);
       return { ...verdict, outputHash: null };
     }
     try {
-      return { ...(await check(buildDir)), outputHash };
+      return { ...(await check(buildDir, logger)), outputHash };
     } catch (err) {
-      return { ...failure('gate_crashed', `The QA gate could not run: ${(err as Error).message}`), outputHash };
+      return { ...failure(logger, 'gate_crashed', `The QA gate could not run: ${(err as Error).message}`), outputHash };
     }
   }
 
@@ -238,9 +241,15 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
     const version = deps.builds.nextVersion(projectId);
     const build = deps.builds.create({ projectId, version, avenue: AVENUE, turnId });
     deps.events.append({ projectId, turnId, kind: 'build.created', payload: { build: toApi(build) } });
+    const buildLog = log.child({ projectId, turnId, buildId: build.id });
+    buildLog.info({ version }, 'Build created');
 
-    const result = await copyAndCheck(projectId, version);
+    const result = await copyAndCheck(projectId, version, buildLog);
     const finished = toApi(deps.builds.finish(build.id, result));
+    buildLog.info(
+      { status: finished.status, qaPassed: finished.qa?.passed, findings: finished.qa?.findings.length, errorCode: finished.error?.code },
+      'Build checked',
+    );
     deps.events.append({ projectId, turnId, kind: 'build.updated', payload: { build: finished } });
     return finished;
   }
@@ -352,15 +361,15 @@ export function downloadFilename(title: string, version: number): string {
   return `${slug || 'build'}-v${version}.zip`;
 }
 
-/** `code`'s plain error. The technical `detail` goes to the server log. */
-function loggedError(code: BuildErrorCode, detail: string): BuildError {
-  console.error(`Build service error (${code}): ${detail}`);
+/** `code`'s plain error. The technical `detail` goes to `logger`. */
+function loggedError(logger: Logger, code: BuildErrorCode, detail: string): BuildError {
+  logger.error({ code, detail }, 'Build error');
   return buildError(code);
 }
 
-/** A failed build with `code`'s plain error. The technical `detail` goes to the server log. */
-function failure(code: BuildErrorCode, detail: string): Verdict {
-  return { status: 'failed', qa: null, error: loggedError(code, detail) };
+/** A failed build with `code`'s plain error. The technical `detail` goes to `logger`. */
+function failure(logger: Logger, code: BuildErrorCode, detail: string): Verdict {
+  return { status: 'failed', qa: null, error: loggedError(logger, code, detail) };
 }
 
 function firstLine(text: string): string | undefined {

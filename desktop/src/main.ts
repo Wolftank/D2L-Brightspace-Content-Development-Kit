@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { app, BrowserWindow, dialog, Menu, shell } from 'electron';
 import { type BackEnd, LAUNCH_COOKIE, startBackEnd } from './back-end.js';
 import { isGuideUrl } from './help-links.js';
+import { appMenu } from './menu.js';
 
 /** The compiled back end, from the `cdk-back-end` workspace packaged with the app. */
 const SERVER = createRequire(import.meta.url).resolve('cdk-back-end/dist/server.js');
@@ -22,7 +23,8 @@ function showWindow(): void {
 }
 
 async function open(): Promise<void> {
-  backEnd = await startBackEnd(process.execPath, SERVER, APP_DIR);
+  backEnd = await startBackEnd(process.execPath, SERVER, APP_DIR, app.getVersion());
+  Menu.setApplicationMenu(appMenu(backEnd.logsDir));
   void backEnd.exited.then(() => {
     if (quitting) return;
     dialog.showErrorBox('CDK stopped', 'The CDK back end stopped unexpectedly. Open CDK again to continue.');

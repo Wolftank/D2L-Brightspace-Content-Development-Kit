@@ -69,7 +69,6 @@ describe('POST /api/projects/:projectId/messages', () => {
   }
 
   beforeEach(() => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
     db = testDb();
     projectsRepo = createProjectsRepo(db);
     turnsRepo = createTurnsRepo(db);
