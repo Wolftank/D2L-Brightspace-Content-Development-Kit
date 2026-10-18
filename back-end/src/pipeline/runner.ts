@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { EventKind, EventPayloads, TurnError } from '@cdk/contract';
+import type { EventKind, EventPayloads, ProgressCategory, TurnError } from '@cdk/contract';
 import type { AgentEvent, AgentSession, TurnErrorCode, TurnInput, TurnLimits, TurnResult } from '../agent/AgentDriver.js';
 import type { MessagesRepo } from '../db/messages.js';
 import type { Turn } from '../db/schema.js';
@@ -58,8 +58,9 @@ function thrownCode(err: unknown): RunnerErrorCode {
 }
 
 interface StatusFeed {
-  status(text: string): void;
-  toolStarted(callId: string, name: string, summary: string): void;
+  replyStarted(): void;
+  status(text: string, category: ProgressCategory): void;
+  toolStarted(callId: string, name: string, summary: string, category: Exclude<ProgressCategory, 'thinking'>): void;
   toolFinished(callId: string, ok: boolean): void;
   /** Finishes every started call that has no `tool.finished` with `ok: false`. */
   failUnfinished(): void;
@@ -102,7 +103,7 @@ export function createRunner(deps: RunnerDeps): Runner {
    * stored.
    */
   function statusFeed(turn: Turn): StatusFeed {
-    const unfinishedCalls = new Map<string, string>();
+    const unfinishedCalls = new Map<string, { summary: string; category: Exclude<ProgressCategory, 'thinking'> }>();
     let latestLine: string | undefined;
 
     function line<K extends 'turn.status' | 'tool.started' | 'tool.finished'>(kind: K, payload: EventPayloads[K], text: string): void {
@@ -111,19 +112,20 @@ export function createRunner(deps: RunnerDeps): Runner {
     }
 
     function toolFinished(callId: string, ok: boolean): void {
-      const summary = unfinishedCalls.get(callId) ?? 'Using a tool';
+      const { summary, category } = unfinishedCalls.get(callId) ?? { summary: 'Using a tool', category: 'other' as const };
       unfinishedCalls.delete(callId);
       const text = ok ? summary : `Failed: ${summary}`;
-      line('tool.finished', { turnId: turn.id, callId, ok, summary: text }, text);
+      line('tool.finished', { turnId: turn.id, callId, ok, summary: text, category }, text);
     }
 
     return {
-      status(text) {
-        if (text !== latestLine) line('turn.status', { turnId: turn.id, text }, text);
+      replyStarted() { latestLine = undefined; },
+      status(text, category) {
+        if (text !== latestLine) line('turn.status', { turnId: turn.id, text, category }, text);
       },
-      toolStarted(callId, name, summary) {
-        unfinishedCalls.set(callId, summary);
-        line('tool.started', { turnId: turn.id, callId, name, summary }, summary);
+      toolStarted(callId, name, summary, category) {
+        unfinishedCalls.set(callId, { summary, category });
+        line('tool.started', { turnId: turn.id, callId, name, summary, category }, summary);
       },
       toolFinished,
       failUnfinished() {
@@ -137,17 +139,20 @@ export function createRunner(deps: RunnerDeps): Runner {
       case 'message_start':
         return;
       case 'text_delta':
+        feed.replyStarted();
         append(turn, 'message.delta', { turnId: turn.id, messageId: replyId, text: event.text });
         return;
       case 'tool_start':
-        feed.toolStarted(event.callId, event.name, event.summary);
+        feed.toolStarted(event.callId, event.name, event.summary, event.category);
         return;
       case 'tool_end':
         feed.toolFinished(event.callId, event.ok);
         return;
       case 'status':
+        feed.status(event.text, event.category);
+        return;
       case 'notice':
-        feed.status(event.text);
+        feed.status(event.text, 'other');
         return;
     }
   }
@@ -197,7 +202,7 @@ export function createRunner(deps: RunnerDeps): Runner {
     const outputHash = await deps.workspaces.hashOutput(turn.projectId);
     const latest = deps.builds.latest(turn.projectId);
     if (outputHash === (latest ? latest.outputHash : startHash)) return;
-    feed.status('Checking your build');
+    feed.status('Checking your build', 'checking');
     await deps.builds.create(turn.projectId, turn.id);
   }
 

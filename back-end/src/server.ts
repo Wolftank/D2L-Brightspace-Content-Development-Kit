@@ -57,6 +57,7 @@ function buildDeps(cfg: Config): { deps: Deps; runner: Runner; builds: BuildServ
     events,
     driver,
     preview: { origin: cfg.previewOrigin, appOrigin: cfg.appOrigin },
+    launchToken: cfg.launchToken,
     appDir: cfg.appDir,
   };
   return { deps, runner, builds };
@@ -87,7 +88,10 @@ async function start(): Promise<void> {
     process.exit(1);
   }
 
-  await startLogging(join(cfg.dataDir, 'logs'), cfg.logLevel);
+  const logsDir = join(cfg.dataDir, 'logs');
+  await startLogging(logsDir, cfg.logLevel);
+  // The desktop app opens this folder from its menu.
+  process.send?.({ logsDir });
   process.on('uncaughtExceptionMonitor', (err) => log.fatal({ err }, 'The back end crashed'));
   log.info({ settings: loggedSettings(cfg) }, 'back-end starting');
 

@@ -125,7 +125,7 @@ describe('runner', () => {
     const { session } = scriptedSession(
       [
         { kind: 'text_delta', text: 'Reading the guide. ' },
-        { kind: 'tool_start', callId: 'call-1', name: 'Write', summary: 'Writing index.html' },
+        { kind: 'tool_start', callId: 'call-1', name: 'Write', summary: 'Writing index.html', category: 'writing' as const },
         { kind: 'tool_end', callId: 'call-1', ok: true },
         { kind: 'notice', text: 'The agent was denied permission to use WebFetch.' },
       ],
@@ -154,11 +154,11 @@ describe('runner', () => {
     const replyId = replies[0]!.id;
     expect(payloadsOf('turn.started')).toEqual([{ turnId: 'turn-1', startedAt: 2 }]);
     expect(payloadsOf('message.delta')).toEqual([{ turnId: 'turn-1', messageId: replyId, text: 'Reading the guide. ' }]);
-    expect(payloadsOf('tool.started')).toEqual([{ turnId: 'turn-1', callId: 'call-1', name: 'Write', summary: 'Writing index.html' }]);
-    expect(payloadsOf('tool.finished')).toEqual([{ turnId: 'turn-1', callId: 'call-1', ok: true, summary: 'Writing index.html' }]);
+    expect(payloadsOf('tool.started')).toEqual([{ turnId: 'turn-1', callId: 'call-1', name: 'Write', summary: 'Writing index.html', category: 'writing' }]);
+    expect(payloadsOf('tool.finished')).toEqual([{ turnId: 'turn-1', callId: 'call-1', ok: true, summary: 'Writing index.html', category: 'writing' }]);
     expect(payloadsOf('turn.status')).toEqual([
-      { turnId: 'turn-1', text: 'The agent was denied permission to use WebFetch.' },
-      { turnId: 'turn-1', text: 'Checking your build' },
+      { turnId: 'turn-1', text: 'The agent was denied permission to use WebFetch.', category: 'other' },
+      { turnId: 'turn-1', text: 'Checking your build', category: 'checking' },
     ]);
     expect(replies[0]).toMatchObject({ role: 'agent', content: [{ type: 'text', text: COMPLETED.text }], turnId: 'turn-1' });
 
@@ -172,7 +172,7 @@ describe('runner', () => {
   it('marks a failed tool call in its finished summary', async () => {
     const { session } = scriptedSession(
       [
-        { kind: 'tool_start', callId: 'call-1', name: 'PowerShell', summary: 'Run the QA check' },
+        { kind: 'tool_start', callId: 'call-1', name: 'PowerShell', summary: 'Run the QA check', category: 'checking' as const },
         { kind: 'tool_end', callId: 'call-1', ok: false },
       ],
       COMPLETED,
@@ -182,19 +182,21 @@ describe('runner', () => {
     await runner.executeTurn('turn-1');
 
     expect(payloadsOf('tool.finished')).toEqual([
-      { turnId: 'turn-1', callId: 'call-1', ok: false, summary: 'Failed: Run the QA check' },
+      { turnId: 'turn-1', callId: 'call-1', ok: false, summary: 'Failed: Run the QA check', category: 'checking' },
     ]);
   });
 
   it("reports the agent's steps as status lines, never storing one that repeats the latest line", async () => {
     const { session } = scriptedSession(
       [
-        { kind: 'status', text: 'Thinking…' },
-        { kind: 'status', text: 'Thinking…' },
-        { kind: 'tool_start', callId: 'call-1', name: 'Write', summary: 'Writing index.html' },
-        { kind: 'status', text: 'Writing index.html' },
+        { kind: 'status', text: 'Thinking…', category: 'thinking' as const },
+        { kind: 'status', text: 'Thinking…', category: 'thinking' as const },
+        { kind: 'tool_start', callId: 'call-1', name: 'Write', summary: 'Writing index.html', category: 'writing' as const },
+        { kind: 'status', text: 'Writing index.html', category: 'other' as const },
         { kind: 'tool_end', callId: 'call-1', ok: true },
-        { kind: 'status', text: 'Thinking…' },
+        { kind: 'status', text: 'Thinking…', category: 'thinking' as const },
+        { kind: 'text_delta', text: 'I will make another change.' },
+        { kind: 'status', text: 'Thinking…', category: 'thinking' as const },
         { kind: 'notice', text: 'The agent was denied permission to use WebFetch.' },
         { kind: 'notice', text: 'The agent was denied permission to use WebFetch.' },
       ],
@@ -213,6 +215,7 @@ describe('runner', () => {
       'tool.started: Writing index.html',
       'tool.finished: Writing index.html',
       'turn.status: Thinking…',
+      'turn.status: Thinking…',
       'turn.status: The agent was denied permission to use WebFetch.',
       'turn.status: Checking your build',
     ]);
@@ -225,8 +228,8 @@ describe('runner', () => {
   ] as const)('fails a tool call that never finishes when a %s turn ends', async (_status, result, endKind) => {
     const { session } = scriptedSession(
       [
-        { kind: 'tool_start', callId: 'call-1', name: 'Write', summary: 'Writing index.html' },
-        { kind: 'tool_start', callId: 'call-2', name: 'Read', summary: 'Reading SKILL.md' },
+        { kind: 'tool_start', callId: 'call-1', name: 'Write', summary: 'Writing index.html', category: 'writing' as const },
+        { kind: 'tool_start', callId: 'call-2', name: 'Read', summary: 'Reading SKILL.md', category: 'reading' as const },
         { kind: 'tool_end', callId: 'call-2', ok: true },
       ],
       result,
@@ -237,8 +240,8 @@ describe('runner', () => {
 
     expect(payloadsOf('tool.started')).toHaveLength(2);
     expect(payloadsOf('tool.finished')).toEqual([
-      { turnId: 'turn-1', callId: 'call-2', ok: true, summary: 'Reading SKILL.md' },
-      { turnId: 'turn-1', callId: 'call-1', ok: false, summary: 'Failed: Writing index.html' },
+      { turnId: 'turn-1', callId: 'call-2', ok: true, summary: 'Reading SKILL.md', category: 'reading' },
+      { turnId: 'turn-1', callId: 'call-1', ok: false, summary: 'Failed: Writing index.html', category: 'writing' },
     ]);
     expect(kinds().at(-1)).toBe(endKind);
   });
@@ -279,7 +282,7 @@ describe('runner', () => {
       { kind: 'message_start' },
       { kind: 'text_delta', text: 'I will ' },
       { kind: 'text_delta', text: 'edit the activity.' },
-      { kind: 'tool_start', callId: 'edit', name: 'Edit', summary: 'Editing index.html' },
+      { kind: 'tool_start', callId: 'edit', name: 'Edit', summary: 'Editing index.html', category: 'writing' as const },
       { kind: 'tool_end', callId: 'edit', ok: true },
       { kind: 'message_start' },
       { kind: 'text_delta', text: 'The activity is ready.' },
@@ -304,7 +307,7 @@ describe('runner', () => {
     const { session } = scriptedSession([
       { kind: 'message_start' },
       { kind: 'message_start' },
-      { kind: 'tool_start', callId: 'read', name: 'Read', summary: 'Reading index.html' },
+      { kind: 'tool_start', callId: 'read', name: 'Read', summary: 'Reading index.html', category: 'reading' as const },
       { kind: 'tool_end', callId: 'read', ok: true },
       { kind: 'message_start' },
       { kind: 'text_delta', text: 'Ready.' },

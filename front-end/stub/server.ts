@@ -1,4 +1,5 @@
 /** Serves the development API, scripted turns, and emulator previews. */
+import { NEXT_STEPS } from '../src/api/failure';
 import { randomUUID } from 'node:crypto';
 import { previewZip, startPreviewServer } from './preview';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -30,7 +31,7 @@ const KEEPALIVE_MS = 15_000;
 
 const user: User = { id: 'stub-user', displayName: 'Stub Instructor', email: null, role: 'instructor' };
 
-type Scenario = 'ok' | 'qa-fail' | 'turn-fail' | 'long-step' | 'long-feed' | 'multi-message' | 'drop' | 'drop-lost';
+type Scenario = 'error-action' | 'cancelled' | 'meaningful-progress' | 'ok' | 'qa-fail' | 'turn-fail' | 'long-step' | 'long-feed' | 'multi-message' | 'drop' | 'drop-lost';
 
 interface StoredEvent {
   seq: number;
@@ -119,9 +120,12 @@ function textOf(content: ContentBlock[]): string {
 }
 
 function scenarioFor(text: string): Scenario {
+  if ((Object.keys(NEXT_STEPS) as NextStep[]).some(step => text.includes('[' + step + ']'))) return 'error-action';
+  if (text.includes('[cancelled]')) return 'cancelled';
   if (text.includes('[drop-lost]')) return 'drop-lost';
   if (text.includes('[drop]')) return 'drop';
   if (text.includes('[multi-message]')) return 'multi-message';
+  if (text.includes('[meaningful-progress]')) return 'meaningful-progress';
   if (text.includes('[long-feed]')) return 'long-feed';
   if (text.includes('[long-step]')) return 'long-step';
   if (text.includes('[turn-fail]')) return 'turn-fail';
@@ -175,8 +179,8 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
         append(state, 'turn.started', { turnId: turn.id, startedAt: turn.startedAt });
       },
     ],
-    [400, () => append(state, 'turn.status', { turnId: turn.id, text: 'Reading your request' })],
-    [1200, () => append(state, 'turn.status', { turnId: turn.id, text: 'Building from the SCORM starter' })],
+    [400, () => append(state, 'turn.status', { turnId: turn.id, text: 'Reading your request', category: 'reading' as const })],
+    [1200, () => append(state, 'turn.status', { turnId: turn.id, text: 'Building from the SCORM starter', category: 'building' as const })],
     ...replyChunks.map(
       (text, index): [number, () => void] => [
         2000 + index * 400,
@@ -185,7 +189,7 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
     ),
     [
       4000,
-      () => append(state, 'tool.started', { turnId: turn.id, callId, name: 'Bash', summary: 'Running the QA gate' }),
+      () => append(state, 'tool.started', { turnId: turn.id, callId, name: 'Bash', summary: 'Running the QA gate', category: 'checking' as const }),
     ],
   ];
 
@@ -207,13 +211,17 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
     })]);
   }
 
-  if (scenario === 'turn-fail') {
+  if (scenario === 'cancelled') {
+    steps.push([4800, () => { turn.status = 'cancelled'; turn.finishedAt = Date.now(); state.activeTurn = null; append(state, 'turn.cancelled', { turnId: turn.id }); }]);
+  } else if (scenario === 'turn-fail' || scenario === 'error-action') {
     steps.push([
       4800,
       () => {
         turn.status = 'failed';
         turn.finishedAt = Date.now();
-        turn.error = { code: 'agent_error', message: 'The agent stopped before it finished.', nextStep: 'send_again' };
+        const requestedStep = (Object.keys(NEXT_STEPS) as NextStep[]).find(step => textOf(state.messages.find(message => message.id === turn.messageId)!.content).includes('[' + step + ']'));
+        const failure: { code: string; message: string; nextStep: NextStep } = { code: 'agent_error', message: 'The agent stopped before it finished.', nextStep: requestedStep ?? 'send_again' };
+        turn.error = failure;
         state.activeTurn = null;
         append(state, 'turn.failed', { turnId: turn.id, error: turn.error });
       },
@@ -229,6 +237,7 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
             callId,
             ok: passed,
             summary: passed ? 'QA gate passed' : `QA gate reported ${FAILED_FINDINGS.length} findings`,
+            category: 'checking' as const,
           }),
       ],
       [
@@ -294,8 +303,20 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
     );
   }
 
+  if (scenario === 'meaningful-progress') {
+    steps.push(
+      [200, () => append(state, 'turn.status', { turnId: turn.id, text: 'Thinking…', category: 'thinking' })],
+      [700, () => append(state, 'tool.started', { turnId: turn.id, callId: 'read', name: 'Read', summary: 'Reading authoring guides', category: 'reading' })],
+      [800, () => append(state, 'tool.started', { turnId: turn.id, callId: 'search', name: 'Grep', summary: 'Finding source files', category: 'searching' })],
+      [900, () => append(state, 'turn.status', { turnId: turn.id, text: 'Thinking…', category: 'thinking' })],
+      [1700, () => append(state, 'tool.started', { turnId: turn.id, callId: 'smoke', name: 'CustomCheck', summary: 'Run smoke test of inline engine', category: 'other' })],
+      [1800, () => append(state, 'tool.started', { turnId: turn.id, callId: 'write', name: 'Write', summary: 'Writing index.html', category: 'writing' })],
+    );
+  }
+
   for (const [delay, step] of steps) {
-    const pause = scenario === 'long-step' && delay >= 2000 ? 20_000
+    const pause = scenario === 'meaningful-progress' && delay >= 1200 ? 4000
+      : scenario === 'long-step' && delay >= 2000 ? 20_000
       : scenario === 'long-feed' && delay >= 4000 ? 8000 : 0;
     setTimeout(step, delay + pause);
   }
@@ -304,6 +325,7 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
       setTimeout(() => append(state, 'turn.status', {
         turnId: turn.id,
         text: `Checking activity ${index + 1}: ${'long-content-file-name-'.repeat(8)}index.html`,
+        category: 'checking' as const,
       }), 1400 + index * 150);
     }
   }
@@ -452,6 +474,11 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
 
   if (segments[0] !== 'api') throw new HttpError('not_found');
   const [, resource, id, sub] = segments;
+
+  if (resource === 'agent' && id === 'sign-in' && method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end('<!doctype html><html lang="en"><title>Agent sign-in</title><h1>Agent sign-in</h1><p>This is the stub sign-in page. Return to the conversation to continue testing.</p></html>'); return;
+  }
 
   if (resource === 'health' && method === 'GET' && !id) return sendJson(res, 200, { ok: true });
 

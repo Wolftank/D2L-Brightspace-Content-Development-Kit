@@ -27,6 +27,8 @@ export interface Config {
   appOrigin: string;
   /** Where build previews are served: `http://preview.localhost:<port>`, on the back end's own port. */
   previewOrigin: string;
+  /** When set, every API request must carry this token in the `cdk_launch` cookie. The desktop app sets it on each launch. */
+  launchToken?: string;
   /** The built front end the back end serves on its own origin. Always absolute when set. */
   appDir?: string;
   /** The least severe level written to the log. */
@@ -43,6 +45,7 @@ const LOGGED_SETTINGS = {
   turnLimits: true,
   appOrigin: true,
   previewOrigin: true,
+  launchToken: false,
   appDir: true,
   logLevel: true,
   appVersion: true,
@@ -110,6 +113,7 @@ const settingsSchema = z.object({
     .transform((value) => new URL(value).origin)
     .refine((origin) => new URL(origin).hostname !== PREVIEW_HOSTNAME, `must not be the preview origin (${PREVIEW_HOSTNAME})`)
     .default('http://127.0.0.1:5173'),
+  LAUNCH_TOKEN: z.string().trim().min(1, 'must not be blank').optional(),
   APP_DIR: z.string().trim().min(1, 'must not be blank').optional(),
   LOG_LEVEL: z.enum(LOG_LEVELS, { error: `must be one of ${LOG_LEVELS.join(', ')}` }).default('info'),
   APP_VERSION: z.string().trim().min(1, 'must not be blank').optional(),
@@ -140,6 +144,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     turnLimits: { maxSteps: settings.AGENT_MAX_STEPS, maxBudgetUsd: settings.AGENT_MAX_BUDGET_USD },
     appOrigin: settings.APP_ORIGIN,
     previewOrigin: `http://${PREVIEW_HOSTNAME}:${settings.PORT}`,
+    launchToken: settings.LAUNCH_TOKEN,
     appDir: settings.APP_DIR === undefined ? undefined : resolve(BACK_END_DIR, settings.APP_DIR),
     logLevel: settings.LOG_LEVEL,
     appVersion: settings.APP_VERSION,

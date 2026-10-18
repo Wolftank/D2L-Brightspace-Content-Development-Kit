@@ -5,7 +5,7 @@ async function buildActivity(page: Page) {
   await page.goto('/');
   await page.getByLabel('Project title').fill('Preview fixture');
   await page.getByLabel('What should students learn or do?').fill('Create a sample activity.');
-  await page.getByRole('button', { name: 'Send' }).click();
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(page.getByTitle('Interactive preview of build 1')).toBeVisible({ timeout: 15_000 });
 }
 
@@ -51,7 +51,7 @@ test('saved starter runs in Student mode, restarts, switches versions and stays 
   const selectedUrl = await page.getByTitle('Interactive preview of build 1').getAttribute('src');
   await page.getByLabel('Describe a change').fill('Create the next version.');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
-  await expect(page.locator('.build-result .result-label')).toHaveText('BUILD 2', { timeout: 15_000 });
+  await expect(page.locator('.build-result .result-label')).toHaveText('Version 2', { timeout: 15_000 });
   await expect(page.getByRole('link', { name: 'Download SCORM package' })).not.toHaveAttribute('href', downloadUrl!);
   await expect(page.getByTitle('Interactive preview of build 1')).toHaveCount(0);
   await expect(page.getByTitle('Interactive preview of build 2')).not.toHaveAttribute('src', selectedUrl!);

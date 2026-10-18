@@ -34,7 +34,7 @@ it('restores the real start and current step after reload and resumes at the sav
   const first = renderHook(() => useProjectEvents('p1'));
   act(() => {
     Stream.instances[0]!.emit('turn.started', { turnId: 't1', startedAt: 1000 }, 1);
-    Stream.instances[0]!.emit('turn.status', { turnId: 't1', text: 'Thinking…' }, 2);
+    Stream.instances[0]!.emit('turn.status', { turnId: 't1', text: 'Thinking…', category: 'thinking' as const }, 2);
   });
   first.unmount();
   const restored = renderHook(() => useProjectEvents('p1'));

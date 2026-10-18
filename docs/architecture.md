@@ -66,6 +66,8 @@ Errors use one envelope: `{ "error": { "code": "...", "message": "...", "nextSte
 
 Every response from the back end, on the app origin and the preview origin, carries an `X-Request-Id` header: a new ID the back end gives each request and writes on that request's records in the server log. An `X-Request-Id` sent by the client is ignored.
 
+Only the app may call the API. A request gets `403 forbidden` when its `Host` is anything but the back end's loopback names (`127.0.0.1`, `localhost`, `[::1]`) or the app origin's host, which stops DNS rebinding, or when it carries an `Origin` other than the app origin, which covers other websites and build previews. In the desktop app it also needs the launch token: the app makes a new one at each launch, gives it to the back end as `LAUNCH_TOKEN`, and sets it on its window as the `cdk_launch` cookie, HttpOnly and SameSite=Strict. Every request from the window carries it, the event stream and downloads included, and other programs on the computer don't have it.
+
 ### Identity
 
 Who is calling, and which agent this install runs.
@@ -165,11 +167,11 @@ Each event: `id` is the project-wide `seq`, `event` is the kind, `data` is JSON.
 | kind | payload | When |
 |---|---|---|
 | `turn.started` | `{ turnId, startedAt }` | The runner picked the turn up; `startedAt` is the recorded turn start in epoch milliseconds |
-| `turn.status` | `{ turnId, text }` | Plain-language progress, sent when the agent starts a new step: "Thinking…", "The agent's service is busy. Trying again…", "Condensing the conversation…", "Checking your build". Never sent on a timer, and never stored when its text repeats the turn's latest `turn.status`, `tool.started`, or `tool.finished` line. Only the main agent's steps are reported, not a subagent's |
+| `turn.status` | `{ turnId, text, category }` | Plain-language progress, sent when the agent starts a new step: "Thinking…", "The agent's service is busy. Trying again…", "Condensing the conversation…", "Checking your build". Never sent on a timer, and never stored when its text repeats the turn's latest `turn.status`, `tool.started`, or `tool.finished` line. Only the main agent's steps are reported, not a subagent's |
 | `message.delta` | `{ turnId, messageId, text }` | Streamed text for one agent message; a distinct assistant message has a new `messageId` |
 | `message.completed` | `{ message }` | The agent's full message is stored |
-| `tool.started` | `{ turnId, callId, name, summary }` | The agent is calling a tool. Sent once per `callId`, as soon as the driver knows `summary`, its plain-language line such as "Writing index.html", which can be before the call's input is complete |
-| `tool.finished` | `{ turnId, callId, ok, summary, buildId? }` | The tool returned, or the turn ended before it did, which is `ok: false`. `summary` repeats the started one, prefixed "Failed: " when `ok` is false |
+| `tool.started` | `{ turnId, callId, name, summary, category }` | The agent is calling a tool. Sent once per `callId`, as soon as the driver knows `summary`, its plain-language line such as "Writing index.html", which can be before the call's input is complete |
+| `tool.finished` | `{ turnId, callId, ok, summary, category, buildId? }` | The tool returned, or the turn ended before it did, which is `ok: false`. `summary` repeats the started one, prefixed "Failed: " when `ok` is false |
 | `build.created` | `{ build }` | A new build exists (status `checking`) |
 | `build.updated` | `{ build }` | QA gate report attached, pedagogy check report attached, or failed |
 | `deployment.updated` | `{ deployment }` | Any status change, including `requested` from the agent |
@@ -182,6 +184,13 @@ The UI derives its build panel from `build.*` and `deployment.*` events plus the
 ## A turn, end to end
 
 A turn is the agent's work in response to one instructor message. This section follows one from the message arriving to the instructor confirming a deployment, naming the component responsible for each step.
+
+### Progress presentation
+
+Progress events carry a `category`: `thinking`, `reading`, `searching`, `writing`, `checking`, `building`, or `other`. Tool events exclude `thinking`; the driver classifies them from tool identity and structured input, and the runner preserves the category on completion. The UI never classifies display text. The default feed summarizes consecutive file edits as "Updating the activity", hides reading and searching, and retains checking, building, other activity, terminal summaries, and failed calls. Raw filenames appear in details. CDK check_output calls carry the checking category. Show details reveals all non-thinking steps, including after a turn finishes.
+
+Thinking updates only the current-step indicator. It is never added to the progress list, including during replay or after a reload. The end of a thinking block, tool activity, and streamed replies replace it. A reply resets status deduplication so a later thinking phase can start with the same status text.
+
 
 ```mermaid
 sequenceDiagram
@@ -269,6 +278,7 @@ The envelope's `error`. `details`, where present, is for the front end's logic a
 | `build_not_ready` | 409 | This build isn't ready to download. | `try_later` |
 | `build_failed` | 409 | This build failed, so it can't be downloaded. | `ask_for_fix` |
 | `build_incomplete` | 409 | This build is missing files it needs. | `send_again` |
+| `forbidden` | 403 | This request isn't allowed. | `try_later` |
 | `internal_error` | 500 | Something went wrong. | `try_later` |
 
 ### Build errors

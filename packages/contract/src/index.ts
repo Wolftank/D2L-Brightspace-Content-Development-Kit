@@ -142,13 +142,15 @@ export interface Deployment {
   createdAt: number;
 }
 
+export type ProgressCategory = 'thinking' | 'reading' | 'searching' | 'writing' | 'checking' | 'building' | 'other';
+
 export interface EventPayloads {
   'turn.started': { turnId: string; startedAt: number };
-  'turn.status': { turnId: string; text: string };
+  'turn.status': { turnId: string; text: string; category: ProgressCategory };
   'message.delta': { turnId: string; messageId: string; text: string };
   'message.completed': { message: Message };
-  'tool.started': { turnId: string; callId: string; name: string; summary: string };
-  'tool.finished': { turnId: string; callId: string; ok: boolean; summary: string; buildId?: string };
+  'tool.started': { turnId: string; callId: string; name: string; summary: string; category: Exclude<ProgressCategory, 'thinking'> };
+  'tool.finished': { turnId: string; callId: string; ok: boolean; summary: string; category: Exclude<ProgressCategory, 'thinking'>; buildId?: string };
   'build.created': { build: Build };
   'build.updated': { build: Build };
   'deployment.updated': { deployment: Deployment };

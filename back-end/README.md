@@ -36,7 +36,7 @@ Copy-Item .env.example .env
 
 | Setting | Default | Rule |
 |---|---|---|
-| `AGENT_DRIVER` | `claude` | The agent that runs turns. Supported: `claude` |
+| `AGENT_DRIVER` | `claude` | The agent that runs turns: `claude`, or `scripted` for development and tests (see [The scripted agent](#the-scripted-agent)) |
 | `AGENT_MODEL` | the agent's default for the account | A model name, such as `claude-sonnet-5`. The agent checks the name on each turn and on `GET /api/me`, not at startup |
 | `AGENT_EFFORT` | the agent's default | `low`, `medium`, `high`, `xhigh`, or `max` |
 | `AGENT_MAX_STEPS` | `60` | The most model calls one request may make: a whole number, 1 or more. A request that needs more stops with a plain message. `.env.example` explains the default |
@@ -44,11 +44,27 @@ Copy-Item .env.example .env
 | `PORT` | `3000` | A whole number from 1 to 65535. When you change it, start the front end with `API_TARGET=http://127.0.0.1:<port>` |
 | `DATA_DIR` | `%LOCALAPPDATA%\CDK` on Windows, `~/.cdk` elsewhere | Where the database, workspaces, and builds are stored. A relative path is resolved against `back-end/` |
 | `APP_ORIGIN` | `http://127.0.0.1:5173` | The origin the app is opened at, and the only one allowed to frame build previews: an http or https origin with no path. The default is the Vite dev server; set it to the back end's own origin when it serves the built app |
+| `LAUNCH_TOKEN` | unset | Set by the desktop app at each launch. Every API request must then carry it in the `cdk_launch` cookie, which the app sets on its window. Leave unset in development |
 | `APP_DIR` | unset | The built front end (`front-end/dist`) to serve at `/` on the back end's own origin, as the desktop app does. Set `APP_ORIGIN` to `http://127.0.0.1:<PORT>` with it. A relative path is resolved against `back-end/` |
 | `LOG_LEVEL` | `info` | The least severe level written to the log: `fatal`, `error`, `warn`, `info`, `debug`, or `trace`. Instructor messages and agent replies are logged only at `debug` |
 | `APP_VERSION` | unset | The Windows app's version, written to the log at startup. The app sets it |
 
 `ANTHROPIC_API_KEY` is read by the Claude CLI, not by the back end.
+
+### The scripted agent
+
+`AGENT_DRIVER=scripted` replaces the agent with fixed turns that make no AI calls, so the real runner, build service, QA gate, and event stream run end to end for free. A marker in the instructor's message picks the scenario, and the same scenario always gives the same events and files. Markers shared with the front end's stub behave the same in both, so a browser spec runs against either.
+
+| Marker | Turn |
+|---|---|
+| none | Writes a workplace safety quiz that passes the QA gate |
+| `[qa-fail]` | Writes a quiz that marks itself completed on load, which the QA gate rejects |
+| `[follow-up]` | Adds two questions to the quiz, so the next build is a new version |
+| `[turn-fail]` | Fails with `agent_error` |
+| `[signed-out]` | Fails with `agent_signed_out` |
+| `[busy]` | Fails with `agent_busy` |
+| `[long-step]` | Goes silent for 20 seconds, then finishes like the default turn |
+| `[cancelled]` | Ends as `cancelled` |
 
 ## Scripts
 

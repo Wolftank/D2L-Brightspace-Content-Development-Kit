@@ -30,6 +30,7 @@ import type {
   TurnResult,
 } from './AgentDriver.js';
 import { log } from '../log.js';
+import { toolCategory } from './progress.js';
 
 /**
  * Built-in file-editing tools that `.claude/settings.json` allows inside the
@@ -393,12 +394,14 @@ const FILE_TOOL_VERBS: Record<string, string> = { Read: 'Reading', Write: 'Writi
  *   built from. A line returned here never changes as more input arrives.
  */
 function knownSummary(name: string, input: unknown, toolSummaries: ReadonlyMap<string, string>): string | undefined {
-  const fields = (typeof input === 'object' && input !== null ? input : {}) as { file_path?: unknown };
+  const fields = (typeof input === 'object' && input !== null ? input : {}) as { file_path?: unknown; skill?: unknown };
   switch (name) {
     case 'Read':
     case 'Write':
     case 'Edit':
       return typeof fields.file_path === 'string' ? `${FILE_TOOL_VERBS[name]} ${fileName(fields.file_path)}` : undefined;
+    case 'Skill':
+      return typeof fields.skill === 'string' && fields.skill.trim() ? `Using skill ${fields.skill}` : undefined;
     case 'Glob':
     case 'Grep':
       return 'Searching the files';
@@ -413,7 +416,7 @@ function knownSummary(name: string, input: unknown, toolSummaries: ReadonlyMap<s
  * session's own tools, by the names Claude calls them.
  */
 export function summarizeTool(name: string, input: unknown, toolSummaries: ReadonlyMap<string, string> = new Map()): string {
-  return knownSummary(name, input, toolSummaries) ?? `${FILE_TOOL_VERBS[name]} a file`;
+  return knownSummary(name, input, toolSummaries) ?? (name === 'Skill' ? 'Using a skill' : `${FILE_TOOL_VERBS[name]} a file`);
 }
 
 /** The last segment of a Windows or POSIX path. */
@@ -500,9 +503,9 @@ export async function* mapClaudeStream(
   const startedCallIds = new Set<string>();
   const streamingCalls = new Map<number, StreamingToolCall>();
 
-  function toolStart(callId: string, name: string, summary: string): AgentEvent {
+  function toolStart(callId: string, name: string, summary: string, input: unknown): AgentEvent {
     startedCallIds.add(callId);
-    return { kind: 'tool_start', callId, name, summary };
+    return { kind: 'tool_start', callId, name, summary, category: toolCategory(name, input) };
   }
 
   try {
@@ -517,11 +520,11 @@ export async function* mapClaudeStream(
               yield { kind: 'notice', text: describePermissionDenied(message) };
               break;
             case 'status':
-              if (message.status === 'requesting') yield { kind: 'status', text: THINKING };
-              if (message.status === 'compacting') yield { kind: 'status', text: CONDENSING };
+              if (message.status === 'requesting') yield { kind: 'status', text: THINKING, category: 'thinking' };
+              if (message.status === 'compacting') yield { kind: 'status', text: CONDENSING, category: 'other' };
               break;
             case 'api_retry':
-              yield { kind: 'status', text: RETRYING };
+              yield { kind: 'status', text: RETRYING, category: 'other' };
               break;
           }
           break;
@@ -535,10 +538,12 @@ export async function* mapClaudeStream(
           } else if (event.type === 'content_block_start') {
             const block = event.content_block;
             if (block.type === 'thinking' || block.type === 'redacted_thinking') {
-              yield { kind: 'status', text: THINKING };
+              yield { kind: 'status', text: THINKING, category: 'thinking' };
+            } else if (block.type === 'text') {
+              yield { kind: 'status', text: 'Updating you', category: 'other' };
             } else if (block.type === 'tool_use') {
               const summary = knownSummary(block.name, block.input, toolSummaries);
-              if (summary) yield toolStart(block.id, block.name, summary);
+              if (summary) yield toolStart(block.id, block.name, summary, block.input);
               else streamingCalls.set(event.index, { callId: block.id, name: block.name, inputJson: '' });
             }
           } else if (event.type === 'content_block_delta') {
@@ -552,7 +557,7 @@ export async function* mapClaudeStream(
               const summary = knownSummary(call.name, parseCompleteFields(call.inputJson), toolSummaries);
               if (summary) {
                 streamingCalls.delete(event.index);
-                yield toolStart(call.callId, call.name, summary);
+                yield toolStart(call.callId, call.name, summary, parseCompleteFields(call.inputJson));
               }
             }
           }
@@ -563,7 +568,7 @@ export async function* mapClaudeStream(
           if (message.parent_tool_use_id) break;
           for (const block of message.message.content) {
             if (block.type === 'tool_use' && !startedCallIds.has(block.id)) {
-              yield toolStart(block.id, block.name, summarizeTool(block.name, block.input, toolSummaries));
+              yield toolStart(block.id, block.name, summarizeTool(block.name, block.input, toolSummaries), block.input);
             }
           }
           break;

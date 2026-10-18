@@ -2,6 +2,14 @@ import type { ApiErrorBody, NextStep } from '@cdk/contract';
 import type { ErrorRequestHandler, Response } from 'express';
 import { ZodError } from 'zod';
 
+/** A request that doesn't come from the CDK window. */
+export class Forbidden extends Error {
+  constructor() {
+    super('Forbidden');
+    this.name = 'Forbidden';
+  }
+}
+
 /** The requested project or route does not exist, or the project is not owned by the caller. */
 export class NotFound extends Error {
   constructor(message = 'Not found') {
@@ -69,6 +77,7 @@ export const API_ERRORS = {
   build_not_ready: { status: 409, message: "This build isn't ready to download.", nextStep: 'try_later' },
   build_failed: { status: 409, message: "This build failed, so it can't be downloaded.", nextStep: 'ask_for_fix' },
   build_incomplete: { status: 409, message: 'This build is missing files it needs.', nextStep: 'send_again' },
+  forbidden: { status: 403, message: "This request isn't allowed.", nextStep: 'try_later' },
   internal_error: { status: 500, message: 'Something went wrong.', nextStep: 'try_later' },
 } satisfies Record<string, { status: number; message: string; nextStep: NextStep }>;
 
@@ -86,6 +95,7 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   if (err instanceof ZodError) return send(res, 'invalid_request', { issues: err.issues });
   if (err instanceof SyntaxError && (err as { type?: string }).type === 'entity.parse.failed') return send(res, 'invalid_json');
   if ((err as { type?: string }).type === 'entity.too.large') return send(res, 'payload_too_large');
+  if (err instanceof Forbidden) return send(res, 'forbidden');
   if (err instanceof NotFound) return send(res, 'not_found');
   if (err instanceof BuildNotFound) return send(res, 'build_not_found');
   if (err instanceof TurnActive) return send(res, 'turn_active', { turnId: err.turnId });

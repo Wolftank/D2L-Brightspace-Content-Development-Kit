@@ -44,8 +44,42 @@ npm run lint
 npm run typecheck
 npx playwright install chromium firefox
 npm run test:e2e
+npm run test:e2e:real
 ```
+
+`test:e2e` runs against the stub. `test:e2e:real` runs the main flows (a passing build and its download, a QA failure, a failed turn, and a follow-up's version 2) against the real back end with the scripted agent, so nothing is billed; it starts both servers itself, on ports 3010 and 5180, clear of the stub and the dev server.
 
 Browser tests cover follow-ups on ready and failed builds, message order, reload, reopening with empty session storage, preview replacement and restart, retained ready previews, mobile stacking, focus and automated WCAG checks.
 
 Manual keyboard and NVDA check: send `[long-step]`, confirm focus returns to the message box and Send is disabled with an explanation. Draft a follow-up, reload, and confirm it stays. Confirm timer ticks are silent, progress updates are announced, and the completed agent reply is announced once. Tab through Conversation, history, the message box, Build panel, download, Preview, Restart preview, and the activity controls. At desktop and narrow widths, verify visible focus and no horizontal page scrolling. NVDA verification remains manual.
+
+## F11 recovery integration
+
+Errors use the shared `NextStep` from `@cdk/contract`: `send_again`, `sign_in`, `try_later`, `smaller_request`, `wait`, `new_project`, and `ask_for_fix`. B24 supplies these on API, turn, history, and build errors. The UI validates incoming errors and does not infer actions from codes. Ask for a fix prepares a follow-up in the composer and preserves an existing draft.
+
+The sign-in link still opens `/api/agent/sign-in`, implemented only by the stub. A real sign-in handler and Electron external-window integration remain outstanding, so F11 remains a draft. Manual NVDA verification also remains outstanding.
+
+Stub markers use each shared next-step identifier in brackets. `[qa-fail]` covers build recovery, `[cancelled]` covers cancellation, and `[drop-lost]` covers explicit reconnect.
+
+## Add to D2L guide (F13)
+
+A ready SCORM build's download opens the instructions without changing the download endpoint. The adjacent Add to D2L instructions button reopens them. The labelled native dialog supports Close and Escape, explicitly wraps Tab/Shift+Tab, and returns focus to its opener. Its ordered steps cover upload, grading, visibility, and testing with a real enrolled test student. The optional deploy.txt uses the same content as the dialog. Other output formats do not receive SCORM instructions.
+
+Sources checked October 17, 2026:
+
+- The kit's `skills/d2l-scorm-package/SKILL.md`, Getting it into D2L and Verifying it actually works, supplies the measured SCSU upload path and the distinction between instructor preview and actual gradebook verification.
+- [D2L import and manage SCORM](https://community.d2l.com/brightspace/kb/articles/4971-import-and-manage-scorm)
+- [D2L content visibility](https://community.d2l.com/brightspace/kb/articles/3382-hide-content-topics-modules-and-downloads)
+- [D2L student-experience testing](https://community.d2l.com/brightspace/kb/articles/35011)
+- [SCSU Academic Technologies](https://www.stcloudstate.edu/ITS/services/academic/default.aspx) confirms the campus sign-in destination.
+
+The desktop window opens only these four guide destinations in the system browser; other popup destinations remain denied.
+
+Acceptance still requiring a person with sandbox access:
+
+- [ ] Someone outside the development team follows the steps in the SCSU sandbox.
+- [ ] A real enrolled test student completes the uploaded build and the instructor verifies its score, repeat-attempt calculation, and reopen behavior.
+- [ ] Keyboard/NVDA reading confirms the dialog title, ordered steps, links, and focus return.
+- [ ] The packaged Windows app opens the guide links in the system browser.
+
+The connected browser had no D2L session during implementation. Automated browser checks use the local scripted stub and do not establish sandbox/gradebook correctness.

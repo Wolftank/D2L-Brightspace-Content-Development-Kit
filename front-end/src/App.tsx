@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ApiError, buildDownloadUrl, createProject, getProject, sendMessage } from './api/client';
+import { ApiError, createProject, getProject, sendMessage } from './api/client';
 import type { Build, Project } from '@cdk/contract';
 import { useProjectEvents } from './hooks/useProjectEvents';
 import type { ConnectionStatus } from './WorkingIndicator';
@@ -7,29 +7,36 @@ import type { ProjectEventState } from './hooks/useProjectEvents';
 import { WorkingIndicator } from './WorkingIndicator';
 import { StatusFeed } from './StatusFeed';
 import './App.css';
+import { readFailure } from './api/failure';
+import { BuildDownload } from './d2l/BuildDownload';
+import { ErrorNotice } from './ErrorNotice';
 import { PreviewPanel } from './preview/PreviewPanel';
 
-function BuildPanel({ build, turn, statusLines, connection, outcome }: {
+function BuildPanel({ build, turn, statusLines, connection, outcome, disabled, onAskForFix, onSendAgain, onEdit, onNewProject }: {
   build: Build | null;
   turn: ProjectEventState['turn'];
   statusLines: ProjectEventState['statusLines'];
   connection: ConnectionStatus;
   outcome?: string;
+  disabled: boolean;
+  onAskForFix: () => void;
+  onSendAgain: () => void;
+  onEdit: () => void;
+  onNewProject: () => void;
 }) {
   return <section className="card build-panel" aria-labelledby="build-title" tabIndex={0}>
-    <p className="eyebrow">02 / BUILD</p><h2 id="build-title">Build panel</h2>
+    <h2 className="panel-heading" id="build-title">Build</h2>
     {turn.status === 'running' && turn.startedAt !== null && <WorkingIndicator startedAt={turn.startedAt} step={turn.currentStep} connection={connection} />}
-    {turn.status === 'running' && statusLines.length > 0 && <StatusFeed lines={statusLines} turnId={turn.id} />}
+    {statusLines.length > 0 && <StatusFeed lines={statusLines} turnId={turn.id} />}
     {turn.status !== 'running' && turn.status !== 'idle' && <p className="turn-summary">{turn.status === 'completed' ? 'Request complete' : outcome}</p>}
-    {!build ? <p className="empty">Your latest build will appear here.</p> :
+    {!build ? <p className="empty">No build yet.</p> :
       <article className={`build-result build-${build.status}`} aria-labelledby="build-result-title">
-        <p className="result-label">BUILD {build.version}</p>
+        <p className="result-label">Version {build.version}</p>
         <h3 id="build-result-title">{build.status === 'ready' ? 'Ready to download' : build.status === 'failed' ? 'QA needs attention' : 'Build is being checked'}</h3>
-        {build.qa && <p>{build.qa.passed ? 'The QA gate passed.' : 'The QA gate needs attention.'}</p>}
-        {build.error && <p>{build.error.message}</p>}
+        {build.error && <ErrorNotice failure={readFailure(build.error)} disabled={disabled} onAskForFix={onAskForFix} onSendAgain={onSendAgain} onEdit={onEdit} onNewProject={onNewProject} />}
         {!!build.qa?.findings.length && <ul className="findings">{build.qa.findings.map((finding, index) =>
           <li key={index}><strong>{finding.severity === 'warn' ? 'WARNING' : 'ERROR'}</strong> {finding.message}{finding.because && <p>{finding.because}</p>}</li>)}</ul>}
-        {build.status === 'ready' && <a className="download" href={buildDownloadUrl(build.id)}>Download SCORM package</a>}
+        {build.status === 'ready' && <BuildDownload key={build.id} build={build} />}
       </article>}
   </section>;
 }
@@ -47,11 +54,12 @@ export function App() {
   const [sending, setSending] = useState(false);
   const [pendingTurn, setPendingTurn] = useState<string | null>(null);
   const messageBox = useRef<HTMLTextAreaElement>(null);
-  const { statusLines, streamingMessages, messages, outcomes, builds, turn, connection, historyError, addMessage } = useProjectEvents(project?.id ?? null);
+  const { statusLines, streamingMessages, messages, outcomes, builds, turn, connection, historyError, reconnect, addMessage } = useProjectEvents(project?.id ?? null);
   const isBuilding = opening || sending || turn.status === 'running' || (pendingTurn !== null && turn.id !== pendingTurn);
   const latestBuild = [...builds].sort((a, b) => b.version - a.version)[0] ?? null;
   const readyBuild = [...builds].filter(build => build.status === 'ready').sort((a, b) => b.version - a.version)[0] ?? null;
   const latestAgent = messages.filter(message => message.role === 'agent').at(-1);
+  const hasMessages = messages.length > 0 || streamingMessages.length > 0;
   const chatHistory = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -66,10 +74,26 @@ export function App() {
   useEffect(() => { sessionStorage.setItem('request-draft', requestText); }, [requestText]);
   useEffect(() => { const element = chatHistory.current; if (element) element.scrollTop = element.scrollHeight; }, [messages, streamingMessages]);
 
+  function startNewProject() {
+    setProject(null); setTitle(''); setPendingTurn(null); setError(null);
+    sessionStorage.removeItem('active-project');
+    window.history.replaceState(null, '', '/');
+    messageBox.current?.focus();
+  }
+
+  function askForFix() {
+    setRequestText(current => current.trim() ? current : 'Please fix the problems reported by the QA check' + (latestBuild ? ' in build ' + latestBuild.version : '') + '.');
+    messageBox.current?.focus();
+  }
+
   async function handleSend(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    await submitRequest(requestText);
+  }
+
+  async function submitRequest(request: string) {
     if (isBuilding) return;
-    const text = requestText.trim();
+    const text = request.trim();
     if (!text || (!project && !title.trim())) {
       setError(new ApiError('invalid_request', 'Enter a project title and a request before building.')); return;
     }
@@ -90,34 +114,40 @@ export function App() {
   }
 
   return <main className="app-shell">
-    <header className="topbar"><a className="brand" href="/" aria-label="D2L Content Development Kit home"><span aria-hidden="true">C</span>D2L Content Development Kit</a><span className="local-label">Local mode</span></header>
-    <section className="intro" aria-labelledby="page-title"><p className="eyebrow">COURSE MATERIAL WORKSPACE</p>
-      <h1 id="page-title">{project?.title ?? 'Describe what you want to build.'}</h1>
-      <p>{project ? 'Keep refining your activity. Each change builds on your conversation.' : 'Create a learning activity, check it, and refine it together.'}</p></section>
+    <header className="topbar"><a className="brand" href="/" aria-label="D2L Content Development Kit home"><span aria-hidden="true">C</span>D2L Content Development Kit</a></header>
+    <section className="intro" aria-labelledby="page-title">
+      <p className="workspace-eyebrow">{project ? 'Project:' : 'Course material workspace'}</p>
+      <h1 id="page-title">{project?.title ?? 'Create an activity'}</h1>
+    </section>
     <div className="workspace">
       <section className="card chat-panel" aria-labelledby="chat-title" tabIndex={0}>
-        <p className="eyebrow">01 / CHAT</p><h2 id="chat-title">Conversation</h2>
-        <div ref={chatHistory} className="chat-history" role="group" tabIndex={0} aria-label="Conversation history">
-          {!messages.length && <p className="empty">Tell CDK what your students should learn or do.</p>}
+        <h2 className="panel-heading" id="chat-title">Design</h2>
+        <div ref={chatHistory} className="chat-history" hidden={!hasMessages} role="group" tabIndex={0} aria-label="Conversation history">
           {messages.map(message => <article className={`chat-message message-${message.role}`} key={message.id}>
             <p className="speaker">{message.role === 'instructor' ? 'You' : 'CDK'}</p>
             <p>{message.content.filter(block => block.type === 'text').map(block => block.text).join('\n')}</p>
             {message.role === 'instructor' && message.turnId && ['failed', 'cancelled'].includes(outcomes[message.turnId]?.status ?? '') &&
-              <p className="error">{outcomes[message.turnId]?.message}</p>}
+              <ErrorNotice failure={outcomes[message.turnId]?.failure ?? { message: 'This request could not be completed.', nextStep: 'try_later' }} disabled={isBuilding}
+                onSendAgain={() => void submitRequest(message.content.filter(block => block.type === 'text').map(block => block.text).join('\n'))}
+                onEdit={() => { setRequestText(message.content.filter(block => block.type === 'text').map(block => block.text).join('\n')); messageBox.current?.focus(); }}
+                onNewProject={startNewProject} onAskForFix={askForFix} />}
           </article>)}
           {streamingMessages.map(message => <article key={message.id} className="chat-message message-agent"><p className="speaker">CDK</p><p>{message.text}</p></article>)}
         </div>
         <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{latestAgent ? `CDK: ${latestAgent.content.filter(block => block.type === 'text').map(block => block.text).join('')}` : ''}</div>
-        {historyError && <p className="error" role="alert">{historyError}</p>}
-        <form onSubmit={handleSend} className="composer">
+        {project && connection !== 'connected' && <div className="connection-notice"><p role="status">{connection === 'reconnecting' ? 'Reconnecting to your request…' : 'Connection lost. Try connecting again.'}</p>{connection === 'lost' && <button type="button" onClick={reconnect}>Try again</button>}</div>}
+        {historyError && <div><p className="error" role="alert">Unable to load the conversation.</p><button type="button" onClick={reconnect}>Try loading the conversation again</button></div>}
+        <form onSubmit={handleSend} className={hasMessages ? 'composer' : 'composer composer-empty'}>
           {!project && <><label htmlFor="project-title">Project title</label><input id="project-title" value={title} onChange={event => setTitle(event.target.value)} placeholder="e.g., Cell division practice" maxLength={160} disabled={sending} /></>}
-          <label htmlFor="request-text">{project ? 'Describe a change' : 'What should students learn or do?'}</label>
-          <textarea ref={messageBox} id="request-text" value={requestText} onChange={event => setRequestText(event.target.value)} placeholder={project ? 'Describe a change or ask a question…' : 'Create a ten-question practice quiz on cell division…'} rows={3} maxLength={20000} aria-describedby="composer-hint" />
-          <div className="composer-footer"><p className="hint" id="composer-hint">{opening ? 'Opening your project…' : isBuilding ? 'CDK is working on your request. You can draft your next message while you wait.' : 'Your requests stay together in this project.'}</p><button disabled={isBuilding} type="submit">{sending ? 'Sending…' : 'Send'}</button></div>
-          {error && <p className="error" role="alert">{error.message}</p>}
+          <label htmlFor="request-text" className={project ? 'sr-only' : undefined}>{project ? 'Describe a change' : 'What should students learn or do?'}</label>
+          <textarea ref={messageBox} id="request-text" value={requestText} onChange={event => setRequestText(event.target.value)} placeholder={project ? 'Describe a change or ask a question…' : 'Create a ten-question practice quiz on cell division…'} rows={3} maxLength={20000} />
+          <div className="composer-footer">{opening && <p role="status">Opening your project…</p>}<button disabled={isBuilding} type="submit">{sending ? 'Sending…' : isBuilding ? 'Working…' : 'Send'}</button></div>
+          {error && <ErrorNotice failure={error} disabled={isBuilding} onSendAgain={() => void submitRequest(requestText)} onEdit={() => messageBox.current?.focus()} onNewProject={startNewProject} onAskForFix={askForFix} />}
         </form>
       </section>
-      <BuildPanel build={latestBuild} turn={turn} statusLines={statusLines} connection={connection} outcome={outcomes[turn.id ?? '']?.message} />
+      <BuildPanel build={latestBuild} turn={turn} statusLines={statusLines} connection={connection} outcome={outcomes[turn.id ?? '']?.message} disabled={isBuilding} onAskForFix={askForFix}
+        onSendAgain={() => { const original = messages.find(message => message.role === 'instructor' && message.turnId === latestBuild?.turnId); if (original) void submitRequest(original.content.filter(block => block.type === 'text').map(block => block.text).join('\n')); }}
+        onEdit={() => messageBox.current?.focus()} onNewProject={startNewProject} />
       <PreviewPanel build={readyBuild} />
     </div>
   </main>;
