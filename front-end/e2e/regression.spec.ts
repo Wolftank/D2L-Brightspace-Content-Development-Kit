@@ -18,7 +18,6 @@ const QA_FINDING_EXPLANATIONS = [
  */
 const FEED_WHILE_CHECKING = [
   'Starting your build',
-  'Reading your request',
   'Building from the SCORM starter',
   'Running the QA gate',
 ];
@@ -55,7 +54,7 @@ test('happy path: the status feed updates and the build is ready to download', a
   await expect(card).toContainText('The QA gate passed.');
   await expect(card.getByRole('link', { name: 'Download SCORM package' })).toBeVisible();
   await expect(page.getByText('Request complete', { exact: true })).toBeVisible({ timeout: TURN_TIMEOUT });
-  await expect(statusLines(page)).toHaveCount(0);
+  await expect(statusLines(page).last()).toHaveText('Build complete');
   await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled();
 });
 
