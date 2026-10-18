@@ -26,7 +26,7 @@ async function submitRequest(page: Page, request: string) {
   await page.goto('/');
   await page.getByLabel('Project title').fill('Cell division practice');
   await page.getByLabel('What should students learn or do?').fill(request);
-  await page.getByRole('button', { name: 'Send' }).click();
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
 }
 
 function statusLines(page: Page) {
@@ -54,7 +54,7 @@ test('happy path: the status feed updates and the build is ready to download', a
   await expect(card.getByRole('link', { name: 'Download SCORM package' })).toBeVisible();
   await expect(page.getByText('Request complete', { exact: true })).toBeVisible({ timeout: TURN_TIMEOUT });
   await expect(statusLines(page).last()).toHaveText('Build complete');
-  await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
 });
 
 test('QA failure: each finding explains itself and no package is offered', async ({ page }) => {
@@ -75,7 +75,7 @@ test('turn failure: a plain-language message appears without raw error details',
   await expect(page.getByLabel('Conversation history')).toContainText('The agent stopped before it finished.', {
     timeout: TURN_TIMEOUT,
   });
-  await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
 
   const panel = page.getByRole('region', { name: 'Build' });
   await expect(panel).not.toContainText('agent_error');
@@ -110,7 +110,7 @@ test('lost connection: the feed says the connection was lost, and a reload resto
   await submitRequest(page, '[drop-lost] Create a practice set on cell division.');
   await expect(statusLines(page).filter({ hasText: 'Building from the SCORM starter' })).toBeVisible();
 
-  await expect(connectionStatus(page)).toHaveText('Connection lost. Reload the page to reconnect.', { timeout: TURN_TIMEOUT });
+  await expect(connectionStatus(page)).toHaveText('Connection lost. Try connecting again.', { timeout: TURN_TIMEOUT });
 
   await page.reload();
 

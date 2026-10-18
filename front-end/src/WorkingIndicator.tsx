@@ -14,7 +14,7 @@ export function WorkingIndicator({ startedAt, step, connection }: {
   }, []);
   const seconds = Math.max(0, Math.floor((now - startedAt) / 1000));
   const text = connection === 'lost'
-    ? 'Connection lost. Reload the page to reconnect.'
+    ? 'Connection lost. Try connecting again.'
     : connection === 'reconnecting'
       ? 'Reconnecting to your request…'
       : step || 'Working on your request';

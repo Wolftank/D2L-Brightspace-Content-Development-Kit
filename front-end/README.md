@@ -50,6 +50,14 @@ Browser tests cover follow-ups on ready and failed builds, message order, reload
 
 Manual keyboard and NVDA check: send `[long-step]`, confirm focus returns to the message box and Send is disabled with an explanation. Draft a follow-up, reload, and confirm it stays. Confirm timer ticks are silent, progress updates are announced, and the completed agent reply is announced once. Tab through Conversation, history, the message box, Build panel, download, Preview, Restart preview, and the activity controls. At desktop and narrow widths, verify visible focus and no horizontal page scrolling. NVDA verification remains manual.
 
+## F11 recovery integration
+
+Errors use the shared `NextStep` from `@cdk/contract`: `send_again`, `sign_in`, `try_later`, `smaller_request`, `wait`, `new_project`, and `ask_for_fix`. B24 supplies these on API, turn, history, and build errors. The UI validates incoming errors and does not infer actions from codes. Ask for a fix prepares a follow-up in the composer and preserves an existing draft.
+
+The sign-in link still opens `/api/agent/sign-in`, implemented only by the stub. A real sign-in handler and Electron external-window integration remain outstanding, so F11 remains a draft. Manual NVDA verification also remains outstanding.
+
+Stub markers use each shared next-step identifier in brackets. `[qa-fail]` covers build recovery, `[cancelled]` covers cancellation, and `[drop-lost]` covers explicit reconnect.
+
 ## Add to D2L guide (F13)
 
 A ready SCORM build's download opens the instructions without changing the download endpoint. The adjacent Add to D2L instructions button reopens them. The labelled native dialog supports Close and Escape, explicitly wraps Tab/Shift+Tab, and returns focus to its opener. Its ordered steps cover upload, grading, visibility, and testing with a real enrolled test student. The optional deploy.txt uses the same content as the dialog. Other output formats do not receive SCORM instructions.

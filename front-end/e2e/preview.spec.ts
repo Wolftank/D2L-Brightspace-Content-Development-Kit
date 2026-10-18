@@ -5,7 +5,7 @@ async function buildActivity(page: Page) {
   await page.goto('/');
   await page.getByLabel('Project title').fill('Preview fixture');
   await page.getByLabel('What should students learn or do?').fill('Create a sample activity.');
-  await page.getByRole('button', { name: 'Send' }).click();
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(page.getByTitle('Interactive preview of build 1')).toBeVisible({ timeout: 15_000 });
 }
 

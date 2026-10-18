@@ -30,6 +30,6 @@ describe('WorkingIndicator', () => {
     view.rerender(<WorkingIndicator startedAt={Date.now()} step="Writing index.html" connection="reconnecting" />);
     expect(screen.getByRole('status')).toHaveTextContent('Reconnecting');
     view.rerender(<WorkingIndicator startedAt={Date.now()} step="Writing index.html" connection="lost" />);
-    expect(screen.getByRole('status')).toHaveTextContent('Connection lost. Reload the page to reconnect.');
+    expect(screen.getByRole('status')).toHaveTextContent('Connection lost. Try connecting again.');
   });
 });

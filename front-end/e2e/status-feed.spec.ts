@@ -8,7 +8,7 @@ for (const size of [{ name: 'desktop', width: 1280, height: 900 }, { name: 'phon
     await page.goto('/');
     await page.getByLabel('Project title').fill('Long feed');
     await page.getByLabel('What should students learn or do?').fill('[long-feed] Build a quiz');
-    await page.getByRole('button', { name: 'Send' }).click();
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
     const feed = page.getByRole('log', { name: 'Build progress' });
     await expect(feed.getByRole('listitem').filter({ hasText: 'Checking activity 15:' })).toHaveCount(1);
     const documentHeight = await page.evaluate(() => document.documentElement.scrollHeight);
