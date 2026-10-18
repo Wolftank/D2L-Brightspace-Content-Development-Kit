@@ -9,7 +9,7 @@ async function submitRequest(page: Page, request: string) {
   await page.goto('/');
   await page.getByLabel('Project title').fill('Workplace safety practice');
   await page.getByLabel('What should students learn or do?').fill(request);
-  await page.getByRole('button', { name: 'Send' }).click();
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
 }
 
 function buildCard(page: Page, heading: string) {
@@ -46,17 +46,17 @@ test('a failed turn shows its plain message and makes no build', async ({ page }
   await expect(page.getByLabel('Conversation history')).toContainText('The agent stopped with an error before it finished.', {
     timeout: TURN_TIMEOUT,
   });
-  await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
   await expect(page.getByRole('region', { name: 'Build', exact: true }).getByRole('article')).toHaveCount(0);
 });
 
 test('a follow-up request makes version 2', async ({ page }) => {
   await submitRequest(page, 'Create a five-question practice set on workplace safety.');
   await expect(buildCard(page, 'Ready to download')).toContainText('Version 1', { timeout: TURN_TIMEOUT });
-  await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled({ timeout: TURN_TIMEOUT });
+  await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled({ timeout: TURN_TIMEOUT });
 
   await page.getByLabel('Describe a change').fill('[follow-up] Add two more questions.');
-  await page.getByRole('button', { name: 'Send' }).click();
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
 
   await expect(buildCard(page, 'Ready to download')).toContainText('Version 2', { timeout: TURN_TIMEOUT });
 });
