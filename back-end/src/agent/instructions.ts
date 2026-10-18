@@ -5,55 +5,47 @@ export interface ProjectInstructionsInput {
   project: Pick<Project, 'id' | 'title'>;
   /** Absolute path returned by the workspace service's pathFor(projectId). */
   workspaceDir: string;
-  shell: 'bash' | 'powershell';
-  /** The absolute path of the Node runtime that runs the QA gate: the back end's own executable. */
-  runtime: string;
 }
 
 /** Renders project context and the kit's build/check/fix workflow for one request. */
-export function renderProjectInstructions({ project, workspaceDir, shell, runtime }: ProjectInstructionsInput): string {
+export function renderProjectInstructions({ project, workspaceDir }: ProjectInstructionsInput): string {
   if (!isAbsolute(workspaceDir) || /[\r\n\0]/.test(workspaceDir)) {
     throw new Error('workspaceDir must be an absolute, single-line path');
   }
-  const kitDir = join(workspaceDir, 'kit');
   const outDir = join(workspaceDir, 'out');
-  const checker = join(kitDir, 'harness', 'lint', 'lint.js');
-  const quote = (value: string) => `'${value.replaceAll("'", shell === 'powershell' ? "''" : "'\\''")}'`;
-  const command = `${shell === 'powershell' ? '& ' : ''}${quote(runtime)} ${quote(checker)} ${quote(outDir)} --avenue scorm`;
 
   return `# Project instructions
 
 Project ID: ${code(project.id)}
 Project title: ${code(project.title)}
-V1 output format: SCORM. Build from the instructor request supplied in the message input. Use the SCORM path directly and proceed without the prototype's output-selection interview.
+Output format: SCORM. Build from the instructor request supplied in the message input. Use the SCORM path directly and proceed without the prototype's output-selection interview.
 
-## Workspace and kit
+## Workspace and skills
 
 - Workspace: ${code(workspaceDir)}
 - Source material (files/): ${code(join(workspaceDir, 'files'))}
 - Generated output (out/): ${code(outDir)}
-- Prepared kit: ${code(kitDir)}
 
-Keep source material and kit files unchanged. Write the activity and its assets only into out/.
-Read and follow these existing guides for content rules and tenant constraints:
-- SCORM skill: ${code(join(kitDir, 'skills', 'd2l-scorm-package', 'SKILL.md'))}
-- QA skill: ${code(join(kitDir, 'skills', 'd2l-tenant-qa', 'SKILL.md'))}
-- SCORM starter: ${code(join(kitDir, 'skills', 'd2l-scorm-package', 'assets', 'starter'))}
-- Tenant profile: ${code(join(kitDir, 'harness', 'tenant-profile.json'))}
+Keep source material unchanged. Write the activity and its assets only into out/.
+Follow these skills for content rules:
+- ${code('d2l-scorm-package')} to build the SCORM activity
+- ${code('d2l-tenant-qa')} to check it against what the D2L tenant allows
 
-Resolve harness paths in the guides from the prepared kit directory and skill-relative assets from the corresponding skill directory. Use the starter already provisioned in out/ as the starting point for the activity.
+Use the starter already provisioned in out/ as the starting point for the activity.
+
+## Tools
+
+You have no shell. Work with your file tools and these CDK tools:
+- ${code('mcp__cdk__get_project')} returns the project's details, its latest build with its QA findings, and what the D2L tenant allows. Read the tenant limits before you build.
+- ${code('mcp__cdk__check_output')} runs the QA checker on out/ as it is now and returns its findings.
+- ${code('mcp__cdk__delete_files')} deletes files or folders inside out/.
 
 ## Build, check, and fix within this request
 
-1. Build the requested SCORM activity in out/ using the guides and source material. Ensure all images have alt text, the page declares lang="en", and headings follow a sequential order without skipping levels. The checker enforces these accessibility rules.
-2. Run this check in ${shell} from the workspace:
-
-\`\`\`${shell}
-${command}
-\`\`\`
-
-3. Inspect the findings and their explanations. Fix errors you can address in out/ and rerun the same checker during this request. Review warnings and report any remaining limitations. If the checker cannot run or errors remain, clearly describe the failure and unresolved findings; do not claim a passing package.
-4. Return a concise description of the activity, the check result, and any unresolved issues. Leave the output for the backend build/download step, which saves a version, independently validates the saved output, and packages passing builds with the manifest at the ZIP root. That backend step owns final packaging and download eligibility; the agent's check is preliminary. In this V1 flow, hand off out/ in place of the guides' standalone packaging and deployment steps.
+1. Build the requested SCORM activity in out/ using the skills and source material. Ensure all images have alt text, the page declares lang="en", and headings follow a sequential order without skipping levels. The checker enforces these accessibility rules.
+2. Check out/ with ${code('mcp__cdk__check_output')}.
+3. Inspect the findings and their explanations. Fix errors you can address in out/ and check again during this request. Review warnings and report any remaining limitations. If the checker cannot run or errors remain, clearly describe the failure and unresolved findings; do not claim a passing package.
+4. Return a concise description of the activity, the check result, and any unresolved issues. When your turn ends, CDK saves out/ as a new version, checks the saved output again, and packages a passing build with the manifest at the ZIP root. That step owns final packaging and download eligibility. Hand off out/ in place of the skills' standalone packaging and deployment steps.
 
 ## How to reply
 

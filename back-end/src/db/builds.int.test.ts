@@ -55,7 +55,7 @@ describe('builds repo', () => {
     const finished = builds.finish(build.id, {
       status: 'failed',
       qa,
-      error: { code: 'qa_failed', message: 'The QA gate reported 1 error(s)' },
+      error: { code: 'qa_failed', message: 'The QA check found problems in this build.', nextStep: 'ask_for_fix' },
       outputHash: 'hash-1',
     });
 
@@ -67,7 +67,7 @@ describe('builds repo', () => {
     const checking = builds.create({ projectId, version: 1, avenue: 'scorm' });
     const ready = builds.create({ projectId, version: 2, avenue: 'scorm' });
     builds.finish(ready.id, { status: 'ready', qa: { passed: true, findings: [] }, error: null, outputHash: 'hash-2' });
-    const error = { code: 'interrupted', message: 'm' };
+    const error = { code: 'interrupted', message: 'm', nextStep: 'send_again' } as const;
 
     const failed = builds.failChecking(error);
 

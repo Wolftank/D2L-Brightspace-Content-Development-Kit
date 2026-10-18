@@ -19,6 +19,7 @@ import { createWorkspaceService, type WorkspaceService } from '../services/works
 import { createEventService, type EventService } from './events.js';
 import { createRunner, type Runner } from './runner.js';
 import { createSessionService, type SessionService } from './sessions.js';
+import type { Build as ApiBuild } from '@cdk/contract';
 
 /** A driver whose agent writes the request into out/notes.txt and replies "Done." */
 function writingDriver(): Pick<AgentDriver, 'open'> {
@@ -138,7 +139,7 @@ describe('runner, end to end', () => {
 
   /** Runs turns with `driver`'s agent, capped by `turnLimits`. */
   function useAgent(driver: Pick<AgentDriver, 'open'>, turnLimits: TurnLimits): void {
-    sessions = createSessionService({ projects, workspaces, driver });
+    sessions = createSessionService({ projects, workspaces, driver, tools: () => ({ name: 'cdk', tools: [] }) });
     const builds = createBuildService({ builds: createBuildsRepo(db), projects, workspaces, events });
     runner = createRunner({ turns: createTurnsRepo(db), messages, events, sessions, workspaces, builds, turnLimits });
   }
@@ -183,10 +184,24 @@ describe('runner, end to end', () => {
     expect(turn).toMatchObject({ status: 'completed', usage: { steps: 2 } });
     expect(messages.get(turn.replyId!)?.content).toEqual([{ type: 'text', text: 'Done.' }]);
 
-    const build = (stored.at(-2)!.payload as { build: { turnId: string; outputHash: string } }).build;
+        const build = (stored.at(-2)!.payload as { build: ApiBuild }).build;
     expect(build.turnId).toBe('turn-1');
     expect(build.outputHash).toBe(await workspaces.hashOutput(projectId));
+    expect(build.qa).toMatchObject({ passed: expect.any(Boolean), findings: expect.any(Array) });
+    expect(createBuildsRepo(db).listByProject(projectId)).toHaveLength(1);
     expect(projects.getById(projectId)?.sessionId).toBe('agent-session-1');
+  });
+
+
+  it('creates no build for a turn that leaves the output unchanged', async () => {
+    useAgent(steppingDriver(), { maxSteps: 60, maxBudgetUsd: 10 });
+    queueTurn('reply-only', 'queued', 'Take 1 step');
+
+    await runner.executeTurn('reply-only');
+
+    expect(turnRow('reply-only').status).toBe('completed');
+    expect(createBuildsRepo(db).listByProject(projectId)).toEqual([]);
+    expect(events.after(projectId, 0).map((event) => event.kind)).not.toContain('build.created');
   });
 
   it('stores separate ordered replies around tool calls for history and event replay', async () => {
@@ -242,16 +257,17 @@ describe('runner, end to end', () => {
   });
 
   it.each([
-    ['step', { maxSteps: 3, maxBudgetUsd: 10 }, 'max_steps_exceeded', 'The request needed more steps than allowed. Try a smaller request.'],
-    ['spending', { maxSteps: 60, maxBudgetUsd: 2.5 }, 'max_budget_exceeded', 'The request reached its spending limit. Try a smaller request.'],
-  ] as const)('ends a turn at its %s limit with the plain message, then runs the next request', async (_limit, turnLimits, code, message) => {
+    ['step', { maxSteps: 3, maxBudgetUsd: 10 }, 'max_steps_exceeded', 'The request needed more steps than allowed.'],
+    ['spending', { maxSteps: 60, maxBudgetUsd: 2.5 }, 'max_budget_exceeded', 'The request reached its spending limit.'],
+  ] as const)('ends a turn at its %s limit with the plain message and a smaller request as the next step, then runs the next request', async (_limit, turnLimits, code, message) => {
     useAgent(steppingDriver(), turnLimits);
     queueTurn('too-big', 'queued', 'Take 5 steps');
 
     await runner.executeTurn('too-big');
 
-    expect(turnRow('too-big')).toMatchObject({ status: 'failed', error: { code, message } });
-    expect(events.after(projectId, 0).at(-1)).toMatchObject({ kind: 'turn.failed', payload: { error: { code, message } } });
+    const error = { code, message, nextStep: 'smaller_request' };
+    expect(turnRow('too-big')).toMatchObject({ status: 'failed', error });
+    expect(events.after(projectId, 0).at(-1)).toMatchObject({ kind: 'turn.failed', payload: { error } });
 
     queueTurn('smaller', 'queued', 'Take 2 steps');
     await runner.executeTurn('smaller');

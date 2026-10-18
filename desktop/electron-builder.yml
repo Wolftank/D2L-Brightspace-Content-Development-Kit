@@ -20,3 +20,5 @@ win:
 nsis:
   oneClick: true
   perMachine: false
+  deleteAppDataOnUninstall: true
+  include: installer.nsh

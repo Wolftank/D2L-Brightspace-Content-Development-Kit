@@ -18,6 +18,7 @@ import { createMessageService } from './services/messages.js';
 import { createProjectService } from './services/projects.js';
 import { createTurnService } from './services/turns.js';
 import { createWorkspaceService } from './services/workspaces.js';
+import { createCdkTools } from './tools/index.js';
 
 function buildDeps(cfg: Config): { deps: Deps; runner: Runner; builds: BuildService } {
   const db = openDb(join(cfg.dataDir, 'cdk.db'));
@@ -34,7 +35,12 @@ function buildDeps(cfg: Config): { deps: Deps; runner: Runner; builds: BuildServ
     turns: turnsRepo,
     messages: messagesRepo,
     events,
-    sessions: createSessionService({ projects: projectsRepo, workspaces, driver }),
+    sessions: createSessionService({
+      projects: projectsRepo,
+      workspaces,
+      driver,
+      tools: (projectId) => createCdkTools({ projects: projectsRepo, workspaces, builds }, projectId),
+    }),
     workspaces,
     builds,
     turnLimits: cfg.turnLimits,

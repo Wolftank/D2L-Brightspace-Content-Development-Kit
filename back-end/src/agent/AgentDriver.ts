@@ -1,4 +1,4 @@
-import type { ZodType } from 'zod';
+import type { z, ZodRawShape } from 'zod';
 
 export type AgentName = 'claude' | 'copilot' | 'scripted';
 
@@ -26,9 +26,9 @@ export interface ProbeResult {
 }
 
 /**
- * What a session needs. The agent can use only its file tools inside
- * `workspaceDir`, its shell, `skills`, and `tools`. A session whose agent
- * loads anything else fails its turn with `agent_unrestricted`.
+ * What a session needs. The agent can use only its file tools, reading inside
+ * `workspaceDir` and writing inside its `out/`, `skills`, and `tools`. A session whose agent loads anything
+ * else fails its turn with `agent_unrestricted`.
  */
 export interface SessionRequest {
   /** The project's workspace. The agent runs inside it. */
@@ -51,16 +51,10 @@ export interface SessionRequest {
    *  agent takes them. */
   skills: string[];
 
-  /** Tools exposed to the agent, bound to this project and instructor. */
+  /** Tools exposed to the agent, bound to this project and instructor. The
+   *  agent may call every one of them; making that true for a given agent's
+   *  SDK is the driver's job (see that agent's section in docs/drivers.md). */
   tools: ToolServerSpec;
-
-  /** Tool names pre-approved for the session, in the agent's qualified
-   *  form, e.g. `mcp__cdk__create_build`. Edits inside `workspaceDir` and
-   *  shell commands are always allowed to callers of this interface; making
-   *  that true for a given agent's SDK is the driver's job, and may take
-   *  agent-specific work — see that agent's section in docs/drivers.md.
-   *  Every other tool call is denied. */
-  allowedTools: string[];
 }
 
 /**
@@ -104,11 +98,15 @@ export interface ToolServerSpec {
   tools: ToolDef<any>[];
 }
 
-export interface ToolDef<TInput> {
+export interface ToolDef<Shape extends ZodRawShape> {
   name: string;
+  /** What the tool does, for the agent. */
   description: string;
-  inputSchema: ZodType<TInput>;
-  handler: (input: TInput) => Promise<ToolResult>;
+  /** The status line the instructor sees while the agent calls the tool, e.g. "Checking the activity". */
+  summary: string;
+  /** The fields of the tool's input object. */
+  input: Shape;
+  handler: (input: z.infer<z.ZodObject<Shape>>) => Promise<ToolResult>;
 }
 
 export interface ToolResult {

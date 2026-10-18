@@ -6,7 +6,7 @@ import type { FinishTurnInput } from '../db/turns.js';
 import { WorkspaceMissing } from '../errors.js';
 import type { Build as ApiBuild } from '@cdk/contract';
 import type { AppendEventInput } from './events.js';
-import { createRunner, type RunnerDeps } from './runner.js';
+import { createRunner, TURN_ERRORS, type RunnerDeps } from './runner.js';
 
 const INSTRUCTOR_MESSAGE: Message = {
   id: 'message-1',
@@ -345,7 +345,7 @@ describe('runner', () => {
 
     await runner.executeTurn('turn-1');
 
-    const error = { code: 'agent_busy', message: "The agent's account is busy or has reached its usage limit. Try again later." };
+    const error = { code: 'agent_busy', message: "The agent's account is busy or has reached its usage limit.", nextStep: 'try_later' };
     expect(finished).toEqual([{ id: 'turn-1', input: { status: 'failed', error, usage: { steps: 1 } } }]);
     expect(kinds()).toEqual(['turn.started', 'message.delta', 'turn.failed']);
     expect(payloadsOf('turn.failed')).toEqual([{ turnId: 'turn-1', error }]);
@@ -367,7 +367,7 @@ describe('runner', () => {
   });
 
   it('fails with workspace_missing before acquiring a session when the workspace is gone', async () => {
-    const { deps, runner, finished, kinds } = setup();
+    const { deps, runner, finished, kinds, payloadsOf } = setup();
     deps.workspaces.hashOutput.mockRejectedValue(new WorkspaceMissing());
 
     await runner.executeTurn('turn-1');
@@ -375,6 +375,7 @@ describe('runner', () => {
     expect(finished[0]!.input).toMatchObject({ status: 'failed', error: { code: 'workspace_missing' } });
     expect(kinds()).toEqual(['turn.started', 'turn.failed']);
     expect(deps.sessions.acquire).not.toHaveBeenCalled();
+    expect(payloadsOf('turn.failed')).toEqual([{ turnId: 'turn-1', error: { code: 'workspace_missing', ...TURN_ERRORS.workspace_missing } }]);
   });
 
   it('keeps workspace_missing, the usage, and the reply when the output disappears after the agent finishes', async () => {
@@ -407,12 +408,13 @@ describe('runner', () => {
     session.send.mockImplementation(() => {
       throw new Error('spawn claude ENOENT');
     });
-    const { deps, runner, finished } = setup({ session });
+    const { deps, runner, finished, payloadsOf } = setup({ session });
 
     await runner.executeTurn('turn-1');
 
     expect(finished[0]!.input).toMatchObject({ status: 'failed', error: { code: 'internal_error' } });
     expect(deps.sessions.close).toHaveBeenCalledOnce();
+    expect(payloadsOf('turn.failed')).toEqual([{ turnId: 'turn-1', error: { code: 'internal_error', ...TURN_ERRORS.internal_error } }]);
   });
 
   it('aborts the agent and fails once when progress cannot be reported', async () => {
@@ -433,7 +435,7 @@ describe('runner', () => {
   });
 
   it('fails once and keeps the reply when the build step throws', async () => {
-    const { deps, runner, replies, finished, kinds } = setup();
+    const { deps, runner, replies, finished, kinds, payloadsOf } = setup();
     deps.builds.create.mockRejectedValue(new Error('EPERM'));
 
     await runner.executeTurn('turn-1');
@@ -444,12 +446,13 @@ describe('runner', () => {
         id: 'turn-1',
         input: {
           status: 'failed',
-          error: expect.objectContaining({ code: 'internal_error' }),
+          error: { code: 'internal_error', ...TURN_ERRORS.internal_error },
           usage: COMPLETED.usage,
           replyId: replies[0]!.id,
         },
       },
     ]);
+    expect(payloadsOf('turn.failed')).toEqual([{ turnId: 'turn-1', error: { code: 'internal_error', ...TURN_ERRORS.internal_error } }]);
   });
 
   it('does nothing for a turn that is not queued', async () => {
@@ -482,7 +485,8 @@ describe('runner', () => {
 
     const error = {
       code: 'interrupted',
-      message: 'The app closed before this request finished. Changes already made are kept; send the request again.',
+      message: 'The app closed before this request finished. Changes made so far are kept.',
+      nextStep: 'send_again',
     };
     expect(deps.turns.failActive).toHaveBeenCalledWith(error);
     expect(appended).toEqual([

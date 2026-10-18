@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { PreToolUseHookInput, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { AgentEvent, SessionRequest, TurnResult } from './AgentDriver.js';
+import type { HookCallback, PreToolUseHookInput, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { AgentEvent, SessionRequest, ToolResult, TurnResult } from './AgentDriver.js';
 
 const RESULT = {
   type: 'result',
@@ -17,10 +17,30 @@ const RESULT = {
   num_turns: 1,
 };
 
+/** The `cdk` server the fake SDK builds: the request's tools as `tool()` returned them. */
+interface FakeToolServer {
+  name: string;
+  tools: Array<{ name: string; handler: (input: unknown) => Promise<unknown> }>;
+}
+
+/** A pre-tool call of `toolName` with `toolInput`, as the CLI sends it to a hook. */
+function preToolUse(toolName: string, toolInput: Record<string, unknown>, cwd: string): PreToolUseHookInput {
+  return {
+    hook_event_name: 'PreToolUse',
+    tool_name: toolName,
+    tool_input: toolInput,
+    tool_use_id: 'call-1',
+    session_id: 'session-1',
+    transcript_path: '',
+    cwd,
+  };
+}
+
 describe('Claude turns', () => {
   let dir: string;
   let calls: Array<{ options: Record<string, unknown> }>;
   let messages: unknown[];
+  let checkOutput: () => Promise<ToolResult>;
 
   function request(): SessionRequest {
     return {
@@ -29,8 +49,18 @@ describe('Claude turns', () => {
       instructions: 'Follow instructions exactly.',
       skillsDir: join(dir, 'skills'),
       skills: ['allowed-skill'],
-      tools: { name: 'cdk', tools: [] },
-      allowedTools: [],
+      tools: {
+        name: 'cdk',
+        tools: [
+          {
+            name: 'check_output',
+            description: 'Runs the QA checker on out/.',
+            summary: 'Checking the activity',
+            input: {},
+            handler: () => checkOutput(),
+          },
+        ],
+      },
     };
   }
 
@@ -50,6 +80,7 @@ describe('Claude turns', () => {
     }
     calls = [];
     messages = [RESULT];
+    checkOutput = async () => ({ content: '{"passed":true,"findings":[]}' });
     vi.resetModules();
     vi.doMock('@anthropic-ai/claude-agent-sdk', () => ({
       query: (call: { options: Record<string, unknown> }) => {
@@ -58,6 +89,8 @@ describe('Claude turns', () => {
           yield* messages;
         })();
       },
+      createSdkMcpServer: (options: FakeToolServer) => options,
+      tool: (name: string, _description: string, _input: unknown, handler: (input: unknown) => Promise<unknown>) => ({ name, handler }),
     }));
   });
 
@@ -81,8 +114,8 @@ describe('Claude turns', () => {
     expect(options).not.toHaveProperty('effort');
   });
 
-  it("loads only the built-in tools, the request's skills, and no outside MCP servers", async () => {
-    const { BUILT_IN_TOOLS } = await import('./claude.js');
+  it("loads only the built-in tools, the request's skills, and the request's own tool server", async () => {
+    const { BUILT_IN_TOOLS, MUTATING_TOOL_RULES } = await import('./claude.js');
     const { options } = await runTurn();
 
     expect(options).toMatchObject({
@@ -91,8 +124,9 @@ describe('Claude turns', () => {
       tools: BUILT_IN_TOOLS,
       skills: ['allowed-skill'],
       strictMcpConfig: true,
+      allowedTools: [...MUTATING_TOOL_RULES, 'mcp__cdk__check_output'],
     });
-    expect(options).not.toHaveProperty('mcpServers');
+    expect(Object.keys(options.mcpServers as object)).toEqual(['cdk']);
     expect(options).not.toHaveProperty('plugins');
     expect(options).not.toHaveProperty('agents');
     expect(options).not.toHaveProperty('additionalDirectories');
@@ -123,10 +157,44 @@ describe('Claude turns', () => {
     }
   });
 
-  it('confines the file tools with a pre-tool hook', async () => {
+  it("serves the request's tools in-process, returning each handler's result", async () => {
     const { options } = await runTurn();
+    const server = (options.mcpServers as Record<string, FakeToolServer>).cdk!;
 
-    expect(options.hooks).toEqual({ PreToolUse: [{ hooks: [expect.any(Function)] }] });
+    expect(server.name).toBe('cdk');
+    expect(server.tools.map((tool) => tool.name)).toEqual(['check_output']);
+    expect(await server.tools[0]!.handler({})).toEqual({
+      content: [{ type: 'text', text: '{"passed":true,"findings":[]}' }],
+      isError: false,
+    });
+  });
+
+  it('gives the agent a plain error when a tool fails, and logs what went wrong', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const failure = new Error('EBUSY: resource busy or locked');
+    checkOutput = async () => {
+      throw failure;
+    };
+    const { options } = await runTurn();
+    const server = (options.mcpServers as Record<string, FakeToolServer>).cdk!;
+
+    expect(await server.tools[0]!.handler({})).toEqual({ content: [{ type: 'text', text: 'The tool failed to run.' }], isError: true });
+    expect(consoleError).toHaveBeenCalledWith('The cdk tool check_output failed:', failure);
+    consoleError.mockRestore();
+  });
+
+  it('confines the file tools with a pre-tool hook that refuses a path outside the workspace', async () => {
+    const { options } = await runTurn();
+    const hooks = options.hooks as { PreToolUse: Array<{ hooks: HookCallback[] }> };
+    const workspaceDir = join(dir, 'workspace');
+
+    expect(hooks.PreToolUse).toHaveLength(1);
+    const output = await hooks.PreToolUse[0]!.hooks[0]!(
+      preToolUse('Read', { file_path: join(dir, 'skills', 'other-skill', 'SKILL.md') }, workspaceDir),
+      'call-1',
+      { signal: new AbortController().signal },
+    );
+    expect(output).toMatchObject({ hookSpecificOutput: { permissionDecision: 'deny' } });
   });
 
   it('fails the turn with agent_unrestricted when the session loads a tool it may not', async () => {
@@ -161,15 +229,7 @@ describe('confineToWorkspace', () => {
 
   async function decide(toolName: string, toolInput: Record<string, unknown>) {
     const { confineToWorkspace } = await import('./claude.js');
-    const input: PreToolUseHookInput = {
-      hook_event_name: 'PreToolUse',
-      tool_name: toolName,
-      tool_input: toolInput,
-      tool_use_id: 'call-1',
-      session_id: 'session-1',
-      transcript_path: '',
-      cwd: workspaceDir,
-    };
+    const input = preToolUse(toolName, toolInput, workspaceDir);
     const output = await confineToWorkspace(workspaceDir)(input, 'call-1', { signal: new AbortController().signal });
     return 'hookSpecificOutput' in output && output.hookSpecificOutput?.hookEventName === 'PreToolUse'
       ? (output.hookSpecificOutput.permissionDecision ?? 'none')
@@ -206,6 +266,21 @@ describe('confineToWorkspace', () => {
     expect(await decide('Write', { file_path: join(outsideDir, 'new.txt'), content: 'x' })).toBe('deny');
   });
 
+  it('refuses a write inside the workspace but outside out/, and still allows reading there', async () => {
+    expect(await decide('Write', { file_path: join(workspaceDir, 'files', 'notes.txt'), content: 'x' })).toBe('deny');
+    expect(await decide('Edit', { file_path: 'CLAUDE.md', old_string: 'a', new_string: 'b' })).toBe('deny');
+    expect(await decide('Write', { file_path: join(workspaceDir, '.claude', 'settings.json'), content: '{}' })).toBe('deny');
+    expect(await decide('Edit', { file_path: 'out/../CLAUDE.md', old_string: 'a', new_string: 'b' })).toBe('deny');
+    expect(await decide('Read', { file_path: join(workspaceDir, 'CLAUDE.md') })).toBe('none');
+  });
+
+  it('refuses a write through a link in out/ that leads elsewhere in the workspace', async () => {
+    await fs.mkdir(join(workspaceDir, 'files'));
+    await fs.symlink(join(workspaceDir, 'files'), join(workspaceDir, 'out', 'sources'), 'junction');
+
+    expect(await decide('Write', { file_path: join(workspaceDir, 'out', 'sources', 'notes.txt'), content: 'x' })).toBe('deny');
+  });
+
   it('refuses a path that leaves the workspace through ..', async () => {
     expect(await decide('Read', { file_path: join(workspaceDir, 'out', '..', '..', 'outside', 'secret.txt') })).toBe('deny');
     expect(await decide('Edit', { file_path: '../outside/secret.txt', old_string: 'a', new_string: 'b' })).toBe('deny');
@@ -231,8 +306,20 @@ describe('confineToWorkspace', () => {
     expect(await decide('Write', { file_path: join(workspaceDir, 'dangling', 'new.txt'), content: 'x' })).toBe('deny');
   });
 
-  it('leaves other tools to the permission rules', async () => {
-    expect(await decide('Bash', { command: `cat ${join(outsideDir, 'secret.txt')}` })).toBe('none');
+  it('refuses a home-directory path, reading ~ the way the CLI does', async () => {
+    expect(await decide('Read', { file_path: '~/.claude/.credentials.json' })).toBe('deny');
+    expect(await decide('Read', { file_path: '~\\.claude\\.credentials.json' })).toBe('deny');
+    expect(await decide('Glob', { pattern: '*', path: '~' })).toBe('deny');
+    expect(await decide('Grep', { pattern: 'token', path: '~' })).toBe('deny');
+  });
+
+  it('refuses an outside path padded with whitespace, which the CLI trims', async () => {
+    expect(await decide('Read', { file_path: ` ${join(outsideDir, 'secret.txt')}` })).toBe('deny');
+    expect(await decide('Write', { file_path: `\n${join(outsideDir, 'new.txt')}`, content: 'x' })).toBe('deny');
+  });
+
+  it('leaves the CDK tools, which confine themselves, to their own checks', async () => {
+    expect(await decide('mcp__cdk__delete_files', { paths: [join(outsideDir, 'secret.txt')] })).toBe('none');
   });
 });
 
