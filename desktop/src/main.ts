@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { app, BrowserWindow, dialog, Menu } from 'electron';
-import { type BackEnd, startBackEnd } from './back-end.js';
+import { type BackEnd, LAUNCH_COOKIE, startBackEnd } from './back-end.js';
 
 /** The compiled back end, from the `cdk-back-end` workspace packaged with the app. */
 const SERVER = createRequire(import.meta.url).resolve('cdk-back-end/dist/server.js');
@@ -31,6 +31,14 @@ async function open(): Promise<void> {
   window = new BrowserWindow({ width: 1280, height: 860, title: 'CDK', show: false });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.once('ready-to-show', showWindow);
+  await window.webContents.session.cookies.set({
+    url: backEnd.url,
+    name: LAUNCH_COOKIE,
+    value: backEnd.launchToken,
+    path: '/',
+    httpOnly: true,
+    sameSite: 'strict',
+  });
   await window.loadURL(backEnd.url);
 }
 

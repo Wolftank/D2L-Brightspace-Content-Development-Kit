@@ -1,4 +1,5 @@
 import { execFile, spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { createServer, type AddressInfo } from 'node:net';
 import { setTimeout as sleep } from 'node:timers/promises';
 
@@ -8,10 +9,15 @@ export const STARTUP_TIMEOUT_MS = 30_000;
 /** The most of the back end's error output kept for a startup failure message. */
 const ERROR_OUTPUT_CHARS = 4_000;
 
+/** The cookie the window carries the launch token in, the name the back end's origin guard reads. */
+export const LAUNCH_COOKIE = 'cdk_launch';
+
 /** A running back end, serving the app at `url`. */
 export interface BackEnd {
   /** The app origin's root, `http://127.0.0.1:<port>/`. */
   url: string;
+  /** The secret this launch's back end requires on every API request, in the `LAUNCH_COOKIE` cookie. */
+  launchToken: string;
   /** Settles when the back end's process exits, for any reason. */
   exited: Promise<void>;
   /** Ends the back end's whole process tree: the back end, the agent, and every command either started. */
@@ -33,11 +39,16 @@ export function appOrigin(port: number): string {
 
 /**
  * The back end's environment: the app's own, plus the settings that make the
- * app's executable run it as Node and serve the built front end in `appDir`
- * on `port`.
+ * app's executable run it as Node, serve the built front end in `appDir` on
+ * `port`, and require `launchToken` on every API request.
  */
-export function backEndEnv(env: NodeJS.ProcessEnv, port: number, appDir: string): NodeJS.ProcessEnv {
-  return { ...env, ELECTRON_RUN_AS_NODE: '1', PORT: String(port), APP_ORIGIN: appOrigin(port), APP_DIR: appDir };
+export function backEndEnv(env: NodeJS.ProcessEnv, port: number, appDir: string, launchToken: string): NodeJS.ProcessEnv {
+  return { ...env, ELECTRON_RUN_AS_NODE: '1', PORT: String(port), APP_ORIGIN: appOrigin(port), APP_DIR: appDir, LAUNCH_TOKEN: launchToken };
+}
+
+/** The `Cookie` header that carries `launchToken`. */
+export function launchCookie(launchToken: string): string {
+  return `${LAUNCH_COOKIE}=${launchToken}`;
 }
 
 /** A port on 127.0.0.1 that is free now, chosen by the OS. */
@@ -79,8 +90,9 @@ export async function startBackEnd(
   timeoutMs = STARTUP_TIMEOUT_MS,
 ): Promise<BackEnd> {
   const port = await freePort();
+  const launchToken = randomBytes(32).toString('base64url');
   const child = spawn(runtime, [server], {
-    env: backEndEnv(process.env, port, appDir),
+    env: backEndEnv(process.env, port, appDir, launchToken),
     stdio: ['ignore', 'ignore', 'pipe'],
     detached: process.platform !== 'win32',
     windowsHide: true,
@@ -104,6 +116,7 @@ export async function startBackEnd(
 
   const backEnd: BackEnd = {
     url: `${appOrigin(port)}/`,
+    launchToken,
     exited,
     async stop() {
       if (!running || child.pid === undefined) return;
@@ -114,7 +127,7 @@ export async function startBackEnd(
 
   const deadline = Date.now() + timeoutMs;
   while (running && Date.now() < deadline) {
-    if (await isHealthy(port)) return backEnd;
+    if (await isHealthy(port, launchToken)) return backEnd;
     await sleep(100);
   }
   const message = running
@@ -124,9 +137,9 @@ export async function startBackEnd(
   throw new BackEndStartError(message);
 }
 
-async function isHealthy(port: number): Promise<boolean> {
+async function isHealthy(port: number, launchToken: string): Promise<boolean> {
   try {
-    const res = await fetch(`${appOrigin(port)}/api/health`);
+    const res = await fetch(`${appOrigin(port)}/api/health`, { headers: { cookie: launchCookie(launchToken) } });
     return res.ok;
   } catch {
     return false;

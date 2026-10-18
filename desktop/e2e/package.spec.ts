@@ -7,7 +7,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { _electron as electron, expect, test } from '@playwright/test';
-import { type BackEnd, startBackEnd } from '../src/back-end.js';
+import { type BackEnd, launchCookie, startBackEnd } from '../src/back-end.js';
 
 /** The runnable app that `npm run package` writes next to the installer. */
 const APP = fileURLToPath(new URL('../release/win-unpacked/', import.meta.url));
@@ -56,11 +56,13 @@ test("the packaged back end runs on the app's runtime and serves the app, projec
     expect(app.status).toBe(200);
     expect(await app.text()).toContain('<title>D2L Content Development Kit</title>');
 
-    const project = await fetch(new URL('/api/projects', origin), {
+    const create = (headers: Record<string, string>) => fetch(new URL('/api/projects', origin), {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...headers },
       body: JSON.stringify({ title: 'Package check' }),
     });
+    expect((await create({})).status).toBe(403);
+    const project = await create({ cookie: launchCookie(backEnd.launchToken) });
     expect(project.status, await project.clone().text()).toBe(201);
 
     expect(await previewStatus(port, `/preview/player.html?buildId=b&attempt=1&parentOrigin=${encodeURIComponent(origin)}`)).toBe(200);
@@ -74,6 +76,7 @@ test('the app opens the CDK window and leaves no processes when closed', async (
   const app = await electron.launch({ executablePath: EXE, args: [`--user-data-dir=${join(dataDir, 'window')}`] });
   const window = await app.firstWindow();
   await expect(window.getByRole('heading', { name: 'Describe what you want to build.' })).toBeVisible();
+  expect(await window.evaluate(() => fetch('/api/me').then((res) => res.status))).toBe(200);
 
   await app.close();
 

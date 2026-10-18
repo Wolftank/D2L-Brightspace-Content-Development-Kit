@@ -2,7 +2,7 @@ import express from 'express';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
 import { errorHandler } from './errors.js';
-import { originGuard, type OriginGuardSettings } from './origin-guard.js';
+import { LAUNCH_COOKIE, originGuard, type OriginGuardSettings } from './origin-guard.js';
 
 const APP_ORIGIN = 'http://127.0.0.1:5173';
 const FORBIDDEN = { error: { code: 'forbidden', message: "This request isn't allowed.", nextStep: 'try_later' } };
@@ -55,23 +55,26 @@ describe('origin guard', () => {
     });
   });
 
-  describe('with a launch token, as in the packaged app', () => {
+  describe('with a launch token, as in the desktop app', () => {
     const TOKEN = 'secret-launch-token-abc123';
+    const COOKIE = `${LAUNCH_COOKIE}=${TOKEN}`;
     const tokenApp = () => app({ launchToken: TOKEN });
 
-    it('allows a request with the token, with or without the app origin', async () => {
-      expect((await request(tokenApp()).get('/api/health').set('Origin', APP_ORIGIN).set('X-CDK-Token', TOKEN)).status).toBe(200);
-      expect((await request(tokenApp()).get('/api/health').set('X-CDK-Token', TOKEN)).status).toBe(200);
+    it('allows a request carrying the token in its cookie, among other cookies, with or without the app origin', async () => {
+      expect((await request(tokenApp()).get('/api/health').set('Origin', APP_ORIGIN).set('Cookie', COOKIE)).status).toBe(200);
+      expect((await request(tokenApp()).get('/api/health').set('Cookie', `theme=dark; ${COOKIE}; lang=en`)).status).toBe(200);
     });
 
-    it('rejects a request with no token or the wrong one', async () => {
+    it('rejects a request with no token, the wrong one, or the token anywhere but its cookie', async () => {
       expect((await request(tokenApp()).get('/api/health').set('Origin', APP_ORIGIN)).body).toEqual(FORBIDDEN);
-      expect((await request(tokenApp()).get('/api/health').set('X-CDK-Token', 'wrong-token')).body).toEqual(FORBIDDEN);
+      expect((await request(tokenApp()).get('/api/health').set('Cookie', `${LAUNCH_COOKIE}=wrong-token`)).body).toEqual(FORBIDDEN);
+      expect((await request(tokenApp()).get('/api/health').set('Cookie', `other=${TOKEN}`)).body).toEqual(FORBIDDEN);
+      expect((await request(tokenApp()).get('/api/health').set('X-CDK-Token', TOKEN)).body).toEqual(FORBIDDEN);
     });
 
     it('rejects a request with the token from a foreign origin or host', async () => {
-      expect((await request(tokenApp()).get('/api/health').set('Origin', 'https://evil.example.com').set('X-CDK-Token', TOKEN)).status).toBe(403);
-      expect((await request(tokenApp()).get('/api/health').set('Host', 'attacker.example:3000').set('X-CDK-Token', TOKEN)).status).toBe(403);
+      expect((await request(tokenApp()).get('/api/health').set('Origin', 'https://evil.example.com').set('Cookie', COOKIE)).status).toBe(403);
+      expect((await request(tokenApp()).get('/api/health').set('Host', 'attacker.example:3000').set('Cookie', COOKIE)).status).toBe(403);
     });
   });
 });

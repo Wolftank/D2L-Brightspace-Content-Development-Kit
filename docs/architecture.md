@@ -64,7 +64,7 @@ All routes are under `/api`, JSON in and out. One auth middleware runs before ev
 
 Errors use one envelope: `{ "error": { "code": "...", "message": "...", "nextStep": "...", "details"?: {} } }` with the usual status codes. [Errors](#errors) lists each code. Lists are cursor-paginated (`?cursor=&limit=`).
 
-Only the app may call the API. A request gets `403 forbidden` when its `Host` is anything but the back end's loopback names (`127.0.0.1`, `localhost`, `[::1]`) or the app origin's host, which stops DNS rebinding, or when it carries an `Origin` other than the app origin, which covers other websites and build previews.
+Only the app may call the API. A request gets `403 forbidden` when its `Host` is anything but the back end's loopback names (`127.0.0.1`, `localhost`, `[::1]`) or the app origin's host, which stops DNS rebinding, or when it carries an `Origin` other than the app origin, which covers other websites and build previews. In the desktop app it also needs the launch token: the app makes a new one at each launch, gives it to the back end as `LAUNCH_TOKEN`, and sets it on its window as the `cdk_launch` cookie, HttpOnly and SameSite=Strict. Every request from the window carries it, the event stream and downloads included, and other programs on the computer don't have it.
 
 ### Identity
 

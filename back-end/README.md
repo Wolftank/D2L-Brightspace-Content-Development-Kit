@@ -44,6 +44,7 @@ Copy-Item .env.example .env
 | `PORT` | `3000` | A whole number from 1 to 65535. When you change it, start the front end with `API_TARGET=http://127.0.0.1:<port>` |
 | `DATA_DIR` | `%LOCALAPPDATA%\CDK` on Windows, `~/.cdk` elsewhere | Where the database, workspaces, and builds are stored. A relative path is resolved against `back-end/` |
 | `APP_ORIGIN` | `http://127.0.0.1:5173` | The origin the app is opened at, and the only one allowed to frame build previews: an http or https origin with no path. The default is the Vite dev server; set it to the back end's own origin when it serves the built app |
+| `LAUNCH_TOKEN` | unset | Set by the desktop app at each launch. Every API request must then carry it in the `cdk_launch` cookie, which the app sets on its window. Leave unset in development |
 | `APP_DIR` | unset | The built front end (`front-end/dist`) to serve at `/` on the back end's own origin, as the desktop app does. Set `APP_ORIGIN` to `http://127.0.0.1:<PORT>` with it. A relative path is resolved against `back-end/` |
 
 `ANTHROPIC_API_KEY` is read by the Claude CLI, not by the back end.

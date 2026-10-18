@@ -26,7 +26,7 @@ export interface Config {
   appOrigin: string;
   /** Where build previews are served: `http://preview.localhost:<port>`, on the back end's own port. */
   previewOrigin: string;
-  /** When set, every API request must carry this token in `X-CDK-Token`. The packaged app sets it on each launch. */
+  /** When set, every API request must carry this token in the `cdk_launch` cookie. The desktop app sets it on each launch. */
   launchToken?: string;
   /** The built front end the back end serves on its own origin. Always absolute when set. */
   appDir?: string;
