@@ -42,7 +42,7 @@ describe('events repo', () => {
 
   it('lists events after a seq, ascending', () => {
     const first = events.insert({ projectId, kind: 'turn.started', payload: {} });
-    const second = events.insert({ projectId, kind: 'turn.status', payload: { text: 'working' } });
+    const second = events.insert({ projectId, kind: 'turn.status', payload: { text: 'working', category: 'other' as const } });
     const third = events.insert({ projectId, kind: 'turn.completed', payload: {} });
 
     expect(events.listAfter(projectId, first.seq)).toEqual([second, third]);

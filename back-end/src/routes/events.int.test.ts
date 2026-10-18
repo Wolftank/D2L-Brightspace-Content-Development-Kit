@@ -169,7 +169,7 @@ describe('GET /api/projects/:projectId/events', () => {
 
   it('resumes via Last-Event-ID, replaying only what comes after it', async () => {
     const first = service.append({ projectId: project.id, kind: 'turn.started', payload: { turnId: 't1', startedAt: 1 } });
-    const second = service.append({ projectId: project.id, kind: 'turn.status', payload: { turnId: 't1', text: 'go' } });
+    const second = service.append({ projectId: project.id, kind: 'turn.status', payload: { turnId: 't1', text: 'go', category: 'other' as const } });
 
     await startServer(fakeDeps());
     const { reader, req } = await openSse(port, `/api/projects/${project.id}/events`, {
@@ -177,25 +177,25 @@ describe('GET /api/projects/:projectId/events', () => {
     });
     const frames = await reader.waitFor(1);
 
-    expect(frames).toEqual([{ seq: second.seq, kind: 'turn.status', payload: { turnId: 't1', text: 'go' } }]);
+    expect(frames).toEqual([{ seq: second.seq, kind: 'turn.status', payload: { turnId: 't1', text: 'go', category: 'other' as const } }]);
     req.destroy();
   });
 
   it('resumes via ?after=, replaying only what comes after it', async () => {
     const first = service.append({ projectId: project.id, kind: 'turn.started', payload: { turnId: 't1', startedAt: 1 } });
-    const second = service.append({ projectId: project.id, kind: 'turn.status', payload: { turnId: 't1', text: 'go' } });
+    const second = service.append({ projectId: project.id, kind: 'turn.status', payload: { turnId: 't1', text: 'go', category: 'other' as const } });
 
     await startServer(fakeDeps());
     const { reader, req } = await openSse(port, `/api/projects/${project.id}/events?after=${first.seq}`);
     const frames = await reader.waitFor(1);
 
-    expect(frames).toEqual([{ seq: second.seq, kind: 'turn.status', payload: { turnId: 't1', text: 'go' } }]);
+    expect(frames).toEqual([{ seq: second.seq, kind: 'turn.status', payload: { turnId: 't1', text: 'go', category: 'other' as const } }]);
     req.destroy();
   });
 
   it('prefers Last-Event-ID over ?after= when both are given', async () => {
     const first = service.append({ projectId: project.id, kind: 'turn.started', payload: { turnId: 't1', startedAt: 1 } });
-    const second = service.append({ projectId: project.id, kind: 'turn.status', payload: { turnId: 't1', text: 'go' } });
+    const second = service.append({ projectId: project.id, kind: 'turn.status', payload: { turnId: 't1', text: 'go', category: 'other' as const } });
 
     await startServer(fakeDeps());
     const { reader, req } = await openSse(port, `/api/projects/${project.id}/events?after=0`, {
@@ -203,7 +203,7 @@ describe('GET /api/projects/:projectId/events', () => {
     });
     const frames = await reader.waitFor(1);
 
-    expect(frames).toEqual([{ seq: second.seq, kind: 'turn.status', payload: { turnId: 't1', text: 'go' } }]);
+    expect(frames).toEqual([{ seq: second.seq, kind: 'turn.status', payload: { turnId: 't1', text: 'go', category: 'other' as const } }]);
     req.destroy();
   });
 
