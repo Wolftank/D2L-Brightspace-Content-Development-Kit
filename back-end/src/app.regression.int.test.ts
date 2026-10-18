@@ -30,7 +30,7 @@ import { captureLog, type LogRecord } from './test/log.js';
  */
 
 const MESSAGE = { content: [{ type: 'text', text: 'Build a self-check on mitosis' }] };
-const ENVELOPE_FIELDS = ['code', 'message', 'nextStep', 'details'];
+const ENVELOPE_FIELDS = ['code', 'message', 'nextStep', 'details', 'requestId'];
 
 /** A stack frame such as `at handle (/app/src/routes/projects.ts:21:5)`. */
 const STACK_FRAME = /\bat .+:\d+:\d+/;
@@ -177,10 +177,12 @@ describe('R3 regression: app, identity, error envelope', () => {
       const res = await request(app()).get('/api/projects/mine');
 
       expectEnvelope(res, 500, 'internal_error');
-      expect(res.body.error).toEqual({ code: 'internal_error', message: 'Something went wrong.', nextStep: 'try_later' });
+      expect(res.body.error).toEqual({ code: 'internal_error', message: 'Something went wrong.', nextStep: 'try_later', requestId: res.headers['x-request-id'] });
       expect(res.text).not.toContain('SQLITE_CORRUPT');
       expect(res.text).not.toContain('cdk.db');
-      expect(logRecords).toContainEqual(expect.objectContaining({ level: 50, err: expect.objectContaining({ message: unexpected.message }) }));
+      expect(logRecords).toContainEqual(
+        expect.objectContaining({ level: 50, reqId: res.headers['x-request-id'], err: expect.objectContaining({ message: unexpected.message }) }),
+      );
     });
 
     it('returns 500 internal_error for an unexpected rejection in an async route, logged on the server only (F23, NF6)', async () => {
@@ -195,9 +197,11 @@ describe('R3 regression: app, identity, error envelope', () => {
       const res = await request(app()).get('/api/me');
 
       expectEnvelope(res, 500, 'internal_error');
-      expect(res.body.error).toEqual({ code: 'internal_error', message: 'Something went wrong.', nextStep: 'try_later' });
+      expect(res.body.error).toEqual({ code: 'internal_error', message: 'Something went wrong.', nextStep: 'try_later', requestId: res.headers['x-request-id'] });
       expect(res.text).not.toContain('ENOENT');
-      expect(logRecords).toContainEqual(expect.objectContaining({ level: 50, err: expect.objectContaining({ message: unexpected.message }) }));
+      expect(logRecords).toContainEqual(
+        expect.objectContaining({ level: 50, reqId: res.headers['x-request-id'], err: expect.objectContaining({ message: unexpected.message }) }),
+      );
     });
   });
 

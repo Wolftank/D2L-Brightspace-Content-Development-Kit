@@ -80,9 +80,9 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-function sendError(res: ServerResponse, error: HttpError): void {
+function sendError(res: ServerResponse, error: HttpError, requestId?: string): void {
   const { status, message, nextStep } = API_ERRORS[error.code];
-  sendJson(res, status, { error: { code: error.code, message, nextStep, details: error.details } } satisfies ApiErrorBody);
+  sendJson(res, status, { error: { code: error.code, message, nextStep, details: error.details, requestId } } satisfies ApiErrorBody);
 }
 
 async function readJson(req: IncomingMessage): Promise<unknown> {
@@ -492,12 +492,14 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
 }
 
 const server = createServer((req, res) => {
+  const requestId = randomUUID();
+  res.setHeader('X-Request-Id', requestId);
   route(req, res).catch((error: unknown) => {
     if (error instanceof HttpError) {
       sendError(res, error);
     } else {
       console.error(error);
-      sendError(res, new HttpError('internal_error'));
+      sendError(res, new HttpError('internal_error'), requestId);
     }
   });
   res.on('finish', () => console.log(`${req.method} ${req.url} -> ${res.statusCode}`));

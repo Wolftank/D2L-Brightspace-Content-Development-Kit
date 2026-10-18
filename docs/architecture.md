@@ -62,7 +62,9 @@ The HTTP API is the request/response contract between the front end and the back
 
 All routes are under `/api`, JSON in and out. One auth middleware runs before every route and sets `req.user`: in local mode it returns the single OS user, in hosted mode it reads the cookie set by the OIDC login. Every query below the middleware filters on `req.user.id`, so hosted mode is a WHERE clause, and local mode is the same code with one instructor.
 
-Errors use one envelope: `{ "error": { "code": "...", "message": "...", "nextStep": "...", "details"?: {} } }` with the usual status codes. [Errors](#errors) lists each code. Lists are cursor-paginated (`?cursor=&limit=`).
+Errors use one envelope: `{ "error": { "code": "...", "message": "...", "nextStep": "...", "details"?: {}, "requestId"?: "..." } }` with the usual status codes. [Errors](#errors) lists each code. Lists are cursor-paginated (`?cursor=&limit=`).
+
+Every response from the back end, on the app origin and the preview origin, carries an `X-Request-Id` header: a new ID the back end gives each request and writes on that request's records in the server log. An `X-Request-Id` sent by the client is ignored.
 
 ### Identity
 
@@ -254,7 +256,7 @@ A failed turn's `error`, stored on the turn and sent in `turn.failed`. The runne
 
 ### API errors
 
-The envelope's `error`. `details`, where present, is for the front end's logic and is never shown to the instructor.
+The envelope's `error`. `details`, where present, is for the front end's logic and is never shown to the instructor. `requestId` is set on `internal_error` only: it repeats the response's `X-Request-Id`, so the request can be found in the server log.
 
 | Code | Status | Message | Next step |
 | --- | --- | --- | --- |

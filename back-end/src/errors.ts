@@ -1,7 +1,6 @@
 import type { ApiErrorBody, NextStep } from '@cdk/contract';
 import type { ErrorRequestHandler, Response } from 'express';
 import { ZodError } from 'zod';
-import { log } from './log.js';
 
 /** The requested project or route does not exist, or the project is not owned by the caller. */
 export class NotFound extends Error {
@@ -73,16 +72,17 @@ export const API_ERRORS = {
   internal_error: { status: 500, message: 'Something went wrong.', nextStep: 'try_later' },
 } satisfies Record<string, { status: number; message: string; nextStep: NextStep }>;
 
-function send(res: Response, code: keyof typeof API_ERRORS, details?: unknown): void {
+function send(res: Response, code: keyof typeof API_ERRORS, details?: unknown, requestId?: string): void {
   const { status, message, nextStep } = API_ERRORS[code];
-  res.status(status).json({ error: { code, message, nextStep, details } } satisfies ApiErrorBody);
+  res.status(status).json({ error: { code, message, nextStep, details, requestId } } satisfies ApiErrorBody);
 }
 
 /**
- * Maps thrown errors to the envelope `{ error: { code, message, nextStep, details? } }`
- * from docs/architecture.md. Registered last in `createApp`.
+ * Maps thrown errors to the envelope `{ error: { code, message, nextStep, details?, requestId? } }`
+ * from docs/architecture.md. An unexpected error is logged and answered with
+ * `internal_error` carrying the request's ID. Registered last in `createApp`.
  */
-export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
+export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   if (err instanceof ZodError) return send(res, 'invalid_request', { issues: err.issues });
   if (err instanceof SyntaxError && (err as { type?: string }).type === 'entity.parse.failed') return send(res, 'invalid_json');
   if ((err as { type?: string }).type === 'entity.too.large') return send(res, 'payload_too_large');
@@ -93,6 +93,6 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   if (err instanceof BuildFailed) return send(res, 'build_failed');
   if (err instanceof BuildIncomplete) return send(res, 'build_incomplete', { missing: err.missing });
 
-  log.error({ err }, 'Request failed');
-  send(res, 'internal_error');
+  req.log.error({ err }, 'Unexpected error');
+  send(res, 'internal_error', undefined, String(req.id));
 };
