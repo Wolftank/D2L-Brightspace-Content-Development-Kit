@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Db } from './index.js';
 import { createProjectsRepo } from './projects.js';
 import { messages as messagesTable, turns as turnsTable, type Turn } from './schema.js';
@@ -21,6 +21,14 @@ describe('turns repo', () => {
     const ownerId = createUsersRepo(db).ensureLocalUser().id;
     projectId = createProjectsRepo(db).create({ id: 'project-1', ownerId, title: 'Cell division practice' }).id;
   });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function projectUpdatedAt(): number | undefined {
+    return createProjectsRepo(db).getById(projectId)?.updatedAt;
+  }
 
   it("finds the project's queued or running turn", () => {
     insertTurn('finished', 'completed');
@@ -62,6 +70,17 @@ describe('turns repo', () => {
 
       expect(db.select().from(messagesTable).all()).toEqual([]);
       expect(db.select().from(turnsTable).all()).toEqual([expect.objectContaining({ id: 'turn-1', status: 'completed' })]);
+    });
+
+    it("records the project's activity with the message, and not when it stores nothing", () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-10-28T12:00:30Z'));
+      turns.queue({ turnId: 'turn-1', messageId: 'message-1', projectId, content });
+      expect(projectUpdatedAt()).toBe(new Date('2026-10-28T12:00:30Z').getTime());
+
+      vi.setSystemTime(new Date('2026-10-28T12:00:45Z'));
+      turns.queue({ turnId: 'turn-2', messageId: 'message-2', projectId, content });
+      expect(projectUpdatedAt()).toBe(new Date('2026-10-28T12:00:30Z').getTime());
     });
 
     it('is not blocked by a finished turn', () => {

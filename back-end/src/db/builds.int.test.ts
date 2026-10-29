@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBuildsRepo, type BuildsRepo } from './builds.js';
 import type { Db } from './index.js';
 import { createProjectsRepo } from './projects.js';
@@ -18,6 +18,10 @@ describe('builds repo', () => {
     const projects = createProjectsRepo(db);
     projectId = projects.create({ id: 'project-1', ownerId, title: 'Cell division practice' }).id;
     otherProjectId = projects.create({ id: 'project-2', ownerId, title: 'Photosynthesis practice' }).id;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('starts a project at version 1 and counts up per project', () => {
@@ -61,6 +65,17 @@ describe('builds repo', () => {
 
     expect(finished).toMatchObject({ status: 'failed', qa, error: { code: 'qa_failed' }, outputHash: 'hash-1' });
     expect(builds.get(build.id)).toEqual(finished);
+  });
+
+  it("records the project's activity when a build finishes", () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const build = builds.create({ projectId, version: 1, avenue: 'scorm' });
+
+    vi.setSystemTime(new Date('2026-10-28T12:00:50Z'));
+    builds.finish(build.id, { status: 'ready', qa: { passed: true, findings: [] }, error: null, outputHash: 'hash-1' });
+
+    expect(createProjectsRepo(db).getById(projectId)?.updatedAt).toBe(new Date('2026-10-28T12:00:50Z').getTime());
+    expect(createProjectsRepo(db).getById(otherProjectId)?.updatedAt).not.toBe(new Date('2026-10-28T12:00:50Z').getTime());
   });
 
   it('fails only checking builds, returning them', () => {

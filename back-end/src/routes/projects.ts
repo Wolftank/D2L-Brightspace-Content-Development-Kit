@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import type { CreateProjectResponse } from '@cdk/contract';
+import type { CreateProjectResponse, ProjectListResponse } from '@cdk/contract';
 import type { Deps } from '../deps.js';
 
 /** Creates SCORM projects only. Any other field, such as `targetCourse`, is dropped. */
@@ -11,6 +11,10 @@ const createProjectBody = z.object({
 
 export function projectsRouter(deps: Deps): Router {
   const router = Router();
+
+  router.get('/projects', (req, res) => {
+    res.status(200).json(deps.projects.list(req.user.id) satisfies ProjectListResponse);
+  });
 
   router.post('/projects', async (req, res) => {
     const input = createProjectBody.parse(req.body);

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Db } from './index.js';
 import { createProjectsRepo, type ProjectsRepo } from './projects.js';
+import { users } from './schema.js';
 import { testDb } from './test-db.js';
 import { createUsersRepo } from './users.js';
 
@@ -89,5 +90,36 @@ describe('projects repo', () => {
     for (const other of otherOwners) {
       expect(projects.get(other, project.id)).toBeUndefined();
     }
+  });
+
+  describe('listByOwner', () => {
+    it("lists only the owner's projects, most recently used first, breaking ties by id", () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      db.insert(users).values({ id: 'someone-else', displayName: 'Someone Else', email: null, role: 'instructor' }).run();
+      vi.setSystemTime(new Date('2026-10-28T12:00:00Z'));
+      projects.create({ id: 'a', ownerId, title: 'A' });
+      projects.create({ id: 'b', ownerId, title: 'B' });
+      vi.setSystemTime(new Date('2026-10-28T12:00:05Z'));
+      projects.create({ id: 'c', ownerId, title: 'C' });
+      projects.create({ id: 'theirs', ownerId: 'someone-else', title: 'Theirs' });
+
+      expect(projects.listByOwner(ownerId).map((project) => project.id)).toEqual(['c', 'b', 'a']);
+      expect(projects.listByOwner('someone-else').map((project) => project.id)).toEqual(['theirs']);
+      expect(projects.listByOwner('no-projects')).toEqual([]);
+    });
+  });
+
+  it('records activity by setting updatedAt to now, leaving createdAt', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-28T12:00:00Z'));
+    const project = projects.create({ id: 'project-1', ownerId, title: 'Cell division practice' });
+
+    vi.setSystemTime(new Date('2026-10-28T12:00:09Z'));
+    projects.recordActivity(project.id);
+
+    expect(projects.get(ownerId, project.id)).toMatchObject({
+      createdAt: new Date('2026-10-28T12:00:00Z').getTime(),
+      updatedAt: new Date('2026-10-28T12:00:09Z').getTime(),
+    });
   });
 });

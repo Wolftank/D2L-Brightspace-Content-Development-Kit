@@ -26,7 +26,7 @@ User ─< Project ─┬─< Message
 | Resource | Fields (abridged) | Notes |
 |---|---|---|
 | **User** | `id, displayName, email?, role` | One row in local mode |
-| **Project** | `id, ownerId, title, avenue?, targetCourse?, sessionId?, createdAt, updatedAt` | `avenue` may stay null until the agent's router skill settles it. `sessionId` is the agent's identifier for this project's session, used to reopen it |
+| **Project** | `id, ownerId, title, avenue?, targetCourse?, sessionId?, createdAt, updatedAt` | `avenue` may stay null until the agent's router skill settles it. `sessionId` is the agent's identifier for this project's session, used to reopen it. `updatedAt` is when the project was last used, which orders the project list |
 | **Message** | `id, projectId, seq, role, content[], turnId?, createdAt` | `role` is `instructor \| agent`. `content` is a list of blocks (below) |
 | **Turn** | `id, projectId, messageId, replyId?, status, startedAt?, finishedAt?, error?, usage?` | `messageId` is the instructor's message, `replyId` the final agent message; earlier agent messages in the same turn share its `turnId`. `status` is `queued \| running \| completed \| failed \| cancelled` |
 | **File** | `id, projectId, name, mime, size, createdAt` | Instructor uploads: syllabus, assignment text, images |
@@ -82,7 +82,7 @@ GET  /api/health
 Creating and managing projects, and the instructor's uploads into them.
 
 ```
-GET    /api/projects                        → { items: Project[] }
+GET    /api/projects                        → { items: { project, latestBuild }[] }
 POST   /api/projects                        { title, targetCourse?, avenue? } → 201 { project }
 GET    /api/projects/:projectId             → { project, builds: [summary], latestDeployment?, activeTurn? }
 PATCH  /api/projects/:projectId             { title?, targetCourse?, avenue? }
@@ -90,6 +90,8 @@ DELETE /api/projects/:projectId             → 204
 POST   /api/projects/:projectId/files       multipart → 201 { file }
 GET    /api/projects/:projectId/files       → { items: File[] }
 ```
+
+`GET /api/projects` lists the caller's projects, most recently used first, each with its latest build summary `{ id, version, status, createdAt }`, or null before its first build. It returns every project, with no paging. A project's `updatedAt` is when it was last used: it is set when the project is created, when a message is sent, and when a build finishes.
 
 In V1, `POST /api/projects` takes `{ title, avenue? }`. `title` is trimmed and must not be blank, `avenue` defaults to `scorm` and accepts nothing else, and any other field, `targetCourse` included, is ignored. Responses carry every field of a resource; a field a later layer fills, such as a project's `targetCourse` or a build's `pedagogy`, is null. In `GET /api/projects/:projectId`, `builds` lists summaries `{ id, version, status, createdAt }`, oldest first, and `activeTurn` is present only while a turn is `queued` or `running`.
 

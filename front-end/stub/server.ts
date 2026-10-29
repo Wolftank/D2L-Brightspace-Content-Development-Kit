@@ -7,6 +7,7 @@ import type {
   ApiErrorBody,
   Build,
   BuildResponse,
+  BuildSummary,
   ContentBlock,
   CreateProjectRequest,
   CreateProjectResponse,
@@ -16,6 +17,7 @@ import type {
   Message,
   NextStep,
   Project,
+  ProjectListResponse,
   ProjectResponse,
   QaFinding,
   SendMessageRequest,
@@ -268,6 +270,7 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
           build.status = passed ? 'ready' : 'failed';
           build.qa = { passed, findings: passed ? [] : FAILED_FINDINGS };
           build.error = passed ? null : { code: 'qa_failed', message: 'The QA check found problems in this build.', nextStep: 'ask_for_fix' };
+          recordActivity(state);
           append(state, 'build.updated', { build: { ...build } });
         },
       ],
@@ -361,10 +364,24 @@ function createProject(body: unknown): CreateProjectResponse {
   return { project };
 }
 
+function summary({ id, version, status, createdAt }: Build): BuildSummary {
+  return { id, version, status, createdAt };
+}
+
+/** Records that the project was used now, as the back end does when a message is sent or a build finishes. */
+function recordActivity(state: ProjectState): void {
+  state.project = { ...state.project, updatedAt: Date.now() };
+}
+
+function listProjects(): ProjectListResponse {
+  const states = [...projects.values()].sort((a, b) => b.project.updatedAt - a.project.updatedAt);
+  return { items: states.map((state) => ({ project: state.project, latestBuild: state.builds.length ? summary(state.builds.at(-1)!) : null })) };
+}
+
 function projectView(state: ProjectState): ProjectResponse {
   return {
     project: state.project,
-    builds: state.builds.map(({ id, version, status, createdAt }) => ({ id, version, status, createdAt })),
+    builds: state.builds.map(summary),
     ...(state.activeTurn ? { activeTurn: state.activeTurn } : {}),
   };
 }
@@ -399,6 +416,7 @@ function sendMessage(state: ProjectState, body: unknown): SendMessageResponse {
   };
   message.turnId = turn.id;
   state.messages.push(message);
+  recordActivity(state);
   state.activeTurn = turn;
   state.turns.set(turn.id, turn);
   runTurn(state, turn, scenarioFor(textOf(message.content)));
@@ -488,6 +506,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   }
 
   if (resource === 'projects') {
+    if (method === 'GET' && !id) return sendJson(res, 200, listProjects());
     if (method === 'POST' && !id) return sendJson(res, 201, createProject(await readJson(req)));
     if (id && !sub && method === 'GET') return sendJson(res, 200, projectView(getProject(id)));
     if (id && sub === 'messages' && method === 'GET') {
