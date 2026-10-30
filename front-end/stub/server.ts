@@ -7,6 +7,7 @@ import type {
   ApiErrorBody,
   Build,
   BuildResponse,
+  ChatMessage,
   ContentBlock,
   CreateProjectRequest,
   CreateProjectResponse,
@@ -14,6 +15,7 @@ import type {
   EventPayloads,
   MeResponse,
   Message,
+  MessageHistoryResponse,
   NextStep,
   Project,
   ProjectResponse,
@@ -492,9 +494,11 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (id && !sub && method === 'GET') return sendJson(res, 200, projectView(getProject(id)));
     if (id && sub === 'messages' && method === 'GET') {
       const state = getProject(id);
-      return sendJson(res, 200, { items: state.messages.map(message => ({ ...message,
-        ...(message.role === 'instructor' && message.turnId ? { turn: state.turns.get(message.turnId) } : {}),
-      })) });
+      const items = state.messages.map((message): ChatMessage => {
+        const turn = message.role === 'instructor' && message.turnId ? state.turns.get(message.turnId) : undefined;
+        return turn ? { ...message, turn: { id: turn.id, status: turn.status, error: turn.error } } : message;
+      });
+      return sendJson(res, 200, { items } satisfies MessageHistoryResponse);
     }
     if (id && sub === 'messages' && method === 'POST') {
       return sendJson(res, 202, sendMessage(getProject(id), await readJson(req)));
