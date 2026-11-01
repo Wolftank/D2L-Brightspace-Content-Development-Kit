@@ -1,0 +1,13 @@
+.projects-link { color: #7b2338; font-size: 14px; font-weight: 700; }
+.projects-intro { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px; }
+.new-project { display: inline-block; padding: 12px 17px; color: #fff; background: #7b2338; border-radius: 5px; font-weight: 700; text-decoration: none; }
+.new-project:hover { background: #602035; }
+.project-list { max-width: 1180px; margin: 0 auto; padding: 0 28px 56px; }
+.project-list > ul { display: grid; gap: 16px; margin: 0; padding: 0; list-style: none; }
+.project-row { min-width: 0; }
+.project-row h2 { margin-bottom: 20px; overflow-wrap: anywhere; }
+.project-row h2 a { color: #7b2338; text-underline-offset: 4px; }
+.project-row dl { display: flex; flex-wrap: wrap; gap: 20px 40px; margin: 0; }
+.project-row dt { margin-bottom: 6px; color: #626d6a; font-size: 12px; }
+.project-row dd { margin: 0; font-size: 14px; }
+@media (max-width: 760px) { .project-list { padding: 0 16px 32px; } .projects-link { font-size: 12px; white-space: nowrap; } .topbar { gap: 12px; } }

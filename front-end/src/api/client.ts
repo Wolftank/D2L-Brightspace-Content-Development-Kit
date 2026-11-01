@@ -4,6 +4,7 @@ import type {
   CreateProjectResponse,
   MessageHistoryResponse,
   ProjectResponse,
+  ProjectListResponse,
   SendMessageRequest,
   SendMessageResponse,
 } from '@cdk/contract';
@@ -68,3 +69,7 @@ export function getMessages(projectId: string, cursor?: string): Promise<Message
   return json('/api/projects/' + projectId + '/messages' + query);
 }
 
+
+export function listProjects(): Promise<ProjectListResponse> {
+  return json('/api/projects');
+}

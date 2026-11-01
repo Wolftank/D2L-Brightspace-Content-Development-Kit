@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 test('interface copy audit across empty, running, ready, guide, and failed states', async ({ page }, testInfo) => {
   test.setTimeout(60_000);
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto('/');
+  await page.goto('/?new=1');
   await expect(page.getByRole('heading', { level: 1, name: 'Create an activity' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Design', exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Build', exact: true })).toBeVisible();
@@ -39,7 +39,7 @@ test('interface copy audit across empty, running, ready, guide, and failed state
   await page.screenshot({ path: testInfo.outputPath('guide.png'), fullPage: true });
   await page.keyboard.press('Escape');
   await page.evaluate(() => sessionStorage.clear());
-  await page.goto('/');
+  await page.goto('/?new=1');
   await page.getByLabel('Project title').fill('Cell division practice');
   await page.getByLabel('What should students learn or do?').fill('[qa-fail] Create a practice quiz.');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
