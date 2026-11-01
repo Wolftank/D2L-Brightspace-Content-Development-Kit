@@ -20,6 +20,7 @@ function setup() {
         const project = rows.get(id);
         return project?.ownerId === ownerId ? project : undefined;
       }),
+      listByOwner: vi.fn((ownerId: string) => [...rows.values()].filter((project) => project.ownerId === ownerId).reverse()),
     },
     workspaces: {
       create: vi.fn(async (projectId: string) => {
@@ -27,7 +28,7 @@ function setup() {
       }),
       remove: vi.fn(async () => {}),
     },
-    builds: { listByProject: vi.fn((): Build[] => []) },
+    builds: { listByProject: vi.fn((): Build[] => []), latest: vi.fn((_projectId: string): Build | undefined => undefined) },
     turns: { findActive: vi.fn((): Turn | undefined => undefined) },
   } satisfies ProjectServiceDeps;
   return { deps, service: createProjectService(deps), steps };
@@ -116,6 +117,29 @@ describe('project service', () => {
 
       expect(() => service.get('owner-2', project.id)).toThrow(NotFound);
       expect(() => service.get('owner-1', 'missing')).toThrow(NotFound);
+    });
+  });
+
+  describe('list', () => {
+    it("lists the owner's projects in the repo's order, each with its latest build summary or null", async () => {
+      const { deps, service } = setup();
+      const older = await service.create('owner-1', { title: 'Older', avenue: 'scorm' });
+      const newer = await service.create('owner-1', { title: 'Newer', avenue: 'scorm' });
+      await service.create('owner-2', { title: 'Not theirs', avenue: 'scorm' });
+      deps.builds.latest.mockImplementation((projectId) =>
+        projectId === older.id ? ({ id: 'build-3', version: 3, status: 'ready', createdAt: 7, qa: null, error: null } as Build) : undefined,
+      );
+
+      expect(service.list('owner-1')).toEqual({
+        items: [
+          { project: newer, latestBuild: null },
+          { project: older, latestBuild: { id: 'build-3', version: 3, status: 'ready', createdAt: 7 } },
+        ],
+      });
+    });
+
+    it('is empty for an owner with no projects', () => {
+      expect(setup().service.list('owner-1')).toEqual({ items: [] });
     });
   });
 });

@@ -16,6 +16,7 @@ import type { Deps } from '../deps.js';
 import { createEventService } from '../pipeline/events.js';
 import { createBuildService } from '../services/builds.js';
 import { createProjectService } from '../services/projects.js';
+import { createTurnService } from '../services/turns.js';
 import { createWorkspaceService, type WorkspaceService } from '../services/workspaces.js';
 
 describe('project routes', () => {
@@ -38,11 +39,7 @@ describe('project routes', () => {
       }),
       builds: createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces: workspaceService, events }),
       events,
-      turns: {
-        start: () => {
-          throw new Error('not used by these tests');
-        },
-      },
+      turns: createTurnService({ projects: projectsRepo, turns: createTurnsRepo(db), runner: { executeTurn: async () => {} } }),
       messages: {
         list: () => {
           throw new Error('not used by these tests');
@@ -116,6 +113,79 @@ describe('project routes', () => {
       expect(res.body.error.code).toBe('internal_error');
       expect(db.select().from(projectsTable).all()).toEqual([]);
       await expect(fs.readdir(join(dataDir, 'projects'))).resolves.toEqual([]);
+    });
+  });
+
+  describe('GET /api/projects', () => {
+    const message = { content: [{ type: 'text', text: 'Make it shorter.' }] };
+
+    async function createAt(time: string, title: string): Promise<string> {
+      vi.setSystemTime(new Date(`2026-10-28T12:00:${time}Z`));
+      return (await request(app()).post('/api/projects').send({ title })).body.project.id;
+    }
+
+    async function listedTitles(): Promise<string[]> {
+      const res = await request(app()).get('/api/projects');
+      expect(res.status).toBe(200);
+      return res.body.items.map((item: { project: { title: string } }) => item.project.title);
+    }
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('is an empty list when the instructor has no projects', async () => {
+      const res = await request(app()).get('/api/projects');
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ items: [] });
+    });
+
+    it("lists only the caller's projects, most recently used first, each with its latest build or null", async () => {
+      db.insert(usersTable).values({ id: 'someone-else', displayName: 'Someone Else', email: null, role: 'instructor' }).run();
+      projectsRepo.create({ id: 'not-yours', ownerId: 'someone-else', title: 'Not yours' });
+      const olderId = await createAt('00', 'Cell division practice');
+      await createAt('10', 'Photosynthesis quiz');
+      const buildsRepo = createBuildsRepo(db);
+      buildsRepo.create({ projectId: olderId, version: 1, avenue: 'scorm' });
+      const latest = buildsRepo.create({ projectId: olderId, version: 2, avenue: 'scorm' });
+
+      const res = await request(app()).get('/api/projects');
+
+      expect(res.body.items).toEqual([
+        { project: expect.objectContaining({ title: 'Photosynthesis quiz', ownerId: owner.id }), latestBuild: null },
+        {
+          project: expect.objectContaining({ id: olderId, title: 'Cell division practice' }),
+          latestBuild: { id: latest.id, version: 2, status: 'checking', createdAt: latest.createdAt },
+        },
+      ]);
+    });
+
+    it('moves a project to the top when a message is sent', async () => {
+      const olderId = await createAt('00', 'Cell division practice');
+      await createAt('10', 'Photosynthesis quiz');
+      expect(await listedTitles()).toEqual(['Photosynthesis quiz', 'Cell division practice']);
+
+      vi.setSystemTime(new Date('2026-10-28T12:00:20Z'));
+      expect((await request(app()).post(`/api/projects/${olderId}/messages`).send(message)).status).toBe(202);
+
+      expect(await listedTitles()).toEqual(['Cell division practice', 'Photosynthesis quiz']);
+    });
+
+    it('moves a project to the top when a build finishes', async () => {
+      const olderId = await createAt('00', 'Cell division practice');
+      await createAt('10', 'Photosynthesis quiz');
+      const buildsRepo = createBuildsRepo(db);
+      const build = buildsRepo.create({ projectId: olderId, version: 1, avenue: 'scorm' });
+
+      vi.setSystemTime(new Date('2026-10-28T12:00:20Z'));
+      buildsRepo.finish(build.id, { status: 'ready', qa: { passed: true, findings: [] }, error: null, outputHash: 'hash-1' });
+
+      expect(await listedTitles()).toEqual(['Cell division practice', 'Photosynthesis quiz']);
     });
   });
 

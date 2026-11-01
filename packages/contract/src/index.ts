@@ -22,6 +22,7 @@ export interface Project {
   targetCourse: string | null;
   sessionId: string | null;
   createdAt: number;
+  /** When the project was last used: created, sent a message, or finished a build. Orders the project list. */
   updatedAt: number;
 }
 
@@ -199,6 +200,17 @@ export interface ProjectResponse {
   builds: BuildSummary[];
   latestDeployment?: Deployment;
   activeTurn?: Turn;
+}
+
+/** A project in the instructor's project list, with its latest build, or null before its first. */
+export interface ProjectListItem {
+  project: Project;
+  latestBuild: BuildSummary | null;
+}
+
+export interface ProjectListResponse {
+  /** The caller's projects, most recently used first. */
+  items: ProjectListItem[];
 }
 
 export interface SendMessageRequest {
