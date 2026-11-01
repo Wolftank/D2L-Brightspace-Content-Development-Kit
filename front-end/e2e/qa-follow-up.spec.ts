@@ -13,7 +13,7 @@ const buildCard = (page: Page) => buildPanel(page).getByRole('article');
 const progressFeed = (page: Page) => buildPanel(page).getByRole('log', { name: 'Build progress' });
 const threadMessages = (page: Page) => page.getByRole('group', { name: 'Conversation history' }).getByRole('article');
 const sendButton = (page: Page) => page.getByRole('button', { name: 'Send', exact: true });
-const projectId = (page: Page) => page.evaluate(() => (JSON.parse(sessionStorage.getItem('active-project')!) as { id: string }).id);
+const projectId = (page: Page) => page.evaluate(() => new URLSearchParams(location.search).get('project')!);
 
 /** Matches a thread message by its speaker and the start of its text. */
 function threadEntry(speaker: 'You' | 'CDK', text: string): RegExp {
@@ -22,7 +22,7 @@ function threadEntry(speaker: 'You' | 'CDK', text: string): RegExp {
 
 /** Starts a project whose first request fails QA and waits for that turn to finish. */
 async function failFirstBuild(page: Page): Promise<void> {
-  await page.goto('/');
+  await page.goto('/?new=1');
   await page.getByLabel('Project title').fill('QA follow-up');
   await page.getByLabel('What should students learn or do?').fill(FIRST_REQUEST);
   await sendButton(page).click();
