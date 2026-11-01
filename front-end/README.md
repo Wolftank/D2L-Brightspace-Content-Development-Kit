@@ -13,7 +13,19 @@ npm run dev:stub
 
 Open http://127.0.0.1:5173. Name your project and send a request. After the reply, send a change to produce version 2. The stub uses scripted replies and the saved SCORM starter activity; its preview runs through the kit's D2L emulator. The stub download is the saved SCORM starter fixture.
 
-A project can be reopened at `/?project=<projectId>`. Reload restores its history, builds and any running turn. Drafts stay in the current browser session. Stub projects live in memory and disappear when the stub server restarts.
+A project can be reopened at `/?project=<projectId>`. Reload restores its history, builds and any running turn. Drafts stay in the current browser session, separately for each project. Stub projects live in memory and disappear when the stub server restarts.
+
+## Project list (F16)
+
+The home URL `/` loads the instructor's projects through B30's `GET /api/projects`. Saved projects appear in the server's most-recently-used order, with title, format, latest build status/version, and the last-used date and time. The list uses B30's complete response without an additional request per row.
+
+If there are no projects, home opens Create an activity. My projects is available from each workspace; New project opens `/?new=1` directly. Creating a project replaces that URL with its project URL, so reload can reopen it. Returning home always shows the list when projects exist, independently of browser-session storage. A failed list request displays an error and retry action rather than an empty workspace.
+
+Opening a saved project fetches its metadata and uses the existing server history/event replay for its conversation, builds, preview, and any active request. Local drafts use project-specific session storage and do not appear in another project or a new project.
+
+Automated coverage includes empty startup, list metadata and keyboard navigation, narrow layouts, axe checks, fresh browser sessions, follow-up builds on the real back end with its scripted agent, and a packaged Windows close/relaunch/continue test. Manual NVDA reading remains a separate check.
+
+List screenshots with scripted metadata: [desktop](docs/f16/projects-desktop.png) and [phone](docs/f16/projects-phone.png).
 
 `npm run dev` proxies to the real back end at port 3000. The real back end and stub provide the message-history route; configure the separate preview origin for interactive build previews:
 

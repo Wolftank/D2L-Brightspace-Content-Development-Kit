@@ -32,7 +32,7 @@ describe('POST /api/projects/:projectId/messages', () => {
   function app() {
     const deps: Deps = {
       users: createUsersRepo(db),
-      projects: { create: unused, get: unused },
+      projects: { create: unused, get: unused, list: unused },
       turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, runner: { executeTurn } }),
       messages: { list: unused },
       builds: { get: unused, download: unused, previewFile: unused },
@@ -200,7 +200,7 @@ describe('GET /api/projects/:projectId/messages', () => {
   function app() {
     const deps: Deps = {
       users: createUsersRepo(db),
-      projects: { create: unused, get: unused },
+      projects: { create: unused, get: unused, list: unused },
       turns: { start: unused },
       messages: createMessageService({ projects: projectsRepo, messages: messagesRepo }),
       builds: { get: unused, download: unused, previewFile: unused },

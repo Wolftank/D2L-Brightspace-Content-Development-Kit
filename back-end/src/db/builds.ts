@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { asc, desc, eq, max } from 'drizzle-orm';
 import type { Db } from './index.js';
+import { createProjectsRepo } from './projects.js';
 import { builds, type Build } from './schema.js';
 
 export interface CreateBuildInput {
@@ -27,7 +28,10 @@ export interface BuildsRepo {
   latest(projectId: string): Build | undefined;
   /** The project's builds, oldest version first. */
   listByProject(projectId: string): Build[];
-  /** Stores a build's final status, QA gate report, error, and output hash, returning the updated row. */
+  /**
+   * Stores a build's final status, QA gate report, error, and output hash,
+   * and records its project's activity, returning the updated row.
+   */
   finish(id: string, input: FinishBuildInput): Build;
   /** Fails every `checking` build with `error`, returning the failed builds. */
   failChecking(error: NonNullable<Build['error']>): Build[];
@@ -69,12 +73,11 @@ export function createBuildsRepo(db: Db): BuildsRepo {
       return db.select().from(builds).where(eq(builds.projectId, projectId)).orderBy(asc(builds.version)).all();
     },
     finish(id, { status, qa, error, outputHash }) {
-      return db
-        .update(builds)
-        .set({ status, qa, error, outputHash })
-        .where(eq(builds.id, id))
-        .returning()
-        .get()!;
+      return db.transaction((tx) => {
+        const build = tx.update(builds).set({ status, qa, error, outputHash }).where(eq(builds.id, id)).returning().get()!;
+        createProjectsRepo(tx).recordActivity(build.projectId);
+        return build;
+      });
     },
     failChecking(error) {
       return db.update(builds).set({ status: 'failed', error }).where(eq(builds.status, 'checking')).returning().all();

@@ -30,6 +30,9 @@ function fakeDeps(): Deps {
       get: () => {
         throw new Error('not used by these tests');
       },
+      list: () => {
+        throw new Error('not used by these tests');
+      },
     },
     builds: {
       get: () => {

@@ -23,7 +23,7 @@ const FEED_WHILE_CHECKING = [
 ];
 
 async function submitRequest(page: Page, request: string) {
-  await page.goto('/');
+  await page.goto('/?new=1');
   await page.getByLabel('Project title').fill('Cell division practice');
   await page.getByLabel('What should students learn or do?').fill(request);
   await page.getByRole('button', { name: 'Send', exact: true }).click();

@@ -79,6 +79,19 @@ console.log('\n== generic sibling filenames are flagged, build-specific ones are
 check('bad-topic\'s data.js is flagged', btRules.has('topic/generic-sibling-filename'));
 check('good-topic\'s wk1-data.js is not', !rulesIn(gt).has('topic/generic-sibling-filename'));
 
+console.log('\n== each accessibility rule fires on its failing fixture and nowhere on its passing one ==');
+const { RULES } = require('./rules');
+for (const { id } of RULES.filter(r => r.id.startsWith('a11y/'))) {
+  const name = id.slice('a11y/'.length);
+  const failing = lint(fx(path.join('a11y', name, 'fail')), 'topic', profile);
+  const passing = lint(fx(path.join('a11y', name, 'pass')), 'topic', profile);
+  check(id + ' fires on a11y/' + name + '/fail, and nothing else does',
+        failing.findings.length > 0 && failing.findings.every(f => f.rule === id),
+        JSON.stringify(failing.findings.map(f => f.rule + '@' + f.line)));
+  check('a11y/' + name + '/pass has no findings at all', passing.findings.length === 0,
+        JSON.stringify(passing.findings.map(f => f.rule + '@' + f.line)));
+}
+
 console.log('\n== the real probe build passes the gate ==');
 const probe = lint(path.join(__dirname, '..', '..', 'probes', 'scorm12-probe'), 'scorm', profile);
 check('zero errors', errs(probe) === 0,

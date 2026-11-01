@@ -3,7 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 
 for (const failedFirst of [false, true]) {
   test(`conversation ${failedFirst ? 'recovers from QA failure' : 'refines a ready build'} and restores on reload`, async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/?new=1');
     await page.getByLabel('Project title').fill('Cell division practice');
     await page.getByLabel('What should students learn or do?').fill(`${failedFirst ? '[qa-fail] ' : ''}Create a practice quiz.`);
     await page.getByRole('button', { name: 'Send', exact: true }).click();
@@ -33,7 +33,7 @@ for (const failedFirst of [false, true]) {
     await expect(thread.getByRole('article')).toHaveCount(4);
     await expect(page.getByText('Version 2', { exact: true })).toBeVisible();
     await expect(page.getByTitle('Interactive preview of build 2')).toBeVisible();
-    const stored = await page.evaluate(() => JSON.parse(sessionStorage.getItem('active-project')!).id as string);
+    const stored = await page.evaluate(() => new URLSearchParams(location.search).get('project')!);
     await page.evaluate(() => sessionStorage.clear());
     await page.goto('/?project=' + stored);
     await expect(thread.getByRole('article')).toHaveCount(4);
@@ -50,7 +50,7 @@ for (const failedFirst of [false, true]) {
 }
 
 test('a failed later build retains the last ready preview', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?new=1');
   await page.getByLabel('Project title').fill('Keep ready preview');
   await page.getByLabel('What should students learn or do?').fill('Create a quiz');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
@@ -65,7 +65,7 @@ test('a failed later build retains the last ready preview', async ({ page }) => 
 
 
 test('keeps progress in the build panel and distinct agent messages around a tool call', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?new=1');
   await page.getByLabel('Project title').fill('Separate agent messages');
   await page.getByLabel('What should students learn or do?').fill('[multi-message] Update my activity');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
@@ -82,7 +82,7 @@ test('keeps progress in the build panel and distinct agent messages around a too
   await page.reload();
   await expect(thread.getByRole('article')).toHaveCount(3);
   await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled({ timeout: 15000 });
-  const projectId = await page.evaluate(() => JSON.parse(sessionStorage.getItem('active-project')!).id as string);
+  const projectId = await page.evaluate(() => new URLSearchParams(location.search).get('project')!);
   await page.evaluate(() => sessionStorage.clear());
   await page.goto('/?project=' + projectId);
   await expect(thread.getByRole('article')).toHaveCount(3);
