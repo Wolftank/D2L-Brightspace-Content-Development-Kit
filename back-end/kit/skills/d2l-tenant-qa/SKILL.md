@@ -72,6 +72,12 @@ themselves in D2L.
 | `shared/text-encoding` | Characters that are not valid UTF-8 show as garbage. |
 | `a11y/alt` | A screen reader user gets nothing, or a file name, for the image. |
 | `a11y/lang` | A screen reader reads the page in the wrong language. |
+| `a11y/control-name` | A screen reader announces just "button" or "link", with no hint of what it does. |
+| `a11y/form-label` | A screen reader announces "edit text" with no hint of what to enter. |
+| `a11y/iframe-title` | A screen reader announces "frame" with no hint of what is inside it. |
+| `a11y/zoom-allowed` | Low-vision students cannot pinch-zoom on a phone or tablet. |
+| `a11y/timed-refresh` | The page reloads mid-reading and the student loses their place and unsaved work. |
+| `a11y/no-moving-elements` | Moving or flashing text that cannot be paused. |
 | `widget/unscoped-css` | A bare selector restyles D2L's chrome and every other widget. A widget is not iframed. |
 | `widget/global-scope-leak` | A top-level declaration collides with the next widget that picks the same name. |
 
