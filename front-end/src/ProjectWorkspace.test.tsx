@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { App } from './App';
-import type { Build, Message, ProjectEvent } from '@cdk/contract';
+import { ProjectWorkspace } from './ProjectWorkspace';
+import type { Build, Message, Project, ProjectEvent } from '@cdk/contract';
 
 class Stream extends EventTarget {
   static latest: Stream | undefined;
@@ -12,7 +12,7 @@ class Stream extends EventTarget {
     this.dispatchEvent(new MessageEvent(event.kind, { data: JSON.stringify(event.payload), lastEventId: String(event.seq) }));
   }
 }
-const project = { id: 'p1', title: 'Cell division' };
+const project: Project = { id: 'p1', title: 'Cell division', ownerId: 'u1', avenue: 'scorm', targetCourse: null, sessionId: null, createdAt: 1, updatedAt: 1 };
 const message = (id: string, seq: number, role: Message['role'], text: string, turnId = 't1'): Message => ({ id, projectId: 'p1', seq, role, content: [{ type: 'text', text }], turnId, createdAt: seq });
 const build = (version: number, status: Build['status'] = 'ready'): Build => ({ id: `b${version}`, projectId: 'p1', version, status, avenue: 'scorm', qa: { passed: status === 'ready', findings: [] }, error: null, outputHash: null, pedagogy: null, turnId: 't1', createdAt: version });
 let history: Message[];
@@ -44,14 +44,14 @@ async function firstRequest() {
 
 describe('F10 conversation', () => {
   it('starts from the chat and requires a title and request', () => {
-    render(<App />);
+    render(<ProjectWorkspace />);
     expect(screen.getByRole('region', { name: 'Design' })).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Preview' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));
     expect(screen.getByRole('alert')).toHaveTextContent('Enter a project title and a request');
   });
   it('keeps draft text while running, streams the reply, and continues the same project in order', async () => {
-    render(<App />); await firstRequest();
+    render(<ProjectWorkspace />); await firstRequest();
     const draft = screen.getByLabelText('Describe a change');
     expect(draft).toHaveFocus();
     fireEvent.change(draft, { target: { value: 'Make buttons larger.' } });
@@ -73,7 +73,7 @@ describe('F10 conversation', () => {
     expect(screen.getByText('CDK: Buttons are larger.')).toHaveAttribute('role', 'status');
   });
   it('shows progress in the build panel and separate streamed agent messages after tool calls', async () => {
-    const view = render(<App />); await firstRequest();
+    const view = render(<ProjectWorkspace />); await firstRequest();
     const chat = screen.getByRole('region', { name: 'Design' });
     const panel = screen.getByRole('region', { name: 'Build' });
     expect(within(panel).getByLabelText('Request progress')).toBeVisible();
@@ -87,7 +87,7 @@ describe('F10 conversation', () => {
     expect(within(panel).getByRole('log', { name: 'Build progress' })).toHaveTextContent('Updating the activity');
     const thread = screen.getByLabelText('Conversation history');
     expect(within(thread).getAllByRole('article').map(node => node.textContent)).toEqual(['YouCreate a quiz.', 'CDKI will edit the activity.', 'CDKReady.']);
-    view.unmount(); render(<App />);
+    view.unmount(); render(<ProjectWorkspace initialProject={project} />);
     expect(within(screen.getByLabelText('Conversation history')).getAllByRole('article')).toHaveLength(3);
     emit({ seq: 7, kind: 'message.completed', payload: { message: message('a1', 2, 'agent', 'I will edit the activity.') } });
     emit({ seq: 8, kind: 'message.completed', payload: { message: message('a2', 3, 'agent', 'Ready.') } });
@@ -97,8 +97,7 @@ describe('F10 conversation', () => {
   });
   it('loads server history on reopening and deduplicates replayed replies', async () => {
     history = [message('u1', 1, 'instructor', 'First request'), message('a1', 2, 'agent', 'First reply')];
-    sessionStorage.setItem('active-project', JSON.stringify(project));
-    render(<App />);
+    render(<ProjectWorkspace initialProject={project} />);
     await screen.findByText('First request');
     emit({ seq: 1, kind: 'message.completed', payload: { message: history[1]! } });
     expect(within(screen.getByLabelText('Conversation history')).getAllByRole('article')).toHaveLength(2);
@@ -106,24 +105,24 @@ describe('F10 conversation', () => {
     expect(screen.getByRole('button', { name: 'Working…' })).toBeDisabled();
   });
   it('restores the thread, streaming reply, running turn and draft after reload', async () => {
-    const view = render(<App />); await firstRequest();
+    const view = render(<ProjectWorkspace />); await firstRequest();
     emit({ seq: 2, kind: 'message.delta', payload: { turnId: 't1', messageId: 'a1', text: 'I am building the quiz.' } });
     fireEvent.change(screen.getByLabelText('Describe a change'), { target: { value: 'Make it shorter next.' } });
     view.unmount();
-    render(<App />);
+    render(<ProjectWorkspace initialProject={project} />);
     expect(within(screen.getByLabelText('Conversation history')).getByText('Create a quiz.')).toBeVisible();
     expect(screen.getByText('I am building the quiz.')).toBeVisible();
     expect(screen.getByLabelText('Describe a change')).toHaveValue('Make it shorter next.');
     expect(screen.getByRole('button', { name: 'Working…' })).toBeDisabled();
   });
   it('shows a cancelled request in the conversation', async () => {
-    render(<App />); await firstRequest();
+    render(<ProjectWorkspace />); await firstRequest();
     emit({ seq: 2, kind: 'turn.cancelled', payload: { turnId: 't1' } });
     expect(within(screen.getByLabelText('Conversation history')).getByText('This request was cancelled.')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled();
   });
   it('replaces the latest build while retaining the last ready preview after QA failure', async () => {
-    render(<App />); await firstRequest();
+    render(<ProjectWorkspace />); await firstRequest();
     emit({ seq: 2, kind: 'build.updated', payload: { build: build(1) } });
     expect(screen.getByTitle('Interactive preview of build 1')).toHaveAttribute('src', expect.stringContaining('buildId=b1'));
     emit({ seq: 3, kind: 'build.updated', payload: { build: build(2, 'failed') } });
@@ -138,7 +137,7 @@ describe('F10 conversation', () => {
     expect(screen.getByTitle('Interactive preview of build 3')).not.toBe(frame);
   });
   it('shows a failed request and allows a follow-up with the draft kept on send failure', async () => {
-    render(<App />); await firstRequest();
+    render(<ProjectWorkspace />); await firstRequest();
     emit({ seq: 2, kind: 'turn.failed', payload: { turnId: 't1', error: { code: 'agent_error', message: 'The agent stopped before it finished.', nextStep: 'send_again' } } });
     expect(within(screen.getByLabelText('Conversation history')).getByText('The agent stopped before it finished.')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled();

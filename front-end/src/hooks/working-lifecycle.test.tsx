@@ -1,6 +1,6 @@
 import { act, render, renderHook, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { App } from '../App';
+import { ProjectWorkspace } from '../ProjectWorkspace';
 import { useProjectEvents } from './useProjectEvents';
 
 class Stream extends EventTarget {
@@ -17,8 +17,7 @@ afterEach(() => { sessionStorage.clear(); vi.unstubAllGlobals(); vi.useRealTimer
 
 it.each(['turn.completed', 'turn.failed', 'turn.cancelled'])('removes the indicator on %s', (kind) => {
   vi.stubGlobal('EventSource', Stream);
-  sessionStorage.setItem('active-project', JSON.stringify({ id: 'p1' }));
-  render(<App />);
+  render(<ProjectWorkspace initialProject={{ id: 'p1', title: 'Test', ownerId: 'u1', avenue: 'scorm', targetCourse: null, sessionId: null, createdAt: 1, updatedAt: 1 }} />);
   const stream = Stream.instances.at(-1)!;
   act(() => {
     stream.dispatchEvent(new Event('open'));

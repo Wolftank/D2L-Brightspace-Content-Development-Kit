@@ -4,7 +4,7 @@ import AxeBuilder from '@axe-core/playwright';
 
 test('download opens the SCORM guide with keyboard containment, focus return, and saved instructions', async ({ page }) => {
   test.setTimeout(60_000);
-  await page.goto('/');
+  await page.goto('/?new=1');
   await page.getByLabel('Project title').fill('D2L guide');
   await page.getByLabel('What should students learn or do?').fill('Create a quiz');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
@@ -48,7 +48,7 @@ test('download opens the SCORM guide with keyboard containment, focus return, an
 
 test('guide fits a phone viewport', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/');
+  await page.goto('/?new=1');
   await page.getByLabel('Project title').fill('Mobile guide');
   await page.getByLabel('What should students learn or do?').fill('Create a quiz');
   await page.getByRole('button', { name: 'Send', exact: true }).click();

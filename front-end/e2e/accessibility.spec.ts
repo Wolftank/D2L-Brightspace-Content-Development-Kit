@@ -43,7 +43,7 @@ async function scan(page: Page, testInfo: TestInfo, state: string) {
 }
 
 async function startRequest(page: Page, request: string) {
-  await page.goto('/');
+  await page.goto('/?new=1');
   await page.getByLabel('Project title').fill('Accessibility baseline');
   await page.getByLabel('What should students learn or do?').fill(request);
   await page.getByRole('button', { name: 'Send', exact: true }).click();
@@ -55,7 +55,7 @@ test.describe('accessibility baseline', () => {
   });
 
   test('empty form', async ({ page }, testInfo) => {
-    await page.goto('/');
+    await page.goto('/?new=1');
     await expect(page.getByRole('heading', { name: 'Create an activity' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
     await scan(page, testInfo, 'empty form');

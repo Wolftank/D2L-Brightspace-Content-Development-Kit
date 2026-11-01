@@ -36,7 +36,10 @@ export default defineConfig({
     {
       command: `node "${viteCli}" --port ${APP_PORT} --strictPort`,
       url: APP_ORIGIN,
-      env: { API_TARGET: `http://127.0.0.1:${BACK_END_PORT}` },
+      env: {
+        API_TARGET: `http://127.0.0.1:${BACK_END_PORT}`,
+        VITE_PREVIEW_ORIGIN: `http://preview.localhost:${BACK_END_PORT}`,
+      },
       reuseExistingServer: false,
     },
   ],
