@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 for (const step of ['send_again', 'smaller_request', 'sign_in', 'try_later', 'wait', 'new_project', 'ask_for_fix']) {
   test(`offers the ${step} recovery step`, async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/?new=1');
     await page.getByLabel('Project title').fill('Error recovery');
     const request = `[${step}] Create a quiz`;
     await page.getByLabel('What should students learn or do?').fill(request);
@@ -35,7 +35,7 @@ for (const step of ['send_again', 'smaller_request', 'sign_in', 'try_later', 'wa
 
 test('retrying a lost stream keeps the draft and recovers progress', async ({ page }) => {
   test.setTimeout(60000);
-  await page.goto('/');
+  await page.goto('/?new=1');
   await page.getByLabel('Project title').fill('Reconnect');
   await page.getByLabel('What should students learn or do?').fill('[drop-lost] Create a quiz');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
@@ -47,7 +47,7 @@ test('retrying a lost stream keeps the draft and recovers progress', async ({ pa
 });
 
 test('QA failure offers a fix and preserves an existing draft', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?new=1');
   await page.getByLabel('Project title').fill('QA recovery');
   await page.getByLabel('What should students learn or do?').fill('[qa-fail] Create a quiz');
   await page.getByRole('button', { name: 'Send', exact: true }).click();

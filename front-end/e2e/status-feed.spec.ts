@@ -5,7 +5,7 @@ for (const size of [{ name: 'desktop', width: 1280, height: 900 }, { name: 'phon
   test(`long feed follows and pauses without page growth at ${size.name} size`, async ({ page }) => {
     await page.setViewportSize(size);
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    await page.goto('/');
+    await page.goto('/?new=1');
     await page.getByLabel('Project title').fill('Long feed');
     await page.getByLabel('What should students learn or do?').fill('[long-feed] Build a quiz');
     await page.getByRole('button', { name: 'Send', exact: true }).click();
@@ -46,7 +46,7 @@ for (const size of [{ name: 'desktop', width: 1280, height: 900 }, { name: 'phon
 }
 
 test('meaningful progress and details survive reload without recording thinking', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?new=1');
   await page.getByLabel('Project title').fill('Meaningful progress');
   await page.getByLabel('What should students learn or do?').fill('[meaningful-progress] Build a quiz');
   await page.getByRole('button', { name: 'Send', exact: true }).click();

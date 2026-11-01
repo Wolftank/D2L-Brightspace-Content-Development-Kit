@@ -93,7 +93,7 @@ test("the packaged back end runs on the app's runtime, serves the app, projects 
 test('the app opens the CDK window and leaves no processes when closed', async () => {
   const app = await electron.launch({ executablePath: EXE, args: [`--user-data-dir=${join(dataDir, 'window')}`] });
   const window = await app.firstWindow();
-  await expect(window.getByRole('heading', { name: 'Create an activity' })).toBeVisible();
+  await expect(window.getByRole('heading', { name: 'My projects' })).toBeVisible();
   expect(await window.evaluate(() => fetch('/api/me').then((res) => res.status))).toBe(200);
   const menu = await app.evaluate(({ Menu }) =>
     Menu.getApplicationMenu()?.items.map((item) => ({ label: item.label, items: item.submenu?.items.map((entry) => entry.label) })),
@@ -104,4 +104,33 @@ test('the app opens the CDK window and leaves no processes when closed', async (
 
   for (let i = 0; i < 50 && (await processesIn(APP)).length > 0; i++) await sleep(100);
   expect(await processesIn(APP)).toEqual([]);
+});
+
+test('closing and reopening the packaged app restores a project that can continue', async () => {
+  const options = {
+    executablePath: EXE,
+    args: [`--user-data-dir=${join(dataDir, 'f16-window')}`],
+    env: { ...process.env, DATA_DIR: join(dataDir, 'f16-data'), AGENT_DRIVER: 'scripted' },
+  };
+  let app = await electron.launch(options);
+  try {
+    let window = await app.firstWindow();
+    await expect(window.getByRole('heading', { name: 'Create an activity' })).toBeVisible();
+    await window.getByLabel('Project title').fill('Saved desktop project');
+    await window.getByLabel('What should students learn or do?').fill('Create a workplace safety practice set.');
+    await window.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(window.getByRole('heading', { name: 'Ready to download' })).toBeVisible({ timeout: 20_000 });
+    await app.close();
+    await expect.poll(() => processesIn(APP)).toEqual([]);
+    app = await electron.launch(options);
+    window = await app.firstWindow();
+    await expect(window.getByRole('heading', { name: 'My projects' })).toBeVisible();
+    await window.getByRole('link', { name: 'Saved desktop project', exact: true }).click();
+    await expect(window.getByLabel('Conversation history')).toContainText('Create a workplace safety practice set.');
+    await expect(window.getByTitle('Interactive preview of build 1')).toBeVisible({ timeout: 20_000 });
+    await window.getByLabel('Describe a change').fill('[follow-up] Add two more questions.');
+    await window.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(window.getByText('Version 2', { exact: true })).toBeVisible({ timeout: 20_000 });
+    await expect(window.getByTitle('Interactive preview of build 2')).toBeVisible();
+  } finally { await app.close(); }
 });

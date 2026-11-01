@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 
 async function buildActivity(page: Page) {
-  await page.goto('/');
+  await page.goto('/?new=1');
   await page.getByLabel('Project title').fill('Preview fixture');
   await page.getByLabel('What should students learn or do?').fill('Create a sample activity.');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
