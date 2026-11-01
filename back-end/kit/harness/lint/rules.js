@@ -134,6 +134,30 @@ function declaresUtf8(text) {
   return /<meta\b[^>]*\bcharset\s*=\s*["']?utf-?8\b/i.test(text);
 }
 
+const ATTRIBUTE = /([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+)))?/g;
+
+/** The value of attribute `name` in tag attribute string `attrs`, '' for a bare attribute, or null when absent. */
+function attr(attrs, name) {
+  for (const m of attrs.matchAll(ATTRIBUTE)) {
+    if (m[1].toLowerCase() === name) return (m[2] ?? m[3] ?? m[4] ?? '').trim();
+  }
+  return null;
+}
+
+/** Whether tag attributes `attrs` give the element a name through aria-label, aria-labelledby, or title. */
+function hasAriaName(attrs) {
+  return ['aria-label', 'aria-labelledby', 'title'].some(n => attr(attrs, n));
+}
+
+/** The text a screen reader reads for markup `html`: its text plus the alt text of any images in it. */
+function readableText(html) {
+  return html
+    .replace(/<img\b([^>]*)>/gi, (m, attrs) => ' ' + (attr(attrs, 'alt') || '') + ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;|&#160;/g, ' ')
+    .trim();
+}
+
 /* ============================================================== rules */
 
 const RULES = [
@@ -725,6 +749,235 @@ const RULES = [
               `Heading level jumps from h${prev} to h${level}, skipping h${prev + 1}.`));
           }
           prev = level;
+        }
+      }
+      return out;
+    }
+  },
+
+  {
+    id: 'a11y/control-name',
+    avenues: ['scorm', 'topic', 'widget'],
+    severity: 'error',
+    because: 'WCAG 2.2 SC 4.1.2 (Name, Role, Value) and 2.4.4 (Link Purpose): a button or link ' +
+             'with no text is announced as just "button" or "link", so a screen-reader user cannot ' +
+             'tell what it does. Give it visible text, or an aria-label for icon-only controls.',
+    test(ctx) {
+      const out = [];
+      for (const f of ctx.files.filter(isMarkup)) {
+        for (const m of matches(f.text, /<(button|a)\b([^>]*)>([\s\S]*?)<\/\1\s*>/gi)) {
+          const [tag, attrs, inner] = m.groups;
+          if (tag.toLowerCase() === 'a' && attr(attrs, 'href') === null) continue;
+          if (hasAriaName(attrs) || readableText(inner)) continue;
+          out.push(finding(this, f.rel, m.line,
+            `<${tag.toLowerCase()}> has no text a screen reader can read. Add text inside it or an aria-label.`));
+        }
+        for (const m of matches(f.text, /<input\b([^>]*)>/gi)) {
+          const attrs = m.groups[0];
+          const type = (attr(attrs, 'type') || '').toLowerCase();
+          const unnamed = (type === 'button' && !attr(attrs, 'value')) ||
+                          (type === 'image' && !attr(attrs, 'alt'));
+          if (unnamed && !hasAriaName(attrs)) {
+            out.push(finding(this, f.rel, m.line,
+              `<input type="${type}"> has no accessible name. Add ${type === 'image' ? 'alt' : 'value'}="..." or an aria-label.`));
+          }
+        }
+      }
+      return out;
+    }
+  },
+
+  {
+    id: 'a11y/form-label',
+    avenues: ['scorm', 'topic', 'widget'],
+    severity: 'error',
+    because: 'WCAG 2.2 SC 3.3.2 (Labels or Instructions) and 1.3.1 (Info and Relationships): a ' +
+             'field with no label is read as "edit text" with no hint of what to enter. Placeholder ' +
+             'text does not count, because it disappears as soon as the student types.',
+    test(ctx) {
+      const out = [];
+      const NO_LABEL_NEEDED = new Set(['hidden', 'submit', 'reset', 'button', 'image']);
+      for (const f of ctx.files.filter(isMarkup)) {
+        const labelledIds = new Set(matches(f.text, /<label\b([^>]*)>/gi)
+          .map(m => attr(m.groups[0], 'for')).filter(Boolean));
+        const labelRanges = matches(f.text, /<label\b[^>]*>[\s\S]*?<\/label\s*>/gi)
+          .map(m => [m.index, m.index + m.text.length]);
+        for (const m of matches(f.text, /<(input|select|textarea)\b([^>]*)>/gi)) {
+          const [tag, attrs] = m.groups;
+          if (tag.toLowerCase() === 'input' &&
+              NO_LABEL_NEEDED.has((attr(attrs, 'type') || '').toLowerCase())) continue;
+          const id = attr(attrs, 'id');
+          if (hasAriaName(attrs) || (id && labelledIds.has(id)) || inAnyRange(m.index, labelRanges)) continue;
+          out.push(finding(this, f.rel, m.line,
+            `<${tag.toLowerCase()}> has no label. Add <label for="${id || 'its-id'}">, wrap it in a <label>, or give it an aria-label.`));
+        }
+      }
+      return out;
+    }
+  },
+
+  {
+    id: 'a11y/iframe-title',
+    avenues: ['scorm', 'topic', 'widget'],
+    severity: 'error',
+    because: 'WCAG 2.2 SC 4.1.2 (Name, Role, Value): screen readers announce an iframe by its title. ' +
+             'Without one the student hears "frame" and has to enter it to find out what it holds.',
+    test(ctx) {
+      const out = [];
+      for (const f of ctx.files.filter(isMarkup)) {
+        for (const m of matches(f.text, /<iframe\b([^>]*)>/gi)) {
+          if (hasAriaName(m.groups[0])) continue;
+          out.push(finding(this, f.rel, m.line,
+            'The iframe has no title. Add title="..." saying what it contains, e.g. title="Week 1 lecture video".'));
+        }
+      }
+      return out;
+    }
+  },
+
+  {
+    id: 'a11y/zoom-allowed',
+    avenues: ['scorm', 'topic'],
+    severity: 'error',
+    because: 'WCAG 2.2 SC 1.4.4 (Resize Text): low-vision students zoom to read. user-scalable=no, ' +
+             'or a maximum-scale under 2, blocks pinch zoom on phones and tablets.',
+    test(ctx) {
+      const out = [];
+      for (const f of ctx.files.filter(isMarkup)) {
+        for (const m of matches(f.text, /<meta\b([^>]*)>/gi)) {
+          const attrs = m.groups[0];
+          if ((attr(attrs, 'name') || '').toLowerCase() !== 'viewport') continue;
+          const content = (attr(attrs, 'content') || '').toLowerCase();
+          const scalable = /user-scalable\s*=\s*(no|0)\b/.exec(content);
+          const max = /maximum-scale\s*=\s*([\d.]+)/.exec(content);
+          if (scalable || (max && parseFloat(max[1]) < 2)) {
+            out.push(finding(this, f.rel, m.line,
+              `The viewport meta tag blocks zoom (${(scalable || max)[0]}). Remove it, or allow maximum-scale of at least 2.`));
+          }
+        }
+      }
+      return out;
+    }
+  },
+
+  {
+    id: 'a11y/timed-refresh',
+    avenues: ['scorm', 'topic'],
+    severity: 'error',
+    because: 'WCAG 2.2 SC 2.2.1 (Timing Adjustable): a timed meta refresh reloads or redirects the ' +
+             'page without warning. A student who reads slowly, or uses a screen reader, loses their ' +
+             'place and any unsaved work.',
+    test(ctx) {
+      const out = [];
+      for (const f of ctx.files.filter(isMarkup)) {
+        for (const m of matches(f.text, /<meta\b([^>]*)>/gi)) {
+          const attrs = m.groups[0];
+          if ((attr(attrs, 'http-equiv') || '').toLowerCase() !== 'refresh') continue;
+          const delay = parseFloat(attr(attrs, 'content') || '0');
+          if (delay > 0) {
+            out.push(finding(this, f.rel, m.line,
+              `The page refreshes itself after ${delay} seconds. Remove the meta refresh, or let the student trigger it.`));
+          }
+        }
+      }
+      return out;
+    }
+  },
+
+  {
+    id: 'a11y/no-moving-elements',
+    avenues: ['scorm', 'topic', 'widget'],
+    severity: 'error',
+    because: 'WCAG 2.2 SC 2.2.2 (Pause, Stop, Hide): <marquee> and <blink> move or flash with no ' +
+             'way to pause them, which distracts students with attention or reading disabilities.',
+    test(ctx) {
+      const out = [];
+      for (const f of ctx.files.filter(isMarkup)) {
+        for (const m of matches(f.text, /<(marquee|blink)\b/gi)) {
+          out.push(finding(this, f.rel, m.line,
+            `<${m.groups[0].toLowerCase()}> cannot be paused. Use static text instead.`));
+        }
+      }
+      return out;
+    }
+  },
+
+  {
+    id: 'a11y/page-title',
+    avenues: ['scorm', 'topic'],
+    severity: 'warn',
+    because: 'WCAG 2.2 SC 2.4.2 (Page Titled): the title is the first thing a screen reader says ' +
+             'and what a browser tab shows. A page without one is announced by its file name.',
+    test(ctx) {
+      const out = [];
+      for (const f of ctx.files.filter(isMarkup)) {
+        const html = /<html\b/i.exec(f.text);
+        if (!html) continue;
+        const title = /<title\b[^>]*>([\s\S]*?)<\/title\s*>/i.exec(f.text);
+        if (title && title[1].trim()) continue;
+        out.push(finding(this, f.rel, lineOf(f.text, html.index),
+          'The page has no <title>. Add one to the <head> naming the activity.'));
+      }
+      return out;
+    }
+  },
+
+  {
+    id: 'a11y/positive-tabindex',
+    avenues: ['scorm', 'topic', 'widget'],
+    severity: 'warn',
+    because: 'WCAG 2.2 SC 2.4.3 (Focus Order): a tabindex above 0 pulls the element ahead of ' +
+             'everything else in the tab order, so keyboard users jump around the page out of ' +
+             'reading order. Use 0 or -1 and order the markup instead.',
+    test(ctx) {
+      const out = [];
+      for (const f of ctx.files.filter(isMarkup)) {
+        for (const m of matches(f.text, /\btabindex\s*=\s*["']?\s*([1-9]\d*)/gi)) {
+          out.push(finding(this, f.rel, m.line,
+            `tabindex="${m.groups[0]}" overrides the natural tab order. Use tabindex="0" or reorder the markup.`));
+        }
+      }
+      return out;
+    }
+  },
+
+  {
+    id: 'a11y/video-captions',
+    avenues: ['scorm', 'topic', 'widget'],
+    severity: 'warn',
+    because: 'WCAG 2.2 SC 1.2.2 (Captions (Prerecorded)): deaf and hard-of-hearing students need ' +
+             'captions for any video with sound. A warning, not an error, because the captions may ' +
+             'be burned into the video, which the lint cannot see.',
+    test(ctx) {
+      const out = [];
+      for (const f of ctx.files.filter(isMarkup)) {
+        for (const m of matches(f.text, /<video\b[^>]*>([\s\S]*?)<\/video\s*>/gi)) {
+          const tracks = matches(m.groups[0], /<track\b([^>]*)>/gi)
+            .map(t => (attr(t.groups[0], 'kind') || '').toLowerCase());
+          if (tracks.includes('captions') || tracks.includes('subtitles')) continue;
+          out.push(finding(this, f.rel, m.line,
+            'The video has no captions track. Add <track kind="captions" src="..." srclang="en">.'));
+        }
+      }
+      return out;
+    }
+  },
+
+  {
+    id: 'a11y/autoplay-audio',
+    avenues: ['scorm', 'topic', 'widget'],
+    severity: 'warn',
+    because: 'WCAG 2.2 SC 1.4.2 (Audio Control): sound that starts on its own talks over the ' +
+             'student\'s screen reader. A warning, because a clip under 3 seconds is allowed, and ' +
+             'the lint cannot measure length.',
+    test(ctx) {
+      const out = [];
+      for (const f of ctx.files.filter(isMarkup)) {
+        for (const m of matches(f.text, /<(audio|video)\b([^>]*)>/gi)) {
+          const [tag, attrs] = m.groups;
+          if (attr(attrs, 'autoplay') === null || attr(attrs, 'muted') !== null) continue;
+          out.push(finding(this, f.rel, m.line,
+            `<${tag.toLowerCase()}> plays sound automatically. Remove autoplay, or add muted and give the student the controls.`));
         }
       }
       return out;
