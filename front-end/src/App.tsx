@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type FocusEvent } from 'react';
 import { ApiError, createProject, getProject, sendMessage } from './api/client';
 import type { Build, Project } from '@cdk/contract';
 import { useProjectEvents } from './hooks/useProjectEvents';
@@ -11,6 +11,11 @@ import { readFailure } from './api/failure';
 import { BuildDownload } from './d2l/BuildDownload';
 import { ErrorNotice } from './ErrorNotice';
 import { PreviewPanel } from './preview/PreviewPanel';
+
+/** Keeps the home link on screen when it gets focus, which Firefox skips when Tab wraps into the page from its toolbar. */
+function keepInView(event: FocusEvent<HTMLElement>) {
+  event.currentTarget.scrollIntoView({ block: 'nearest' });
+}
 
 function BuildPanel({ build, turn, statusLines, connection, outcome, disabled, onAskForFix, onSendAgain, onEdit, onNewProject }: {
   build: Build | null;
@@ -114,7 +119,7 @@ export function App() {
   }
 
   return <main className="app-shell">
-    <header className="topbar"><a className="brand" href="/" aria-label="D2L Content Development Kit home"><span aria-hidden="true">C</span>D2L Content Development Kit</a></header>
+    <header className="topbar"><a className="brand" href="/" aria-label="D2L Content Development Kit home" onFocus={keepInView}><span aria-hidden="true">C</span>D2L Content Development Kit</a></header>
     <section className="intro" aria-labelledby="page-title">
       <p className="workspace-eyebrow">{project ? 'Project:' : 'Course material workspace'}</p>
       <h1 id="page-title">{project?.title ?? 'Create an activity'}</h1>
