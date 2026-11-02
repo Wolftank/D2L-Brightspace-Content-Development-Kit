@@ -7,8 +7,8 @@
    build that passes here works when deployed.
 
    Usage:
-     node harness/lint/lint.js <path> --avenue scorm|topic|widget|external
-     node harness/lint/lint.js <path> --avenue scorm --json
+     node qa/lint/lint.js <path> --avenue scorm|topic|widget|external
+     node qa/lint/lint.js <path> --avenue scorm --json
 
    Exit code 0 when there are no errors, 1 otherwise. Warnings are advisory.
    ===================================================================== */
@@ -163,7 +163,7 @@ function report(result, avenue, root, profile) {
 function main(argv) {
   const args = argv.slice(2);
   if (!args.length || args.includes('-h') || args.includes('--help')) {
-    console.log('Usage: node harness/lint/lint.js <path> --avenue scorm|topic|widget|external [--json]');
+    console.log('Usage: node qa/lint/lint.js <path> --avenue scorm|topic|widget|external [--json]');
     return 0;
   }
   const target = args.find(a => !a.startsWith('-'));

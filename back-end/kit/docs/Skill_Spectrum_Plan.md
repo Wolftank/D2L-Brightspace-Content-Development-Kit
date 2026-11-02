@@ -100,8 +100,8 @@ rules, which makes it the reference implementation as well as the guide.
 ## 2. SCSU-Tenant-D2L-Emulator
 
 Not graphical. A suite you run against a build before it goes anywhere near D2L.
-It already exists in skeleton form as `harness/d2l-emulator.js` plus
-`harness/tenant-profile.json`.
+It already exists in skeleton form as `qa/d2l-emulator.js` plus
+`qa/tenant-profile.json`.
 
 Two halves, because they catch different things:
 

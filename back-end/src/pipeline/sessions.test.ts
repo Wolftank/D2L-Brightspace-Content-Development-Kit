@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentDriver, AgentSession, SessionRequest, ToolServerSpec } from '../agent/AgentDriver.js';
 import type { Project } from '../db/schema.js';
 import { NotFound, WorkspaceMissing } from '../errors.js';
-import { KIT_DIR, SCORM_SKILLS } from '../kit.js';
+import { KIT_DIR, SCORM_SKILLS, TOPIC_SKILLS, skillsForAvenue } from '../kit.js';
 import { createSessionService, SESSION_IDLE_MS, type SessionService } from './sessions.js';
 
 type FakeSession = AgentSession & { sessionId: string | null; close: ReturnType<typeof vi.fn> };
@@ -181,6 +181,26 @@ describe('session service', () => {
     await service.acquire('p1');
 
     expect(driver.open).toHaveBeenCalledTimes(2);
+  });
+
+  it('opens a topic project with content-topic skills', async () => {
+    projectRows.set('pt', {
+      id: 'pt',
+      ownerId: 'owner-1',
+      title: 'Topic project',
+      avenue: 'topic',
+      sessionId: null,
+      createdAt: 0,
+      updatedAt: 0,
+    });
+    provisioned.add('pt');
+
+    await service.acquire('pt');
+
+    expect(opened).toHaveLength(1);
+    expect(opened[0]).toMatchObject({
+      skills: TOPIC_SKILLS,
+    });
   });
 
   it('keeps each project in its own workspace and session', async () => {

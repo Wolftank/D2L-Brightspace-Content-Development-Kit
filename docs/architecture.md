@@ -431,7 +431,7 @@ How `back-end/src` is laid out, so that each concern above has exactly one home.
 | `src/tilt-udl/` | The pedagogy check |
 | `src/deploy/` | The D2L client and verification |
 | `src/db/` | SQLite schema and repositories |
-| `kit/harness/` | The QA gate, run by `builds`; the emulator and the tenant profile, served by `preview/`; the tenant profile is also read by `tools/` |
+| `kit/qa/` | The QA gate, run by `builds`; the emulator and the tenant profile, served by `preview/`; the tenant profile is also read by `tools/` |
 
 Wiring lives in one `createApp(deps)` function. `server.js` calls it with real drivers; tests call it with fakes.
 
@@ -459,7 +459,7 @@ Every document in `docs/` and every comment in `back-end/src/` uses these words,
 | **workspace service** | The back-end component that creates, locates, and removes workspaces. |
 | **output** | The contents of `out/` in the workspace: the course content the project produces. |
 | **build** | An immutable copy of the output that has been through the QA gate. |
-| **QA gate** | The kit's static check of a build against the tenant profile, implemented by `kit/harness/lint`. |
+| **QA gate** | The kit's static check of a build against the tenant profile, implemented by `kit/qa/lint`. |
 | **pedagogy check** | The TILT and UDL check, run on a build or on pasted text. |
 | **deployment** | Placing a build into a D2L course. |
 | **kit** | The D2L Content Development Kit in `back-end/kit`: skills, QA gate, emulator, probes. |

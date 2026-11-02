@@ -103,7 +103,7 @@ function failed(message: string): ToolResult {
 
 /** The tenant profile's sections for SCORM output, as the QA gate enforces them. */
 async function tenantLimits(): Promise<Record<string, unknown>> {
-  const profile = JSON.parse(await readFile(join(KIT_DIR, 'harness', 'tenant-profile.json'), 'utf8')) as Record<string, unknown>;
+  const profile = JSON.parse(await readFile(join(KIT_DIR, 'qa', 'tenant-profile.json'), 'utf8')) as Record<string, unknown>;
   return Object.fromEntries(SCORM_TENANT_SECTIONS.map((section) => [section, profile[section]]));
 }
 

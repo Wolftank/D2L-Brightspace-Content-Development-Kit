@@ -2,7 +2,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { renderProjectInstructions, type ProjectInstructionsInput } from './instructions.js';
 
-const project = { id: 'project-26', title: 'Cell division practice' };
+const project = { id: 'project-26', title: 'Cell division practice', avenue: 'scorm' as const };
 const workspaceDir = resolve('test workspace');
 
 describe('renderProjectInstructions', () => {
@@ -36,7 +36,16 @@ describe('renderProjectInstructions', () => {
     for (const tool of ['mcp__cdk__get_project', 'mcp__cdk__check_output', 'mcp__cdk__delete_files']) {
       expect(markdown).toContain(tool);
     }
-    expect(markdown).not.toMatch(/powershell|bash|lint\.js|harness/i);
+    expect(markdown).not.toMatch(/powershell|bash|lint\.js|qa\/lint/i);
+  });
+
+  it('renders topic-specific instructions for a content-topic project', () => {
+    const topicProject = { ...project, avenue: 'topic' as const };
+    const markdown = renderProjectInstructions({ project: topicProject, workspaceDir });
+    expect(markdown).toContain('Output format: Content Topic');
+    expect(markdown).toContain('d2l-content-topic');
+    expect(markdown).not.toContain('d2l-scorm-package');
+    expect(markdown).not.toContain('Output format: SCORM');
   });
 
   it('keeps multiline titles and Markdown delimiters inside literal project data', () => {

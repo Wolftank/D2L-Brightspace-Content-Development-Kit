@@ -4,7 +4,7 @@ A design note, written before rewriting the router to add homepage widgets.
 
 The technical differences between the build avenues are recorded in
 [../probes/RESULTS.md](../probes/RESULTS.md) and enforced by
-[../harness/](../harness/). This note is about the *other* question, the one
+[../qa/](../qa/). This note is about the *other* question, the one
 faculty actually ask: not "what can this technology do" but "where does this
 thing belong."
 

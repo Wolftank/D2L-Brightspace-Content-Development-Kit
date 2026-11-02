@@ -23,7 +23,7 @@ async function play(session: AgentSession, text: string, signal = new AbortContr
 
 /** The QA gate's report on `outDir` for a SCORM package. */
 async function gate(outDir: string): Promise<{ pass: boolean; findings: Array<{ rule: string; severity: string }> }> {
-  const lint = join(KIT_DIR, 'harness', 'lint', 'lint.js');
+  const lint = join(KIT_DIR, 'qa', 'lint', 'lint.js');
   try {
     const { stdout } = await execFileAsync(process.execPath, [lint, outDir, '--avenue', 'scorm', '--json']);
     return JSON.parse(stdout);

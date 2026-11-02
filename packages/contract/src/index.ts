@@ -185,10 +185,10 @@ export interface MeResponse {
   agent: { name: string; ok: boolean; version?: string; detail?: string };
 }
 
-/** Creates a SCORM project. Any other field is ignored. */
+/** Creates a project. Any other field is ignored. */
 export interface CreateProjectRequest {
   title: string;
-  avenue?: 'scorm';
+  avenue?: 'scorm' | 'topic';
 }
 
 export interface CreateProjectResponse {

@@ -21,7 +21,7 @@ import { createWorkspaceService, type WorkspaceService } from '../services/works
 
 const PREVIEW_HOST = 'preview.localhost:3000';
 const APP_ORIGIN = 'http://127.0.0.1:5173';
-const BAD_SCORM = join(KIT_DIR, 'harness', 'lint', 'fixtures', 'bad-scorm');
+const BAD_SCORM = join(KIT_DIR, 'qa', 'lint', 'fixtures', 'bad-scorm');
 
 describe('preview origin', () => {
   let rootDir: string;
@@ -113,7 +113,7 @@ describe('preview origin', () => {
     it('serves the emulator unchanged from the kit', async () => {
       const res = await preview('/preview/d2l-emulator.js');
 
-      expect(res.text).toBe(await fs.readFile(join(KIT_DIR, 'harness', 'd2l-emulator.js'), 'utf8'));
+      expect(res.text).toBe(await fs.readFile(join(KIT_DIR, 'qa', 'd2l-emulator.js'), 'utf8'));
     });
 
     it('serves nothing else under /preview/', async () => {

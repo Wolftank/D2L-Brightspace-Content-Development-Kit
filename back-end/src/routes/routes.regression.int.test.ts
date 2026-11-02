@@ -36,7 +36,7 @@ import { captureLog, type LogRecord } from '../test/log.js';
  */
 
 const STARTER = join(KIT_DIR, 'skills', 'd2l-scorm-package', 'assets', 'starter');
-const BAD_SCORM = join(KIT_DIR, 'harness', 'lint', 'fixtures', 'bad-scorm');
+const BAD_SCORM = join(KIT_DIR, 'qa', 'lint', 'fixtures', 'bad-scorm');
 const WORKSPACE_MISSING_ERROR = {
   code: 'workspace_missing',
   message: "This project's files are missing, so the request couldn't run.",

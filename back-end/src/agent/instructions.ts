@@ -2,7 +2,7 @@ import { isAbsolute, join } from 'node:path';
 import type { Project } from '../db/schema.js';
 
 export interface ProjectInstructionsInput {
-  project: Pick<Project, 'id' | 'title'>;
+  project: Pick<Project, 'id' | 'title' | 'avenue'>;
   /** Absolute path returned by the workspace service's pathFor(projectId). */
   workspaceDir: string;
 }
@@ -18,7 +18,7 @@ export function renderProjectInstructions({ project, workspaceDir }: ProjectInst
 
 Project ID: ${code(project.id)}
 Project title: ${code(project.title)}
-Output format: SCORM. Build from the instructor request supplied in the message input. Use the SCORM path directly and proceed without the prototype's output-selection interview.
+Output format: ${project.avenue === 'topic' ? 'Content Topic' : 'SCORM'}. Build from the instructor request supplied in the message input. Use the ${project.avenue === 'topic' ? 'content-topic' : 'SCORM'} path directly and proceed without the prototype's output-selection interview.
 
 ## Workspace and skills
 
@@ -28,7 +28,7 @@ Output format: SCORM. Build from the instructor request supplied in the message 
 
 Keep source material unchanged. Write the activity and its assets only into out/.
 Follow these skills for content rules:
-- ${code('d2l-scorm-package')} to build the SCORM activity
+- ${code(project.avenue === 'topic' ? 'd2l-content-topic' : 'd2l-scorm-package')} to build the ${project.avenue === 'topic' ? 'content topic' : 'SCORM activity'}
 - ${code('d2l-tenant-qa')} to check it against what the D2L tenant allows
 
 Use the starter already provisioned in out/ as the starting point for the activity.
@@ -42,10 +42,10 @@ You have no shell. Work with your file tools and these CDK tools:
 
 ## Build, check, and fix within this request
 
-1. Build the requested SCORM activity in out/ using the skills and source material. Ensure all images have alt text, the page declares lang="en", and headings follow a sequential order without skipping levels. The checker enforces these accessibility rules.
+1. Build the requested ${project.avenue === 'topic' ? 'content topic' : 'SCORM activity'} in out/ using the skills and source material. Ensure all images have alt text, the page declares lang="en", and headings follow a sequential order without skipping levels. The checker enforces these accessibility rules.
 2. Check out/ with ${code('mcp__cdk__check_output')}.
 3. Inspect the findings and their explanations. Fix errors you can address in out/ and check again during this request. Review warnings and report any remaining limitations. If the checker cannot run or errors remain, clearly describe the failure and unresolved findings; do not claim a passing package.
-4. Return a concise description of the activity, the check result, and any unresolved issues. When your turn ends, CDK saves out/ as a new version, checks the saved output again, and packages a passing build with the manifest at the ZIP root. That step owns final packaging and download eligibility. Hand off out/ in place of the skills' standalone packaging and deployment steps.
+4. Return a concise description of the activity, the check result, and any unresolved issues. When your turn ends, CDK saves out/ as a new version, checks the saved output again, and packages a passing build${project.avenue === 'scorm' ? ' with the manifest at the ZIP root' : ''}. That step owns final packaging and download eligibility. Hand off out/ in place of the skills' standalone packaging and deployment steps.
 
 ## How to reply
 

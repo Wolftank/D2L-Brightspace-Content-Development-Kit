@@ -29,9 +29,9 @@ export interface WorkspaceService {
 
   /**
    * Provisions a fresh workspace: an empty `files/` for instructor uploads,
-   * the SCORM starter copied into `out/`, and the sibling `builds/` directory. Writes nothing agent-specific.
+   * the avenue's starter copied into `out/`, and the sibling `builds/` directory. Writes nothing agent-specific.
    */
-  create(projectId: string): Promise<void>;
+  create(projectId: string, avenue?: string): Promise<void>;
 
   /** Removes the project's directory, its workspace and builds included. */
   remove(projectId: string): Promise<void>;
@@ -58,9 +58,14 @@ export class BuildVersionExists extends Error {
   }
 }
 
+/** Maps an avenue to the skill directory that holds its starter files. */
+const STARTER_SKILL: Record<string, string> = {
+  scorm: 'd2l-scorm-package',
+  topic: 'd2l-content-topic',
+};
+
 export function createWorkspaceService(deps: WorkspaceServiceDeps): WorkspaceService {
   const kitDir = deps.kitDir ?? KIT_DIR;
-  const starterDir = join(kitDir, 'skills', 'd2l-scorm-package', 'assets', 'starter');
 
   function projectDir(projectId: string): string {
     return join(deps.dataDir, 'projects', projectId);
@@ -86,7 +91,9 @@ export function createWorkspaceService(deps: WorkspaceServiceDeps): WorkspaceSer
     return workspaceDir;
   }
 
-  async function create(projectId: string): Promise<void> {
+  async function create(projectId: string, avenue = 'scorm'): Promise<void> {
+    const skill = STARTER_SKILL[avenue] ?? STARTER_SKILL.scorm;
+    const starterDir = join(kitDir, 'skills', skill, 'assets', 'starter');
     const workspaceDir = pathFor(projectId);
     await fs.mkdir(join(workspaceDir, 'files'), { recursive: true });
     await copyWithRetry(starterDir, join(workspaceDir, 'out'));
