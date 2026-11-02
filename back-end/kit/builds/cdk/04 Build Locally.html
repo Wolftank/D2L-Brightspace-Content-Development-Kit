@@ -227,7 +227,7 @@
     <div class="card">
       <p>When it looks right, check it against the tenant. This catches the failures that
          are invisible in a local browser because they only happen inside D2L.</p>
-      <pre><code>node harness/lint/lint.js &lt;your-folder&gt; --avenue scorm|topic|external</code></pre>
+      <pre><code>node qa/lint/lint.js &lt;your-folder&gt; --avenue scorm|topic|external</code></pre>
       <p>Every finding explains <strong>why</strong>, quoting the behaviour we measured.
          The point is that you learn the constraint, not just silence the check. Warnings
          are advisory; errors are things we watched break.</p>

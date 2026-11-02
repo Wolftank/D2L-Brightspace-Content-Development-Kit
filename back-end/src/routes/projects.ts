@@ -3,10 +3,10 @@ import { z } from 'zod';
 import type { CreateProjectResponse, ProjectListResponse } from '@cdk/contract';
 import type { Deps } from '../deps.js';
 
-/** Creates SCORM projects only. Any other field, such as `targetCourse`, is dropped. */
+/** Creates SCORM or content-topic projects. Any other field, such as `targetCourse`, is dropped. */
 const createProjectBody = z.object({
   title: z.string().trim().min(1, 'must not be blank'),
-  avenue: z.literal('scorm').default('scorm'),
+  avenue: z.enum(['scorm', 'topic']).default('scorm'),
 });
 
 export function projectsRouter(deps: Deps): Router {

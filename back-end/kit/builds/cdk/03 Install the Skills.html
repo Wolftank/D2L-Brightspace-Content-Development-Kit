@@ -227,7 +227,7 @@ cd ~/projects
 <span class="c"># unzip the kit here, giving you:</span>
 D2L_Code/
   skills/     <span class="c">the six skills</span>
-  harness/    <span class="c">the checking tools</span>
+  qa/    <span class="c">the checking tools</span>
   probes/     <span class="c">the evidence they rest on</span>
   builds/     <span class="c">examples, including these pages</span>
   docs/       <span class="c">design notes and planning</span></code></pre>
@@ -255,11 +255,11 @@ claude</code></pre>
       <p>The kit checks itself. Run this and you should see three suites pass. If they do
          not, something did not unzip correctly, and you want to know that now rather
          than halfway through building.</p>
-      <pre><code>node harness/emulator.test.js
-node harness/lint/lint.test.js</code></pre>
+      <pre><code>node qa/emulator.test.js
+node qa/lint/lint.test.js</code></pre>
       <p>Then try the gate on one of the included examples. It should report
          <strong>Clean. No findings.</strong></p>
-      <pre><code>node harness/lint/lint.js skills/d2l-scorm-package/assets/starter --avenue scorm</code></pre>
+      <pre><code>node qa/lint/lint.js skills/d2l-scorm-package/assets/starter --avenue scorm</code></pre>
     </div>
 
     <div class="card">

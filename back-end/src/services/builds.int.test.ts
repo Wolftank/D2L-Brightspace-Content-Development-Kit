@@ -18,7 +18,7 @@ import { createBuildService, downloadFilename, type BuildService } from './build
 import { createWorkspaceService, type WorkspaceService } from './workspaces.js';
 import { captureLog, type LogRecord } from '../test/log.js';
 
-const BAD_SCORM = join(KIT_DIR, 'harness', 'lint', 'fixtures', 'bad-scorm');
+const BAD_SCORM = join(KIT_DIR, 'qa', 'lint', 'fixtures', 'bad-scorm');
 
 describe('build service', () => {
   let dataDir: string;
@@ -34,8 +34,8 @@ describe('build service', () => {
   /** A build service whose QA gate is `lint.js` with the given source. */
   async function withStubGate(source: string, gateTimeoutMs?: number): Promise<BuildService> {
     const kitDir = join(dataDir, 'stub-kit');
-    await fs.mkdir(join(kitDir, 'harness', 'lint'), { recursive: true });
-    await fs.writeFile(join(kitDir, 'harness', 'lint', 'lint.js'), source);
+    await fs.mkdir(join(kitDir, 'qa', 'lint'), { recursive: true });
+    await fs.writeFile(join(kitDir, 'qa', 'lint', 'lint.js'), source);
     return createService({ kitDir, gateTimeoutMs });
   }
 

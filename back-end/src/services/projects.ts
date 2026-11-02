@@ -10,7 +10,7 @@ import type { WorkspaceService } from './workspaces.js';
 
 export interface CreateProjectInput {
   title: string;
-  avenue: 'scorm';
+  avenue: 'scorm' | 'topic';
 }
 
 export interface ProjectServiceDeps {
@@ -38,7 +38,7 @@ export function createProjectService(deps: ProjectServiceDeps): ProjectService {
     async create(ownerId, { title, avenue }) {
       const id = randomUUID();
       try {
-        await deps.workspaces.create(id);
+        await deps.workspaces.create(id, avenue);
         return toApi(deps.projects.create({ id, ownerId, title, avenue }));
       } catch (err) {
         await deps.workspaces.remove(id).catch((removeErr: unknown) => {

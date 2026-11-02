@@ -51,7 +51,7 @@ rest are static prose and will render anywhere.
 Before uploading:
 
 ```bash
-node harness/lint/lint.js builds/cdk --avenue topic
+node qa/lint/lint.js builds/cdk --avenue topic
 node builds/cdk/routing.test.js
 ```
 

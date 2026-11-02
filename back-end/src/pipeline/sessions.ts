@@ -3,7 +3,7 @@ import type { AgentDriver, AgentSession, ToolServerSpec } from '../agent/AgentDr
 import { renderProjectInstructions } from '../agent/instructions.js';
 import type { ProjectsRepo } from '../db/projects.js';
 import { NotFound } from '../errors.js';
-import { KIT_DIR, SCORM_SKILLS } from '../kit.js';
+import { KIT_DIR, skillsForAvenue } from '../kit.js';
 import { log } from '../log.js';
 import type { WorkspaceService } from '../services/workspaces.js';
 
@@ -64,7 +64,7 @@ export function createSessionService(deps: SessionServiceDeps): SessionService {
       sessionId: project.sessionId,
       instructions: renderProjectInstructions({ project, workspaceDir }),
       skillsDir: join(KIT_DIR, 'skills'),
-      skills: SCORM_SKILLS,
+      skills: skillsForAvenue(project.avenue),
       tools: deps.tools(projectId),
     });
     return { session, savedSessionId: project.sessionId };

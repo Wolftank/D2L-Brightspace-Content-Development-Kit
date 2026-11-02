@@ -172,7 +172,7 @@ above and passes the lint clean.
 ## Before you deploy: run the gate
 
 ```bash
-node harness/lint/lint.js <your-build-folder> --avenue widget
+node qa/lint/lint.js <your-build-folder> --avenue widget
 ```
 
 The widget rule set is different from the others. It checks for CSS leakage,

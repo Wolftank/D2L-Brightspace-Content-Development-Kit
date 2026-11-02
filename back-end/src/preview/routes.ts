@@ -12,15 +12,15 @@ export interface PreviewSettings {
 }
 
 const PLAYER_DIR = join(BACK_END_DIR, 'preview');
-const HARNESS_DIR = join(KIT_DIR, 'harness');
+const QA_DIR = join(KIT_DIR, 'qa');
 
 /** The player page and the files it loads, by the name each is requested under `/preview/`. */
 const PLAYER_FILES = new Map([
   ['player.html', join(PLAYER_DIR, 'player.html')],
   ['player.js', join(PLAYER_DIR, 'player.js')],
   ['player.css', join(PLAYER_DIR, 'player.css')],
-  ['d2l-emulator.js', join(HARNESS_DIR, 'd2l-emulator.js')],
-  ['tenant-profile.json', join(HARNESS_DIR, 'tenant-profile.json')],
+  ['d2l-emulator.js', join(QA_DIR, 'd2l-emulator.js')],
+  ['tenant-profile.json', join(QA_DIR, 'tenant-profile.json')],
 ]);
 
 /** Absolute paths may sit under a dot folder, such as the default `~/.cdk`; every path served is already checked. */
