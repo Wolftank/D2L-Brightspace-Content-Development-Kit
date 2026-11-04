@@ -1,8 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Build, Message } from '@cdk/contract';
 import {
   initialProjectEventState,
   projectEventReducer,
+  useProjectEvents,
+  type ProjectEventState,
 } from './useProjectEvents';
+
+vi.mock('../api/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api/client')>()),
+  getMessages: vi.fn(() => new Promise(() => undefined)),
+}));
 
 describe('projectEventReducer', () => {
   it('handles turn.started', () => {
@@ -362,4 +371,247 @@ it('keeps thinking out of progress history across replay and replaces the active
     if ('seq' in event && event.seq === 5) expect(state.turn.currentStep).toBe('Writing your reply');
   }
   expect(events.reduce(projectEventReducer, initialProjectEventState)).toEqual(state);
+});
+
+class Stream extends EventTarget {
+  static instances: Stream[] = [];
+  readyState = 0;
+  close = vi.fn(() => { this.readyState = 2; });
+  constructor(public url: string) { super(); Stream.instances.push(this); }
+  open() {
+    this.readyState = 1;
+    this.dispatchEvent(new Event('open'));
+  }
+  drop() {
+    this.readyState = 0;
+    this.dispatchEvent(new Event('error'));
+  }
+  closePermanently() {
+    this.readyState = 2;
+    this.dispatchEvent(new Event('error'));
+  }
+  emit(kind: string, payload: unknown, seq: number) {
+    this.dispatchEvent(new MessageEvent(kind, { data: JSON.stringify(payload), lastEventId: String(seq) }));
+  }
+}
+
+function eventStateOf({ turn, statusLines, streamingMessages, builds, messages, outcomes }: ProjectEventState): ProjectEventState {
+  return { turn, statusLines, streamingMessages, builds, messages, outcomes };
+}
+
+function lineTexts(state: ProjectEventState): string[] {
+  return state.statusLines.map(line => line.text);
+}
+
+function build(status: Build['status']): Build {
+  return { id: 'build-1', projectId: 'p1', version: 1, status, avenue: 'scorm', qa: null, pedagogy: null, error: null, outputHash: null, turnId: 't1', createdAt: 1 };
+}
+
+function chatMessage(id: string, seq: number, role: Message['role'], turnId: string, text: string): Message {
+  return { id, projectId: 'p1', seq, role, content: [{ type: 'text', text }], turnId, createdAt: seq };
+}
+
+describe('useProjectEvents', () => {
+  beforeEach(() => { vi.stubGlobal('EventSource', Stream); });
+
+  afterEach(() => {
+    sessionStorage.clear();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+    Stream.instances = [];
+  });
+
+  describe('duplicate events', () => {
+    it('ignores a replayed event at or below the last saved sequence', () => {
+      const hook = renderHook(() => useProjectEvents('p1'));
+      const stream = Stream.instances[0]!;
+      act(() => {
+        stream.open();
+        stream.emit('turn.started', { turnId: 't1', startedAt: 1000 }, 1);
+        stream.emit('turn.status', { turnId: 't1', text: 'Checking the outline', category: 'checking' }, 2);
+        stream.emit('message.delta', { turnId: 't1', messageId: 'm1', text: 'Here is the quiz' }, 3);
+        stream.emit('build.created', { build: build('checking') }, 4);
+      });
+
+      act(() => {
+        stream.emit('turn.status', { turnId: 't1', text: 'Checking the outline', category: 'checking' }, 2);
+        stream.emit('message.delta', { turnId: 't1', messageId: 'm1', text: 'Here is the quiz' }, 3);
+        stream.emit('build.updated', { build: build('ready') }, 4);
+        stream.emit('build.updated', { build: build('failed') }, 1);
+      });
+
+      expect(lineTexts(hook.result.current)).toEqual(['Starting your build', 'Checking the outline']);
+      expect(hook.result.current.streamingMessages).toEqual([{ id: 'm1', turnId: 't1', text: 'Here is the quiz' }]);
+      expect(hook.result.current.builds).toEqual([build('checking')]);
+      expect(sessionStorage.getItem('progress-p1-last-seq')).toBe('4');
+    });
+
+    it('ignores events at or below a sequence saved before the hook mounted', () => {
+      sessionStorage.setItem('progress-p1-last-seq', '5');
+      const hook = renderHook(() => useProjectEvents('p1'));
+      const stream = Stream.instances[0]!;
+      expect(stream.url).toBe('/api/projects/p1/events?after=5');
+
+      act(() => {
+        stream.open();
+        stream.emit('turn.started', { turnId: 't1', startedAt: 1000 }, 5);
+      });
+      expect(hook.result.current.statusLines).toEqual([]);
+
+      act(() => stream.emit('turn.started', { turnId: 't2', startedAt: 2000 }, 6));
+      expect(lineTexts(hook.result.current)).toEqual(['Starting your build']);
+    });
+  });
+
+  describe('reconnect', () => {
+    it('shows reconnecting on a stream error and connected again on reopen, without duplicating replayed lines', () => {
+      vi.useFakeTimers();
+      const hook = renderHook(() => useProjectEvents('p1'));
+      const stream = Stream.instances[0]!;
+      act(() => {
+        stream.open();
+        stream.emit('turn.started', { turnId: 't1', startedAt: 1000 }, 1);
+        stream.emit('tool.started', { turnId: 't1', callId: 'c1', name: 'Write', summary: 'Writing the quiz', category: 'writing' }, 2);
+      });
+      expect(hook.result.current.connection).toBe('connected');
+
+      act(() => stream.drop());
+      expect(hook.result.current.connection).toBe('reconnecting');
+
+      act(() => {
+        vi.advanceTimersByTime(5_000);
+        stream.open();
+      });
+      expect(hook.result.current.connection).toBe('connected');
+
+      act(() => {
+        stream.emit('turn.started', { turnId: 't1', startedAt: 1000 }, 1);
+        stream.emit('tool.started', { turnId: 't1', callId: 'c1', name: 'Write', summary: 'Writing the quiz', category: 'writing' }, 2);
+        stream.emit('turn.status', { turnId: 't1', text: 'Checking the quiz', category: 'checking' }, 3);
+      });
+      expect(lineTexts(hook.result.current)).toEqual(['Starting your build', 'Writing the quiz', 'Checking the quiz']);
+      expect(Stream.instances).toHaveLength(1);
+      expect(stream.close).not.toHaveBeenCalled();
+    });
+
+    it('shows lost immediately when the stream closes permanently', () => {
+      vi.useFakeTimers();
+      const hook = renderHook(() => useProjectEvents('p1'));
+      const stream = Stream.instances[0]!;
+      act(() => stream.open());
+
+      act(() => stream.closePermanently());
+      expect(hook.result.current.connection).toBe('lost');
+      expect(stream.close).toHaveBeenCalledOnce();
+
+      act(() => vi.advanceTimersByTime(30_000));
+      expect(hook.result.current.connection).toBe('lost');
+      expect(stream.close).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('switching projects', () => {
+    it("closes the old stream, opens one for the new project and shows that project's saved state", () => {
+      const saved: ProjectEventState = {
+        ...initialProjectEventState,
+        turn: { id: 't9', startedAt: 9000, currentStep: 'Packaging the build', status: 'running' },
+        statusLines: [{ seq: 7, text: 'Packaging the build', category: 'building' }],
+      };
+      sessionStorage.setItem('progress-p2-event-state', JSON.stringify(saved));
+      sessionStorage.setItem('progress-p2-last-seq', '7');
+      const hook = renderHook(({ projectId }) => useProjectEvents(projectId), { initialProps: { projectId: 'p1' } });
+      const first = Stream.instances[0]!;
+      act(() => {
+        first.open();
+        first.emit('turn.started', { turnId: 't1', startedAt: 1000 }, 1);
+      });
+
+      hook.rerender({ projectId: 'p2' });
+
+      expect(first.close).toHaveBeenCalledOnce();
+      expect(Stream.instances).toHaveLength(2);
+      expect(Stream.instances[1]!.url).toBe('/api/projects/p2/events?after=7');
+      expect(hook.result.current.connection).toBe('reconnecting');
+      expect(eventStateOf(hook.result.current)).toEqual(saved);
+      expect(JSON.parse(sessionStorage.getItem('progress-p2-event-state')!)).toEqual(saved);
+      expect(lineTexts(JSON.parse(sessionStorage.getItem('progress-p1-event-state')!))).toEqual(['Starting your build']);
+    });
+
+    it('shows the empty state when the new project has no saved state', () => {
+      const hook = renderHook(({ projectId }) => useProjectEvents(projectId), { initialProps: { projectId: 'p1' } });
+      act(() => {
+        Stream.instances[0]!.open();
+        Stream.instances[0]!.emit('turn.started', { turnId: 't1', startedAt: 1000 }, 1);
+        Stream.instances[0]!.emit('build.created', { build: build('checking') }, 2);
+      });
+
+      hook.rerender({ projectId: 'p2' });
+
+      expect(Stream.instances[0]!.close).toHaveBeenCalledOnce();
+      expect(Stream.instances[1]!.url).toBe('/api/projects/p2/events');
+      expect(eventStateOf(hook.result.current)).toEqual(initialProjectEventState);
+    });
+  });
+
+  describe('saved state', () => {
+    it('falls back to the empty state when the saved state on mount is unreadable', () => {
+      sessionStorage.setItem('progress-p1-event-state', '{"turn":');
+      const hook = renderHook(() => useProjectEvents('p1'));
+      expect(eventStateOf(hook.result.current)).toEqual(initialProjectEventState);
+
+      act(() => {
+        Stream.instances[0]!.open();
+        Stream.instances[0]!.emit('turn.started', { turnId: 't1', startedAt: 1000 }, 1);
+      });
+      expect(lineTexts(hook.result.current)).toEqual(['Starting your build']);
+    });
+
+    it('falls back to the empty state when the switched-to project has unreadable saved state', () => {
+      sessionStorage.setItem('progress-p2-event-state', 'not json');
+      const hook = renderHook(({ projectId }) => useProjectEvents(projectId), { initialProps: { projectId: 'p1' } });
+      act(() => {
+        Stream.instances[0]!.open();
+        Stream.instances[0]!.emit('turn.started', { turnId: 't1', startedAt: 1000 }, 1);
+      });
+
+      hook.rerender({ projectId: 'p2' });
+
+      expect(eventStateOf(hook.result.current)).toEqual(initialProjectEventState);
+    });
+  });
+
+  describe('chat events', () => {
+    it("keeps each turn's agent reply in the thread in order and starts a follow-up turn with a new reply", () => {
+      const hook = renderHook(() => useProjectEvents('p1'));
+      const stream = Stream.instances[0]!;
+      act(() => {
+        stream.open();
+        hook.result.current.addMessage(chatMessage('u1', 1, 'instructor', 't1', 'Make a quiz on cells'));
+      });
+      act(() => {
+        stream.emit('turn.started', { turnId: 't1', startedAt: 1000 }, 1);
+        stream.emit('message.delta', { turnId: 't1', messageId: 'a1', text: 'Here is ' }, 2);
+        stream.emit('message.delta', { turnId: 't1', messageId: 'a1', text: 'your quiz' }, 3);
+        stream.emit('message.completed', { message: chatMessage('a1', 2, 'agent', 't1', 'Here is your quiz') }, 4);
+        stream.emit('turn.completed', { turnId: 't1' }, 5);
+      });
+      act(() => hook.result.current.addMessage(chatMessage('u2', 3, 'instructor', 't2', 'Make it shorter')));
+
+      act(() => stream.emit('turn.started', { turnId: 't2', startedAt: 2000 }, 6));
+      expect(hook.result.current.streamingMessages).toEqual([]);
+      expect(hook.result.current.messages.map(message => message.id)).toEqual(['u1', 'a1', 'u2']);
+
+      act(() => stream.emit('message.delta', { turnId: 't2', messageId: 'a2', text: 'Here is a shorter quiz' }, 7));
+      expect(hook.result.current.streamingMessages).toEqual([{ id: 'a2', turnId: 't2', text: 'Here is a shorter quiz' }]);
+
+      act(() => {
+        stream.emit('message.completed', { message: chatMessage('a2', 4, 'agent', 't2', 'Here is a shorter quiz') }, 8);
+        stream.emit('turn.completed', { turnId: 't2' }, 9);
+      });
+      expect(hook.result.current.messages.map(message => message.id)).toEqual(['u1', 'a1', 'u2', 'a2']);
+      expect(hook.result.current.messages[1]!.content).toEqual([{ type: 'text', text: 'Here is your quiz' }]);
+      expect(hook.result.current.streamingMessages).toEqual([]);
+      expect(hook.result.current.outcomes).toEqual({ t1: { status: 'completed' }, t2: { status: 'completed' } });
+    });
+  });
 });
