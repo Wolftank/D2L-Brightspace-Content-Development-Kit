@@ -1,6 +1,7 @@
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { BuildableAvenue } from '@cdk/contract';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createBuildsRepo } from '../db/builds.js';
 import { createEventsRepo } from '../db/events.js';
@@ -188,7 +189,7 @@ describe('ClaudeAgentDriver, live SDK', () => {
   }, 60_000);
 });
 
-describe('ClaudeAgentDriver, live SDK, in a provisioned SCORM workspace', () => {
+describe('ClaudeAgentDriver, live SDK, in a provisioned workspace', () => {
   let dataDir: string;
 
   beforeEach(async () => {
@@ -214,23 +215,23 @@ describe('ClaudeAgentDriver, live SDK, in a provisioned SCORM workspace', () => 
     };
   }
 
-  /** Opens a session for a new SCORM project, with `prepare` run on its workspace first. */
-  async function openProject(prepare: (outDir: string) => Promise<void> = async () => {}) {
+  /** Opens a session for a new project of `avenue`, with `prepare` run on its workspace first. */
+  async function openProject({ avenue = 'scorm', prepare = async () => {} }: { avenue?: BuildableAvenue; prepare?: (outDir: string) => Promise<void> } = {}) {
     const db = testDb();
     const projects = createProjectsRepo(db);
     const workspaces = createWorkspaceService({ dataDir });
     const builds = createBuildService({ builds: createBuildsRepo(db), projects, workspaces, events: createEventService(createEventsRepo(db)) });
-    const project = projects.create({ id: 'live-project', ownerId: createUsersRepo(db).ensureLocalUser().id, title: 'Photosynthesis check', avenue: 'scorm' });
-    await workspaces.create(project.id, 'scorm');
+    const project = projects.create({ id: 'live-project', ownerId: createUsersRepo(db).ensureLocalUser().id, title: 'Photosynthesis check', avenue });
+    await workspaces.create(project.id, avenue);
     const workspaceDir = workspaces.pathFor(project.id);
     await prepare(join(workspaceDir, 'out'));
     const checks: boolean[] = [];
     const session = await driver.open({
       workspaceDir,
       sessionId: null,
-      instructions: renderProjectInstructions({ project, avenue: 'scorm', workspaceDir }),
+      instructions: renderProjectInstructions({ project, avenue, workspaceDir }),
       skillsDir: join(KIT_DIR, 'skills'),
-      skills: skillsFor('scorm'),
+      skills: skillsFor(avenue),
       tools: recordingChecks(createCdkTools({ projects, workspaces, builds }, project.id), checks),
     });
     return { project, workspaces, workspaceDir, builds, checks, session };
@@ -270,12 +271,12 @@ describe('ClaudeAgentDriver, live SDK, in a provisioned SCORM workspace', () => 
   }, 60_000);
 
   it('fixes what its first check finds, and the turn\'s build passes the QA gate', async () => {
-    const { project, builds, checks, session } = await openProject(async (outDir) => {
+    const { project, builds, checks, session } = await openProject({ prepare: async (outDir) => {
       const page = await readFile(join(outDir, 'index.html'), 'utf8');
       const broken = '<img src="leaf.svg">\n<script>var answers = [;</script>\n</body>';
       await writeFile(join(outDir, 'index.html'), page.replace('</body>', broken));
       await writeFile(join(outDir, 'leaf.svg'), '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" fill="green"/></svg>');
-    });
+    } });
 
     const turn = session.send(
       { text: 'Check the activity with check_output before you change anything, then fix every error it reports.', attachments: [] },
@@ -312,4 +313,32 @@ describe('ClaudeAgentDriver, live SDK, in a provisioned SCORM workspace', () => 
     expect(checks.length).toBeGreaterThan(0);
     expect(await builds.create(project.id)).toMatchObject({ status: 'ready', qa: { passed: true } });
   }, 900_000);
+
+  it('builds a content topic from the starter that passes the QA gate in topic mode, then version 2 for a follow-up', async () => {
+    const { project, builds, checks, session } = await openProject({ avenue: 'topic' });
+
+    const first = session.send(
+      {
+        text:
+          'Build a lab safety checklist for first-year chemistry students that they can mark as read, ' +
+          'with notes for running the first lab that only instructors see.',
+        attachments: [],
+      },
+      { maxSteps: 60, maxBudgetUsd: 5 },
+      new AbortController().signal,
+    );
+    await drain(first.events);
+    expect((await first.result).error).toBeUndefined();
+    expect(checks.length).toBeGreaterThan(0);
+    expect(await builds.create(project.id)).toMatchObject({ version: 1, status: 'ready', avenue: 'topic', qa: { passed: true } });
+
+    const second = session.send(
+      { text: 'Add a reminder to the instructor notes to check that every student has signed the safety contract.', attachments: [] },
+      { maxSteps: 30, maxBudgetUsd: 3 },
+      new AbortController().signal,
+    );
+    await drain(second.events);
+    expect((await second.result).error).toBeUndefined();
+    expect(await builds.create(project.id)).toMatchObject({ version: 2, status: 'ready', avenue: 'topic', qa: { passed: true } });
+  }, 1_200_000);
 });

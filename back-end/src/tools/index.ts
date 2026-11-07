@@ -1,14 +1,23 @@
 import { readFile, realpath, rm } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { z, type ZodRawShape } from 'zod';
+import type { BuildableAvenue } from '@cdk/contract';
 import type { ToolDef, ToolResult, ToolServerSpec } from '../agent/AgentDriver.js';
 import type { ProjectsRepo } from '../db/projects.js';
-import { KIT_DIR } from '../kit.js';
+import { buildableAvenue, KIT_DIR } from '../kit.js';
 import type { BuildService } from '../services/builds.js';
 import type { WorkspaceService } from '../services/workspaces.js';
 
-/** The tenant profile's sections that apply to SCORM output. */
-const SCORM_TENANT_SECTIONS = ['scorm', 'fileLoading', 'storage', 'rendering'];
+/**
+ * The tenant profile's sections that apply to each avenue. A content topic
+ * leaves out `scorm` and gains `brightspaceApi`, which it can reach; the
+ * notes in `fileLoading`, `storage`, and `rendering` say where an HTML topic
+ * differs from a SCORM package.
+ */
+const TENANT_SECTIONS: Record<BuildableAvenue, string[]> = {
+  scorm: ['scorm', 'fileLoading', 'storage', 'rendering'],
+  topic: ['fileLoading', 'storage', 'brightspaceApi', 'rendering'],
+};
 
 export interface CdkToolsDeps {
   projects: Pick<ProjectsRepo, 'getById'>;
@@ -35,7 +44,7 @@ export function createCdkTools(deps: CdkToolsDeps, projectId: string): ToolServe
         title: project.title,
         avenue: project.avenue,
         latestBuild: latest ? { version: latest.version, status: latest.status, qa: latest.qa, error: latest.error } : null,
-        tenant: await tenantLimits(),
+        tenant: await tenantLimits(buildableAvenue(project)),
       });
     },
   });
@@ -101,10 +110,10 @@ function failed(message: string): ToolResult {
   return { content: message, isError: true };
 }
 
-/** The tenant profile's sections for SCORM output, as the QA gate enforces them. */
-async function tenantLimits(): Promise<Record<string, unknown>> {
+/** The tenant profile's sections for `avenue`, as the QA gate enforces them. */
+async function tenantLimits(avenue: BuildableAvenue): Promise<Record<string, unknown>> {
   const profile = JSON.parse(await readFile(join(KIT_DIR, 'qa', 'tenant-profile.json'), 'utf8')) as Record<string, unknown>;
-  return Object.fromEntries(SCORM_TENANT_SECTIONS.map((section) => [section, profile[section]]));
+  return Object.fromEntries(TENANT_SECTIONS[avenue].map((section) => [section, profile[section]]));
 }
 
 /**

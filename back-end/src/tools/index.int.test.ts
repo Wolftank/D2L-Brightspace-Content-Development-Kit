@@ -87,6 +87,17 @@ describe('CDK tools', () => {
       expect(content).not.toContain('homepageWidget');
       expect(content).not.toContain('brightspaceApi');
     });
+
+    it("reports a content topic's tenant limits, with the Brightspace API and without SCORM", async () => {
+      await addProject('t1', 'Campus map', 'topic');
+
+      const project = JSON.parse((await call(toolsFor('t1'), 'get_project')).content);
+
+      expect(project).toMatchObject({ title: 'Campus map', avenue: 'topic', latestBuild: null });
+      expect(Object.keys(project.tenant)).toEqual(['fileLoading', 'storage', 'brightspaceApi', 'rendering']);
+      expect(project.tenant.brightspaceApi.roleDetection.value).toContain('myenrollments');
+      expect(project.tenant.storage.sharedAcrossEntireLms.note).toContain('HTML topics');
+    });
   });
 
   describe('check_output', () => {
