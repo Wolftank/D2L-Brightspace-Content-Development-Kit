@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { KIT_DIR } from '../kit.js';
+import type { BuildableAvenue } from '@cdk/contract';
+import { AVENUE_SKILL, KIT_DIR } from '../kit.js';
 import { toolCategory } from './progress.js';
 import type {
   AgentDriver,
@@ -41,8 +42,8 @@ const FAILURES: Partial<Record<Scenario, { code: TurnErrorCode; message: string 
 const LONG_STEP_MS = 20_000;
 
 const SESSION_ID = 'scripted-session';
-const STARTER_DIR = join(KIT_DIR, 'skills', 'd2l-scorm-package', 'assets', 'starter');
 const TITLE = 'Workplace Safety Training';
+const TOPIC_TITLE = 'Lab Safety Orientation';
 
 const STARTER_QUESTIONS = [
   "{ q: 'Replace this question.', opts: ['Right answer', 'Wrong answer'], correct: 0 }",
@@ -71,6 +72,20 @@ const COMPLETED_ON_LOAD = `<script>
 </script>
 `;
 
+/** A file a building scenario writes into out/, and the id of the tool call that writes it. */
+interface ScenarioFile {
+  name: string;
+  callId: string;
+  text: string;
+}
+
+const TOPIC_INTRO = 'Read the checklist below before your first lab session.';
+const TOPIC_NOTES = 'Walk the class to the eye-wash station and the fire blanket during the first session.';
+const TOPIC_FOLLOW_UP_NOTES = `${TOPIC_NOTES} Check that every student has signed the safety contract before they handle chemicals.`;
+
+/** Loads the starter's data with a static script tag, which the QA gate rejects for a topic. */
+const STATIC_DATA_SCRIPT = '<script src="data.js"></script>\n</head>';
+
 const REPLIES: Record<BuildingScenario, string> = {
   ok:
     'I built a five-question multiple-choice practice set on workplace safety. ' +
@@ -84,23 +99,62 @@ const REPLIES: Record<BuildingScenario, string> = {
     'The revised version now has seven questions and passed the check.',
 };
 
-let filesByScenario: Promise<Record<BuildingScenario, { html: string; manifest: string }>> | undefined;
+const TOPIC_REPLIES: Record<BuildingScenario, string> = {
+  ok:
+    'I built a lab safety orientation page. Students read the safety checklist and can mark it as read, ' +
+    'and instructors also see notes for running the first session.',
+  'qa-fail':
+    'I built the page, but the check found a problem: it loads its data with a plain script tag, ' +
+    'which some courses ignore, so students could see an empty page.',
+  'follow-up':
+    'I added a reminder about the safety contract to the instructor notes. The revised version passed the check.',
+};
 
-/** The SCORM files each building scenario writes, made from the kit's starter on first use. */
-function scenarioFiles(): Promise<Record<BuildingScenario, { html: string; manifest: string }>> {
-  filesByScenario ??= makeScenarioFiles();
-  return filesByScenario;
+const filesByAvenue: Partial<Record<BuildableAvenue, Promise<Record<BuildingScenario, ScenarioFile[]>>>> = {};
+
+/** The files each building scenario writes for `avenue`, made from the kit's starter on first use. */
+function scenarioFiles(avenue: BuildableAvenue): Promise<Record<BuildingScenario, ScenarioFile[]>> {
+  filesByAvenue[avenue] ??= avenue === 'topic' ? makeTopicFiles() : makeScormFiles();
+  return filesByAvenue[avenue];
 }
 
-async function makeScenarioFiles(): Promise<Record<BuildingScenario, { html: string; manifest: string }>> {
-  const read = async (name: string) => (await readFile(join(STARTER_DIR, name), 'utf8')).replace(/\r\n/g, '\n');
-  const [starterHtml, starterManifest] = await Promise.all([read('index.html'), read('imsmanifest.xml')]);
+/** The starter file `name` of the skill that builds `avenue`, with Unix line endings. */
+async function readStarter(avenue: BuildableAvenue, name: string): Promise<string> {
+  const text = await readFile(join(KIT_DIR, 'skills', AVENUE_SKILL[avenue], 'assets', 'starter', name), 'utf8');
+  return text.replace(/\r\n/g, '\n');
+}
+
+async function makeScormFiles(): Promise<Record<BuildingScenario, ScenarioFile[]>> {
+  const [starterHtml, starterManifest] = await Promise.all([readStarter('scorm', 'index.html'), readStarter('scorm', 'imsmanifest.xml')]);
   const manifest = replaceRequired(starterManifest, 'RENAME ME', TITLE);
   const html = replaceRequired(replaceRequired(starterHtml, 'RENAME ME', TITLE), questionsBlock(STARTER_QUESTIONS), questionsBlock(QUESTIONS));
+  const files = (indexHtml: string): ScenarioFile[] => [
+    { name: 'index.html', callId: 'write-index', text: indexHtml },
+    { name: 'imsmanifest.xml', callId: 'write-manifest', text: manifest },
+  ];
   return {
-    ok: { html, manifest },
-    'qa-fail': { html: replaceRequired(html, '</body>', `${COMPLETED_ON_LOAD}</body>`), manifest },
-    'follow-up': { html: replaceRequired(html, questionsBlock(QUESTIONS), questionsBlock(FOLLOW_UP_QUESTIONS)), manifest },
+    ok: files(html),
+    'qa-fail': files(replaceRequired(html, '</body>', `${COMPLETED_ON_LOAD}</body>`)),
+    'follow-up': files(replaceRequired(html, questionsBlock(QUESTIONS), questionsBlock(FOLLOW_UP_QUESTIONS))),
+  };
+}
+
+async function makeTopicFiles(): Promise<Record<BuildingScenario, ScenarioFile[]>> {
+  const starterHtml = await readStarter('topic', 'index.html');
+  const html = replaceRequired(
+    replaceRequired(
+      replaceRequired(starterHtml, 'RENAME ME', TOPIC_TITLE),
+      'Replace this with your activity. The wiring below is the part worth keeping.',
+      TOPIC_INTRO,
+    ),
+    'Notes, exemplars or marking guidance go here.',
+    TOPIC_NOTES,
+  );
+  const files = (indexHtml: string): ScenarioFile[] => [{ name: 'index.html', callId: 'write-index', text: indexHtml }];
+  return {
+    ok: files(html),
+    'qa-fail': files(replaceRequired(html, '</head>', STATIC_DATA_SCRIPT)),
+    'follow-up': files(replaceRequired(html, TOPIC_NOTES, TOPIC_FOLLOW_UP_NOTES)),
   };
 }
 
@@ -117,7 +171,7 @@ function questionsBlock(questions: string[]): string {
  *   instead of silently writing the wrong files.
  */
 function replaceRequired(text: string, from: string, to: string): string {
-  if (!text.includes(from)) throw new Error(`The SCORM starter no longer contains: ${from.slice(0, 60)}`);
+  if (!text.includes(from)) throw new Error(`The kit's starter no longer contains: ${from.slice(0, 60)}`);
   return text.split(from).join(to);
 }
 
@@ -145,8 +199,15 @@ function splitIntoChunks(text: string, maxLen: number): string[] {
   return chunks;
 }
 
+/** How the scripted agent describes building from each avenue's starter. */
+const BUILDING_STATUS: Record<BuildableAvenue, string> = {
+  scorm: 'Building from the SCORM starter',
+  topic: 'Building from the content-topic starter',
+};
+
 async function* runScenario(
   scenario: Scenario,
+  avenue: BuildableAvenue,
   outDir: string,
   signal: AbortSignal,
   resolveResult: (result: TurnResult) => void,
@@ -166,30 +227,27 @@ async function* runScenario(
     await delay(400, signal);
 
     if (scenario === 'cancelled') {
-      yield { kind: 'status', text: 'Building from the SCORM starter', category: 'building' };
+      yield { kind: 'status', text: BUILDING_STATUS[avenue], category: 'building' };
       await delay(200, signal);
       resolveResult({ status: 'cancelled', sessionId, text: '', usage: { inputTokens: 800, outputTokens: 100, costUsd: 0.005, steps: 1 } });
       return;
     }
 
-    yield { kind: 'status', text: 'Building from the SCORM starter', category: 'building' };
+    yield { kind: 'status', text: BUILDING_STATUS[avenue], category: 'building' };
     await delay(scenario === 'long-step' ? LONG_STEP_MS : 800, signal);
 
     const building: BuildingScenario = scenario === 'qa-fail' || scenario === 'follow-up' ? scenario : 'ok';
-    const { html, manifest } = (await scenarioFiles())[building];
+    const files = (await scenarioFiles(avenue))[building];
     await mkdir(outDir, { recursive: true });
 
-    yield { kind: 'tool_start', callId: 'write-index', name: 'Write', summary: 'Writing index.html', category: toolCategory('Write', {}) };
-    await writeFile(join(outDir, 'index.html'), html, 'utf8');
-    await delay(200, signal);
-    yield { kind: 'tool_end', callId: 'write-index', ok: true };
+    for (const file of files) {
+      yield { kind: 'tool_start', callId: file.callId, name: 'Write', summary: `Writing ${file.name}`, category: toolCategory('Write', {}) };
+      await writeFile(join(outDir, file.name), file.text, 'utf8');
+      await delay(200, signal);
+      yield { kind: 'tool_end', callId: file.callId, ok: true };
+    }
 
-    yield { kind: 'tool_start', callId: 'write-manifest', name: 'Write', summary: 'Writing imsmanifest.xml', category: toolCategory('Write', {}) };
-    await writeFile(join(outDir, 'imsmanifest.xml'), manifest, 'utf8');
-    await delay(200, signal);
-    yield { kind: 'tool_end', callId: 'write-manifest', ok: true };
-
-    const reply = REPLIES[building];
+    const reply = (avenue === 'topic' ? TOPIC_REPLIES : REPLIES)[building];
     for (const chunk of splitIntoChunks(reply, 60)) {
       yield { kind: 'text_delta', text: chunk };
       await delay(100, signal);
@@ -205,7 +263,7 @@ async function* runScenario(
   }
 }
 
-function createScriptedSession(sessionId: string, workspaceDir: string): AgentSession {
+function createScriptedSession(sessionId: string, workspaceDir: string, avenue: BuildableAvenue): AgentSession {
   return {
     get sessionId() {
       return sessionId;
@@ -216,7 +274,7 @@ function createScriptedSession(sessionId: string, workspaceDir: string): AgentSe
       const result = new Promise<TurnResult>((resolve) => {
         resolveResult = resolve;
       });
-      const events = runScenario(scenarioFor(input.text), join(workspaceDir, 'out'), signal, resolveResult, sessionId);
+      const events = runScenario(scenarioFor(input.text), avenue, join(workspaceDir, 'out'), signal, resolveResult, sessionId);
       return { events, result };
     },
 
@@ -225,9 +283,11 @@ function createScriptedSession(sessionId: string, workspaceDir: string): AgentSe
 }
 
 /**
- * An agent for development and tests that replays fixed SCORM turns with no
- * AI calls. The marker in the instructor's message picks the scenario; the
- * same scenario always gives the same events and files.
+ * An agent for development and tests that replays fixed turns with no AI
+ * calls. It builds a content topic when the session offers the content-topic
+ * skill, and a SCORM package otherwise. The marker in the instructor's
+ * message picks the scenario; the same scenario always gives the same events
+ * and files.
  */
 export function createScriptedAgentDriver(): AgentDriver {
   return {
@@ -238,7 +298,8 @@ export function createScriptedAgentDriver(): AgentDriver {
     },
 
     async open(req: SessionRequest): Promise<AgentSession> {
-      return createScriptedSession(req.sessionId ?? SESSION_ID, req.workspaceDir);
+      const avenue = req.skills.includes(AVENUE_SKILL.topic) ? 'topic' : 'scorm';
+      return createScriptedSession(req.sessionId ?? SESSION_ID, req.workspaceDir, avenue);
     },
   };
 }
