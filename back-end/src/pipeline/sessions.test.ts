@@ -195,6 +195,26 @@ describe('session service', () => {
     expect(sessions[1]?.close).not.toHaveBeenCalled();
   });
 
+  it('closes every open session on closeAll, saving each session id, even when one fails to close', async () => {
+    addProject('p2');
+    await service.acquire('p1');
+    await service.acquire('p2');
+    service.release('p2');
+    sessions[0]!.sessionId = 'agent-session-1';
+    sessions[1]!.sessionId = 'agent-session-2';
+    sessions[0]!.close.mockRejectedValueOnce(new Error('close failed'));
+
+    await service.closeAll();
+
+    expect(sessions.map((session) => session.close.mock.calls.length)).toEqual([1, 1]);
+    expect(projectRows.get('p1')?.sessionId).toBe('agent-session-1');
+    expect(projectRows.get('p2')?.sessionId).toBe('agent-session-2');
+    await vi.advanceTimersByTimeAsync(SESSION_IDLE_MS);
+    expect(sessions[1]!.close).toHaveBeenCalledTimes(1);
+    await service.acquire('p1');
+    expect(opened).toHaveLength(3);
+  });
+
   it('recovers from an idle close that fails and reopens on the next acquire', async () => {
     await service.acquire('p1');
     sessions[0]!.close.mockRejectedValueOnce(new Error('close failed'));

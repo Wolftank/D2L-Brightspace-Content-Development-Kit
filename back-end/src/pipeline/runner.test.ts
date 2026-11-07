@@ -81,6 +81,13 @@ function setup(options: { session?: AgentSession; hashes?: string[] } = {}) {
         finished.push({ id, input });
         return { ...turns.get(id)!, ...input };
       }),
+      cancelQueued: vi.fn((id: string): Turn | undefined => {
+        const turn = turns.get(id);
+        if (!turn || turn.status !== 'queued') return undefined;
+        const cancelled = { ...turn, status: 'cancelled' as const, finishedAt: 3 };
+        turns.set(id, cancelled);
+        return cancelled;
+      }),
       failActive: vi.fn((): Turn[] => []),
     },
     messages: {
@@ -364,6 +371,27 @@ describe('runner', () => {
     expect(finished[0]!.input.status).toBe('cancelled');
     expect(kinds()).toEqual(['turn.started', 'turn.cancelled']);
     expect(deps.sessions.close).toHaveBeenCalledOnce();
+  });
+
+  it('cancels a turn whose session is still opening, so its agent starts already stopped', async () => {
+    const { session, signals } = scriptedSession([], { status: 'cancelled', sessionId: null, text: '' });
+    const { deps, runner, finished } = setup({ session });
+    let openSession!: (value: AgentSession) => void;
+    const opening = new Promise<void>((acquiring) => {
+      deps.sessions.acquire.mockImplementation(() => {
+        acquiring();
+        return new Promise((resolve) => (openSession = resolve));
+      });
+    });
+
+    const ended = runner.executeTurn('turn-1');
+    await opening;
+    runner.cancel('turn-1');
+    openSession(session);
+    await ended;
+
+    expect(signals[0]!.aborted).toBe(true);
+    expect(finished[0]!.input.status).toBe('cancelled');
   });
 
   it('fails with workspace_missing before acquiring a session when the workspace is gone', async () => {

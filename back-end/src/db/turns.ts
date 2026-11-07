@@ -31,6 +31,8 @@ export type FinishTurnInput =
 export interface TurnsRepo {
   /** The project's `queued` or `running` turn, if it has one. */
   findActive(projectId: string): Turn | undefined;
+  /** The turn with `id`, if it exists. */
+  get(id: string): Turn | undefined;
   /**
    * Stores the instructor's message and a `queued` turn, and records the
    * project's activity, in one transaction. When the project already has a
@@ -39,6 +41,8 @@ export interface TurnsRepo {
   queue(input: QueueTurnInput): QueueTurnResult;
   /** Marks a `queued` turn `running` with its start time. Undefined when the turn is missing or not `queued`. */
   start(id: string): RunningTurn | undefined;
+  /** Marks a `queued` turn `cancelled`. Undefined when the turn is missing or not `queued`. */
+  cancelQueued(id: string): Turn | undefined;
   /** Stores a turn's final status, finish time, error, usage, and reply, returning the updated row. */
   finish(id: string, input: FinishTurnInput): Turn;
   /** Fails every `queued` or `running` turn with `error`, returning the failed turns. */
@@ -57,6 +61,9 @@ export function createTurnsRepo(db: Db): TurnsRepo {
   return {
     findActive(projectId) {
       return findActive(db, projectId);
+    },
+    get(id) {
+      return db.select().from(turns).where(eq(turns.id, id)).get();
     },
     queue({ turnId, messageId, projectId, content }) {
       return db.transaction(
@@ -78,6 +85,14 @@ export function createTurnsRepo(db: Db): TurnsRepo {
         .where(and(eq(turns.id, id), eq(turns.status, 'queued')))
         .returning()
         .get() as RunningTurn | undefined;
+    },
+    cancelQueued(id) {
+      return db
+        .update(turns)
+        .set({ status: 'cancelled', finishedAt: Date.now() })
+        .where(and(eq(turns.id, id), eq(turns.status, 'queued')))
+        .returning()
+        .get();
     },
     finish(id, input) {
       const { status, usage, replyId } = input;

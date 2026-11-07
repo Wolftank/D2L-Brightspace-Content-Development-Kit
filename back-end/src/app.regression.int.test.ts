@@ -94,7 +94,7 @@ describe('R3 regression: app, identity, error envelope', () => {
     deps = {
       users: createUsersRepo(db),
       projects: createProjectService({ projects: projectsRepo, workspaces, builds: buildsRepo, turns: turnsRepo }),
-      turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, runner: { executeTurn: async () => {} } }),
+      turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, runner: { executeTurn: async () => {}, cancel: () => {} } }),
       builds: createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces, events }),
       events,
       messages: createMessageService({ projects: projectsRepo, messages: createMessagesRepo(db) }),

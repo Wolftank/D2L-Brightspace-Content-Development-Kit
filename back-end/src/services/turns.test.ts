@@ -13,6 +13,7 @@ function setup(queueResult?: (input: QueueTurnInput) => QueueTurnResult) {
       get: vi.fn((ownerId: string, id: string) => (ownerId === 'owner-1' && id === 'project-1' ? ({ id } as Project) : undefined)),
     },
     turns: {
+      get: vi.fn((): Turn | undefined => undefined),
       queue: vi.fn(
         queueResult ??
           ((input: QueueTurnInput): QueueTurnResult => ({
@@ -21,7 +22,7 @@ function setup(queueResult?: (input: QueueTurnInput) => QueueTurnResult) {
           })),
       ),
     },
-    runner: { executeTurn: vi.fn(async () => {}) },
+    runner: { executeTurn: vi.fn(async () => {}), cancel: vi.fn() },
   } satisfies TurnServiceDeps;
   return { deps, service: createTurnService(deps) };
 }

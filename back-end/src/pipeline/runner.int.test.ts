@@ -59,6 +59,48 @@ function writingDriver(): Pick<AgentDriver, 'open'> {
   };
 }
 
+/**
+ * A driver whose agent writes a request for a draft into out/draft.txt, calls
+ * `working`, and works until cancelled; any other request it writes into
+ * out/notes.txt and completes. `openedWith` collects each session's opening id.
+ */
+function draftingDriver(openedWith: Array<string | null>, working: () => void): Pick<AgentDriver, 'open'> {
+  return {
+    async open(req) {
+      openedWith.push(req.sessionId);
+      let sessionId = req.sessionId;
+      return {
+        get sessionId() {
+          return sessionId;
+        },
+        send(input, _limits, signal) {
+          let resolveResult!: (result: TurnResult) => void;
+          const result = new Promise<TurnResult>((resolve) => {
+            resolveResult = resolve;
+          });
+          const events = (async function* (): AsyncGenerator<AgentEvent> {
+            sessionId ??= 'agent-session-1';
+            const file = input.text.includes('draft') ? 'draft.txt' : 'notes.txt';
+            yield { kind: 'tool_start', callId: 'call-1', name: 'Write', summary: `Writing ${file}`, category: 'writing' as const };
+            await fs.writeFile(join(req.workspaceDir, 'out', file), input.text);
+            yield { kind: 'tool_end', callId: 'call-1', ok: true };
+            if (file === 'draft.txt') {
+              working();
+              await new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }));
+              resolveResult({ status: 'cancelled', sessionId, text: '' });
+              return;
+            }
+            yield { kind: 'text_delta', text: 'Done.' };
+            resolveResult({ status: 'completed', sessionId, text: 'Done.' });
+          })();
+          return { events, result };
+        },
+        async close() {},
+      };
+    },
+  };
+}
+
 const STEP_COST_USD = 1;
 
 /**
@@ -274,6 +316,70 @@ describe('runner, end to end', () => {
     await runner.executeTurn('smaller');
 
     expect(turnRow('smaller')).toMatchObject({ status: 'completed', usage: { steps: 2 } });
+  });
+
+  describe('cancelling', () => {
+    let openedWith: Array<string | null>;
+    let working: Promise<void>;
+
+    beforeEach(() => {
+      openedWith = [];
+      let markWorking!: () => void;
+      working = new Promise((resolve) => {
+        markWorking = resolve;
+      });
+      useAgent(draftingDriver(openedWith, markWorking), { maxSteps: 60, maxBudgetUsd: 10 });
+    });
+
+    it('stops a running turn and keeps its output for the next completed turn to build, in the same agent session', async () => {
+      queueTurn('stopped', 'queued', 'Write a draft');
+
+      const ended = runner.executeTurn('stopped');
+      await working;
+      runner.cancel('stopped');
+      await ended;
+
+      expect(turnRow('stopped')).toMatchObject({ status: 'cancelled', error: null, replyId: null });
+      expect(turnRow('stopped').finishedAt).toBeTypeOf('number');
+      expect(events.after(projectId, 0).map((event) => event.kind)).toEqual(['turn.started', 'tool.started', 'tool.finished', 'turn.cancelled']);
+      expect(createBuildsRepo(db).listByProject(projectId)).toEqual([]);
+      expect(projects.getById(projectId)?.sessionId).toBe('agent-session-1');
+      expect(await fs.readFile(join(workspaces.pathFor(projectId), 'out', 'draft.txt'), 'utf8')).toBe('Write a draft');
+
+      queueTurn('follow-up', 'queued', 'Now add notes');
+      await runner.executeTurn('follow-up');
+
+      expect(turnRow('follow-up').status).toBe('completed');
+      expect(openedWith).toEqual([null, 'agent-session-1']);
+      const builds = createBuildsRepo(db).listByProject(projectId);
+      expect(builds).toHaveLength(1);
+      expect(builds[0]!.outputHash).toBe(await workspaces.hashOutput(projectId));
+    });
+
+    it('ends a queued turn cancelled, so the runner never starts it', async () => {
+      queueTurn('queued', 'queued', 'Write a draft');
+
+      runner.cancel('queued');
+      await runner.executeTurn('queued');
+
+      expect(turnRow('queued')).toMatchObject({ status: 'cancelled', startedAt: null });
+      expect(events.after(projectId, 0).map((event) => event.kind)).toEqual(['turn.cancelled']);
+      expect(openedWith).toEqual([]);
+    });
+
+    it('cancels the running turn when the back end shuts down, so the next start leaves it cancelled, not interrupted', async () => {
+      queueTurn('at-shutdown', 'queued', 'Write a draft');
+
+      void runner.executeTurn('at-shutdown');
+      await working;
+      await runner.cancelAll();
+      await sessions.closeAll();
+      runner.failInterrupted();
+
+      expect(turnRow('at-shutdown')).toMatchObject({ status: 'cancelled', error: null });
+      expect(events.after(projectId, 0).map((event) => event.kind).at(-1)).toBe('turn.cancelled');
+      expect(projects.getById(projectId)?.sessionId).toBe('agent-session-1');
+    });
   });
 
   describe('its log', () => {

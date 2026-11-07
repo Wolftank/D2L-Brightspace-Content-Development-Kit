@@ -5,8 +5,8 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type BackEnd, BackEndStartError, startBackEnd } from './back-end.js';
 
-/** A stand-in back end: answers /api/health on PORT when the launch token's cookie comes with it, and starts a long-running child, like the agent. */
-const FAKE_SERVER = `
+/** A stand-in back end that ignores the shutdown message: answers /api/health on PORT when the launch token's cookie comes with it, and starts a long-running child, like the agent. */
+const STUBBORN_SERVER = `
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -17,6 +17,16 @@ writeFileSync(new URL('pids.json', import.meta.url), JSON.stringify({ backEnd: p
 } }));
 const healthy = (req) => req.url === '/api/health' && req.headers.cookie === 'cdk_launch=' + process.env.LAUNCH_TOKEN;
 createServer((req, res) => res.writeHead(healthy(req) ? 200 : 404).end()).listen(Number(process.env.PORT), '127.0.0.1');
+`;
+
+/** The stand-in back end, which also stops its agent and exits on the shutdown message. */
+const FAKE_SERVER = `${STUBBORN_SERVER}
+process.on('message', (message) => {
+  if (message !== 'shutdown') return;
+  agent.kill();
+  writeFileSync(new URL('stopped.txt', import.meta.url), 'stopped');
+  process.exit(0);
+});
 `;
 
 function isRunning(pid: number): boolean {
@@ -81,15 +91,27 @@ describe('startBackEnd', () => {
     await expect(backEnd.logsDir).resolves.toBe('C:/CDK/logs');
   });
 
-  it("stops the back end's whole process tree, including the processes it started", async () => {
+  it('stops the back end with the shutdown message, waiting for it to stop its agent and exit on its own', async () => {
     backEnd = await startBackEnd(process.execPath, await script(FAKE_SERVER), dir, '0.2.0');
     const pids = JSON.parse(await readFile(join(dir, 'pids.json'), 'utf8'));
-    expect(isRunning(pids.agent)).toBe(true);
 
     await backEnd.stop();
 
+    expect(await readFile(join(dir, 'stopped.txt'), 'utf8')).toBe('stopped');
     expect(await waitUntilStopped(pids.backEnd)).toBe(true);
     expect(await waitUntilStopped(pids.agent)).toBe(true);
+  });
+
+  it("ends the whole process tree of a back end that does not exit in time, including the processes it started", async () => {
+    backEnd = await startBackEnd(process.execPath, await script(STUBBORN_SERVER), dir, '0.2.0');
+    const pids = JSON.parse(await readFile(join(dir, 'pids.json'), 'utf8'));
+    expect(isRunning(pids.agent)).toBe(true);
+
+    await backEnd.stop(500);
+
+    expect(await waitUntilStopped(pids.backEnd)).toBe(true);
+    expect(await waitUntilStopped(pids.agent)).toBe(true);
+    await expect(readFile(join(dir, 'stopped.txt'), 'utf8')).rejects.toThrow();
   });
 
   it('settles exited when the back end stops on its own', async () => {

@@ -16,7 +16,7 @@ export const migrationsFolder = join(dirname(fileURLToPath(import.meta.url)), '.
  * Opens the SQLite database at `path` (or `:memory:`), running any pending
  * migrations before returning.
  */
-export function openDb(path: string): Db {
+export function openDb(path: string): Db & { $client: Database.Database } {
   if (path !== ':memory:') {
     mkdirSync(dirname(path), { recursive: true });
   }
