@@ -58,10 +58,10 @@ export class BuildFailed extends Error {
   }
 }
 
-/** A build's `imsmanifest.xml`, or a file it declares, is missing from the build. */
+/** A file the build needs is missing from it: a SCORM build's `imsmanifest.xml` or a file it declares, or a file a topic's page references. */
 export class BuildIncomplete extends Error {
   constructor(public readonly missing: string[]) {
-    super(`The build is missing files its manifest needs: ${missing.join(', ')}`);
+    super(`The build is missing files it needs: ${missing.join(', ')}`);
     this.name = 'BuildIncomplete';
   }
 }

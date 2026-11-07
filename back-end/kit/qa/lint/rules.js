@@ -1000,7 +1000,8 @@ const RULES = [
         for (const m of matches(f.text, re)) {
           const ref = m.groups[1].replace(/^\.\//, '').toLowerCase();
           if (!have.has(ref)) {
-            out.push(finding(this, f.rel, m.line, `References "${m.groups[1]}" which is not in the build.`));
+            out.push(finding(this, f.rel, m.line, `References "${m.groups[1]}" which is not in the build.`,
+              { reference: m.groups[1] }));
           }
         }
       }

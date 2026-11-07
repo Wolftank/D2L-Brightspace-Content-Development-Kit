@@ -22,7 +22,7 @@ uploaded to the course and attached as a topic, which D2L renders in a nested
 iframe.
 
 Measured against **our own tenant**. Evidence lives in `probes/RESULTS.md` and
-`harness/tenant-profile.json`.
+`qa/tenant-profile.json`.
 
 ---
 
@@ -151,7 +151,7 @@ content-topic build in a course shares one flat Manage Files folder, not a
 per-build directory, so a plain `data.js` or `styles.js` can — and has —
 collided with an unrelated build's file of the same name. Prefix it with
 something that identifies this build, e.g. `campus-map-data.js`, not `data.js`.
-`node harness/lint/lint.js` warns on this (`topic/generic-sibling-filename`),
+`node qa/lint/lint.js` warns on this (`topic/generic-sibling-filename`),
 but the warning only exists because a collision already happened once.
 
 ---
@@ -223,7 +223,7 @@ render fine and only fail on the interaction that finds them.
 ## Before you deploy: run the gate
 
 ```bash
-node harness/lint/lint.js <your-build-folder> --avenue topic
+node qa/lint/lint.js <your-build-folder> --avenue topic
 ```
 
 Zero errors to deploy. The rules encode exactly the failures above.

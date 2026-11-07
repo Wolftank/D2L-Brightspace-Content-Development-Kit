@@ -1,11 +1,11 @@
 {
   "$comment": [
-    "What our D2L tenant allows and restricts. The local harness enforces this,",
+    "What our D2L tenant allows and restricts. The local QA gate enforces this,",
     "so a package that passes locally is a package that will work in D2L.",
     "",
     "Every entry carries a 'verified' flag. Anything false is a CONSERVATIVE GUESS,",
     "not a measurement. Run probes/ and update this file, then flip the flag.",
-    "The harness warns loudly when it enforces an unverified constraint, because",
+    "The QA gate warns loudly when it enforces an unverified constraint, because",
     "an unverified constraint is exactly how we got the SCORM/widget mixup."
   ],
 

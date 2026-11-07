@@ -43,6 +43,10 @@ const btRules = rulesIn(bt);
 ].forEach(id => check(id, btRules.has(id)));
 check('bad-topic fails the gate', errs(bt) > 0);
 
+console.log('\n== a missing asset names the reference ==');
+check('bad-topic\'s missing image is named as its reference',
+      bt.findings.some(f => f.rule === 'shared/missing-assets' && f.reference === 'img/gone.png'));
+
 console.log('\n== bad-widget trips every widget rule ==');
 const bw = lint(fx('bad-widget'), 'widget', profile);
 const bwRules = rulesIn(bw);

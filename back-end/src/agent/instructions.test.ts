@@ -3,11 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { renderProjectInstructions, type ProjectInstructionsInput } from './instructions.js';
 
 const project = { id: 'project-26', title: 'Cell division practice' };
+const avenue = 'scorm';
 const workspaceDir = resolve('test workspace');
 
 describe('renderProjectInstructions', () => {
   it('identifies project facts and the complete single-request workflow deterministically', () => {
-    const input: ProjectInstructionsInput = { project, workspaceDir };
+    const input: ProjectInstructionsInput = { project, avenue, workspaceDir };
     const markdown = renderProjectInstructions(input);
     expect(renderProjectInstructions(input)).toBe(markdown);
     expect(markdown).toContain(project.id);
@@ -31,22 +32,31 @@ describe('renderProjectInstructions', () => {
   });
 
   it('names the CDK tools and no shell command', () => {
-    const markdown = renderProjectInstructions({ project, workspaceDir });
+    const markdown = renderProjectInstructions({ project, avenue, workspaceDir });
     expect(markdown).toContain('You have no shell');
     for (const tool of ['mcp__cdk__get_project', 'mcp__cdk__check_output', 'mcp__cdk__delete_files']) {
       expect(markdown).toContain(tool);
     }
-    expect(markdown).not.toMatch(/powershell|bash|lint\.js|harness/i);
+    expect(markdown).not.toMatch(/powershell|bash|lint\.js|qa\/lint/i);
+  });
+
+  it('names the content-topic skill and leaves out the SCORM manifest for a content topic', () => {
+    const markdown = renderProjectInstructions({ project, avenue: 'topic', workspaceDir });
+    expect(markdown).toContain('Output format: content topic');
+    expect(markdown).toContain('Build the requested content topic in out/');
+    expect(markdown).toContain('d2l-content-topic');
+    expect(markdown).toContain('d2l-tenant-qa');
+    expect(markdown).not.toMatch(/scorm|manifest/i);
   });
 
   it('keeps multiline titles and Markdown delimiters inside literal project data', () => {
     const title = 'A `title`\n```\n# Another heading';
-    const markdown = renderProjectInstructions({ project: { ...project, title }, workspaceDir });
+    const markdown = renderProjectInstructions({ project: { ...project, title }, avenue, workspaceDir });
     expect(markdown).toContain(`Project title: \`\`\`\` ${title.replaceAll('\n', '\\n')} \`\`\`\``);
     expect(markdown).not.toContain('\n# Another heading');
   });
 
   it.each(['relative/workspace', `${workspaceDir}\nother`, `${workspaceDir}\0other`])('rejects an unusable workspace path', (path) => {
-    expect(() => renderProjectInstructions({ project, workspaceDir: path })).toThrow('absolute, single-line path');
+    expect(() => renderProjectInstructions({ project, avenue, workspaceDir: path })).toThrow('absolute, single-line path');
   });
 });

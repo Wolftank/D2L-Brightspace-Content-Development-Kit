@@ -36,7 +36,7 @@ import { captureLog, type LogRecord } from '../test/log.js';
  */
 
 const STARTER = join(KIT_DIR, 'skills', 'd2l-scorm-package', 'assets', 'starter');
-const BAD_SCORM = join(KIT_DIR, 'harness', 'lint', 'fixtures', 'bad-scorm');
+const BAD_SCORM = join(KIT_DIR, 'qa', 'lint', 'fixtures', 'bad-scorm');
 const WORKSPACE_MISSING_ERROR = {
   code: 'workspace_missing',
   message: "This project's files are missing, so the request couldn't run.",
@@ -206,7 +206,7 @@ describe('R8 regression: project, message and build routes', () => {
       ['a blank title', { title: '   ' }],
       ['a missing title', {}],
       ['a title that is not text', { title: 42 }],
-      ['another avenue', { title: 'Cell division practice', avenue: 'topic' }],
+      ['an avenue CDK cannot build', { title: 'Cell division practice', avenue: 'widget' }],
     ])('rejects %s with 400 invalid_request and creates no project or workspace', async (_, body) => {
       const res = await request(app()).post('/api/projects').send(body);
 
@@ -234,7 +234,7 @@ describe('R8 regression: project, message and build routes', () => {
 
     beforeEach(async () => {
       db.insert(usersTable).values({ id: 'someone-else', displayName: 'Someone Else', email: null, role: 'instructor' }).run();
-      await workspaces.create('not-mine');
+      await workspaces.create('not-mine', 'scorm');
       projectsRepo.create({ id: 'not-mine', ownerId: 'someone-else', title: 'Not yours', avenue: 'scorm' });
       const othersBuild = await builds.create('not-mine');
       expect(othersBuild.status).toBe('ready');

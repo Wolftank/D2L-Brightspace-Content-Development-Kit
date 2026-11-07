@@ -41,7 +41,7 @@ against. **#17 needs a decision from Ben**, not code.
 | 8 | Bidirectional interaction needs both directions tested | **Closed** | None |
 | 9 | `javascript_tool` needs top-level `await` | **Closed** | None |
 | 10 | Zero-sibling builds + content-vs-chrome colors | **Closed** | None |
-| 11 | SCORM emulator can't model preview/review | **Closed** | None — `D2LEmulator.install()` now takes `opts.credit`/`opts.mode`, defaulting from `learner.role`; `harness/emulator-harness.html` added |
+| 11 | SCORM emulator can't model preview/review | **Closed** | None — `D2LEmulator.install()` now takes `opts.credit`/`opts.mode`, defaulting from `learner.role`; `qa/emulator-harness.html` added |
 | 12 | Confirming data point | No fix needed | Explicitly nothing to fold in |
 | 13a | New animation-loop race-condition bug | **Closed** | None |
 | 13b | Correction to #5's DOM-read guidance | **Closed** | None |
@@ -541,7 +541,7 @@ components at file-access time). Worth a one-line note in the script's
 usage comment for anyone whose build folder isn't a repo subfolder.
 
 **Real gap #1 — the emulator has no documented way to run against a real build.**
-`d2l-scorm-package`'s SKILL.md shows `node harness/emulator.test.js` (38
+`d2l-scorm-package`'s SKILL.md shows `node qa/emulator.test.js` (38
 assertions) as "the run-time emulator," but that file only exercises
 hand-authored scenarios against the `D2LEmulator` library directly — there is
 no CLI or runner that takes a build folder and drives its actual `index.html`
@@ -808,10 +808,10 @@ these are optional downloads, not the core faculty workflow.
   the actual behavior that was missing, not just the settable field. 12 new
   `emulator.test.js` assertions cover it.
 - ~~Ship a reusable `emulator-harness.html` template~~ **Done**, added next to
-  `harness/d2l-emulator.js`, and pointed at from `d2l-tenant-qa`'s "Run it" and
+  `qa/d2l-emulator.js`, and pointed at from `d2l-tenant-qa`'s "Run it" and
   `d2l-scorm-package`'s verification section (the finding's text named
   `d2l-scorm-package`'s "Run it" section specifically, but the actual
-  `node harness/emulator.test.js` reference lives in `d2l-tenant-qa`; both
+  `node qa/emulator.test.js` reference lives in `d2l-tenant-qa`; both
   skills now reference the harness from where it's actually relevant).
 - Add a one-line note to `build-scorm.ps1`'s header comment: `-Source`/`-Out`
   must be relative to the script's own folder (`Join-Path` does not resolve

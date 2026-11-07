@@ -1,21 +1,29 @@
 import { execFile } from 'node:child_process';
 import * as fs from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { Readable } from 'node:stream';
 import { ZipArchive } from 'archiver';
 import { z } from 'zod';
-import type { Build as ApiBuild, BuildError, QaReport } from '@cdk/contract';
+import type { Build as ApiBuild, BuildableAvenue, BuildError, QaReport } from '@cdk/contract';
 import type { Logger } from 'pino';
 import type { BuildsRepo, FinishBuildInput } from '../db/builds.js';
 import type { ProjectsRepo } from '../db/projects.js';
 import type { Build, Project } from '../db/schema.js';
-import { BuildFailed, BuildIncomplete, BuildNotFound, BuildNotReady } from '../errors.js';
-import { KIT_DIR } from '../kit.js';
+import { BuildFailed, BuildIncomplete, BuildNotFound, BuildNotReady, NotFound } from '../errors.js';
+import { buildableAvenue, KIT_DIR } from '../kit.js';
 import { log } from '../log.js';
 import type { EventService } from '../pipeline/events.js';
 import type { WorkspaceService } from './workspaces.js';
 
-const AVENUE = 'scorm';
+const kitRequire = createRequire(import.meta.url);
+
+/** The part of a QA gate rule that `download` runs in process. */
+interface MissingAssetsRule {
+  id: string;
+  test(ctx: { files: unknown[] }): Array<{ reference: string }>;
+}
+
 const MANIFEST = 'imsmanifest.xml';
 const QA_REPORT_FILE = 'qa.json';
 const DEFAULT_GATE_TIMEOUT_MS = 60_000;
@@ -77,7 +85,8 @@ export interface BuildDownload {
 export interface BuildService {
   /**
    * Stores the next build version as `checking`, copies the project's output
-   * into it, runs the QA gate on the copy, and returns the finished build.
+   * into it, runs the QA gate for the project's avenue on the copy, and
+   * returns the finished build.
    * Emits `build.created` once the build is stored, and `build.updated` once
    * its final status is stored. A failed copy finishes the build as `failed`.
    */
@@ -90,10 +99,12 @@ export interface BuildService {
   latest(projectId: string): Build | undefined;
 
   /**
-   * A zip of a `ready` build with `imsmanifest.xml` at its root, named after
-   * the project's title and the build version. Throws `BuildNotFound`,
-   * `BuildNotReady`, `BuildFailed`, or `BuildIncomplete` before any byte
-   * is streamed.
+   * A zip of a `ready` build's files, with a SCORM build's `imsmanifest.xml`
+   * at its root, named after the project's title and the build version.
+   * Throws `BuildNotFound`, `BuildNotReady`, `BuildFailed`, or
+   * `BuildIncomplete` before any byte is streamed: for a SCORM build when a
+   * file its manifest declares is missing, and for a topic when a file one of
+   * its pages references is missing.
    */
   download(ownerId: string, buildId: string): Promise<BuildDownload>;
 
@@ -109,7 +120,7 @@ export interface BuildService {
   failInterrupted(): void;
 
   /**
-   * Runs the QA gate on the project's output in place, recording nothing.
+   * Runs the QA gate for the project's avenue on its output in place, recording nothing.
    * Throws `WorkspaceMissing` when the project has no workspace.
    */
   checkOutput(projectId: string): Promise<OutputCheck>;
@@ -129,14 +140,15 @@ interface GateRun {
 type Verdict = Omit<FinishBuildInput, 'outputHash'>;
 
 export function createBuildService(deps: BuildServiceDeps): BuildService {
-  const gateScript = join(deps.kitDir ?? KIT_DIR, 'harness', 'lint', 'lint.js');
+  const kitDir = deps.kitDir ?? KIT_DIR;
+  const gateScript = join(kitDir, 'qa', 'lint', 'lint.js');
   const gateTimeoutMs = deps.gateTimeoutMs ?? DEFAULT_GATE_TIMEOUT_MS;
 
-  function runGate(buildDir: string): Promise<GateRun> {
+  function runGate(buildDir: string, avenue: BuildableAvenue): Promise<GateRun> {
     return new Promise((done) => {
       execFile(
         process.execPath,
-        [gateScript, buildDir, '--avenue', AVENUE, '--json'],
+        [gateScript, buildDir, '--avenue', avenue, '--json'],
         { timeout: gateTimeoutMs, maxBuffer: GATE_MAX_OUTPUT_BYTES, windowsHide: true },
         (err, stdout, stderr) => {
           if (!err) {
@@ -151,9 +163,9 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
     });
   }
 
-  /** Runs the QA gate on `dir` and reads its report. The technical detail of a gate failure goes to `logger`. */
-  async function inspect(dir: string, logger: Logger): Promise<OutputCheck> {
-    const run = await runGate(dir);
+  /** Runs the QA gate for `avenue` on `dir` and reads its report. The technical detail of a gate failure goes to `logger`. */
+  async function inspect(dir: string, avenue: BuildableAvenue, logger: Logger): Promise<OutputCheck> {
+    const run = await runGate(dir, avenue);
     const detail = run.failure ?? firstLine(run.stderr) ?? `exited with code ${run.exitCode}`;
 
     if (run.exitCode !== 0 && run.exitCode !== 1) {
@@ -189,8 +201,8 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
   }
 
   /** Checks a build's copy of the output and stores the QA report beside it. */
-  async function check(buildDir: string, logger: Logger): Promise<Verdict> {
-    const result = await inspect(buildDir, logger);
+  async function check(buildDir: string, avenue: BuildableAvenue, logger: Logger): Promise<Verdict> {
+    const result = await inspect(buildDir, avenue, logger);
     if ('error' in result) return { status: 'failed', qa: null, error: result.error };
 
     await fs.writeFile(join(buildDir, QA_REPORT_FILE), JSON.stringify(result.qa, null, 2));
@@ -200,12 +212,20 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
   }
 
   async function checkOutput(projectId: string): Promise<OutputCheck> {
+    const avenue = buildableAvenue(projectById(projectId));
     const outDir = join(await deps.workspaces.locate(projectId), 'out');
     try {
-      return await inspect(outDir, log.child({ projectId }));
+      return await inspect(outDir, avenue, log.child({ projectId }));
     } catch (err) {
       return { error: loggedError(log.child({ projectId }), 'gate_crashed', `The QA gate could not run: ${(err as Error).message}`) };
     }
+  }
+
+  /** Unscoped lookup for pipeline code; throws `NotFound` when the project doesn't exist. */
+  function projectById(projectId: string): Project {
+    const project = deps.projects.getById(projectId);
+    if (!project) throw new NotFound('Project not found');
+    return project;
   }
 
   /** The build and its project, if the project is `ownerId`'s; otherwise throws `BuildNotFound`. */
@@ -218,7 +238,7 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
     return { build, project };
   }
 
-  async function copyAndCheck(projectId: string, version: number, logger: Logger): Promise<FinishBuildInput> {
+  async function copyAndCheck(projectId: string, version: number, avenue: BuildableAvenue, logger: Logger): Promise<FinishBuildInput> {
     let buildDir: string;
     let outputHash: string;
     try {
@@ -229,22 +249,23 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
       return { ...verdict, outputHash: null };
     }
     try {
-      return { ...(await check(buildDir, logger)), outputHash };
+      return { ...(await check(buildDir, avenue, logger)), outputHash };
     } catch (err) {
       return { ...failure(logger, 'gate_crashed', `The QA gate could not run: ${(err as Error).message}`), outputHash };
     }
   }
 
   async function create(projectId: string, turnId?: string): Promise<ApiBuild> {
+    const avenue = buildableAvenue(projectById(projectId));
     // No await between choosing the version and storing the row, so concurrent
     // calls never pick the same version and a failed copy uses its version up.
     const version = deps.builds.nextVersion(projectId);
-    const build = deps.builds.create({ projectId, version, avenue: AVENUE, turnId });
+    const build = deps.builds.create({ projectId, version, avenue, turnId });
     deps.events.append({ projectId, turnId, kind: 'build.created', payload: { build: toApi(build) } });
     const buildLog = log.child({ projectId, turnId, buildId: build.id });
     buildLog.info({ version }, 'Build created');
 
-    const result = await copyAndCheck(projectId, version, buildLog);
+    const result = await copyAndCheck(projectId, version, avenue, buildLog);
     const finished = toApi(deps.builds.finish(build.id, result));
     buildLog.info(
       { status: finished.status, qaPassed: finished.qa?.passed, findings: finished.qa?.findings.length, errorCode: finished.error?.code },
@@ -252,6 +273,18 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
     );
     deps.events.append({ projectId, turnId, kind: 'build.updated', payload: { build: finished } });
     return finished;
+  }
+
+  /**
+   * Every relative reference in the topic's pages to a file that is not in
+   * `buildDir`, as found by the QA gate's own `shared/missing-assets` rule.
+   */
+  function missingReferences(buildDir: string): string[] {
+    const { collect } = kitRequire(gateScript) as { collect(root: string): unknown[] };
+    const { RULES } = kitRequire(join(kitDir, 'qa', 'lint', 'rules.js')) as { RULES: MissingAssetsRule[] };
+    const rule = RULES.find((candidate) => candidate.id === 'shared/missing-assets');
+    if (!rule) throw new Error('The QA gate has no shared/missing-assets rule');
+    return [...new Set(rule.test({ files: collect(buildDir) }).map((finding) => finding.reference))];
   }
 
   async function download(ownerId: string, buildId: string): Promise<BuildDownload> {
@@ -264,7 +297,7 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
     }
 
     const buildDir = deps.workspaces.buildPathFor(build.projectId, String(build.version));
-    const missing = await missingManifestFiles(buildDir);
+    const missing = build.avenue === 'scorm' ? await missingManifestFiles(buildDir) : missingReferences(buildDir);
     if (missing.length > 0) {
       throw new BuildIncomplete(missing);
     }

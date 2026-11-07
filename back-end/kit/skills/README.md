@@ -68,7 +68,7 @@ with server-enforced visibility. The gap was caught by IT reading along.
 
 Every claim traces to something measured on
 `stcloudstate.learn.minnstate.edu`, recorded in [`../probes/RESULTS.md`](../probes/RESULTS.md)
-and enforced by [`../harness/`](../harness/). Where something is a guess, it is
+and enforced by [`../qa/`](../qa/). Where something is a guess, it is
 marked `verified: false` in the tenant profile and the tooling says so out loud.
 
 That discipline exists because this project began with a confident, wrong
@@ -99,6 +99,6 @@ Worth knowing even without reading a skill in full. All four fail **silently**.
 argues for. Copy one rather than writing boilerplate.
 
 ```bash
-node harness/lint/lint.js skills/d2l-scorm-package/assets/starter --avenue scorm
-node harness/lint/lint.js skills/d2l-content-topic/assets/starter --avenue topic
+node qa/lint/lint.js skills/d2l-scorm-package/assets/starter --avenue scorm
+node qa/lint/lint.js skills/d2l-content-topic/assets/starter --avenue topic
 ```

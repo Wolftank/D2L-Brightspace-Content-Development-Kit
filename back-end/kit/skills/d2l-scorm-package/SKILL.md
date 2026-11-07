@@ -23,7 +23,7 @@ Build a SCORM package that runs as a graded activity in D2L Brightspace.
 Everything here was measured against **our own tenant**
 (`stcloudstate.learn.minnstate.edu`), not taken from documentation. Several
 findings contradict the documentation. Full evidence is in
-`probes/RESULTS.md` and `harness/tenant-profile.json` in the D2L_Code repo.
+`probes/RESULTS.md` and `qa/tenant-profile.json` in the D2L_Code repo.
 
 ---
 
