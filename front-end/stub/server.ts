@@ -64,6 +64,7 @@ const API_ERRORS = {
   invalid_json: { status: 400, message: "The request couldn't be read.", nextStep: 'send_again' },
   not_found: { status: 404, message: "This project doesn't exist.", nextStep: 'new_project' },
   build_not_found: { status: 404, message: "This build doesn't exist.", nextStep: 'send_again' },
+  turn_not_found: { status: 404, message: "This request doesn't exist.", nextStep: 'send_again' },
   turn_active: { status: 409, message: 'A request is already running for this project.', nextStep: 'wait' },
   build_not_ready: { status: 409, message: "This build isn't ready to download.", nextStep: 'try_later' },
   build_failed: { status: 409, message: "This build failed, so it can't be downloaded.", nextStep: 'ask_for_fix' },
@@ -216,7 +217,7 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
   }
 
   if (scenario === 'cancelled') {
-    steps.push([4800, () => { turn.status = 'cancelled'; turn.finishedAt = Date.now(); state.activeTurn = null; append(state, 'turn.cancelled', { turnId: turn.id }); }]);
+    steps.push([4800, () => stopTurn(state, turn)]);
   } else if (scenario === 'turn-fail' || scenario === 'error-action') {
     steps.push([
       4800,
@@ -323,15 +324,15 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
     const pause = scenario === 'meaningful-progress' && delay >= 1200 ? 4000
       : scenario === 'long-step' && delay >= 2000 ? 20_000
       : scenario === 'long-feed' && delay >= 4000 ? 8000 : 0;
-    setTimeout(step, delay + pause);
+    setTimeout(() => { if (turn.status === 'queued' || turn.status === 'running') step(); }, delay + pause);
   }
   if (scenario === 'long-feed') {
     for (let index = 0; index < 60; index++) {
-      setTimeout(() => append(state, 'turn.status', {
+      setTimeout(() => { if (turn.status === 'running') append(state, 'turn.status', {
         turnId: turn.id,
         text: `Checking activity ${index + 1}: ${'long-content-file-name-'.repeat(8)}index.html`,
         category: 'checking' as const,
-      }), 1400 + index * 150);
+      }); }, 1400 + index * 150);
     }
   }
 }
@@ -473,6 +474,15 @@ function streamEvents(req: IncomingMessage, res: ServerResponse, state: ProjectS
   req.on('close', detach);
 }
 
+function stopTurn(state: ProjectState, turn: Turn): void {
+  if (turn.status !== 'queued' && turn.status !== 'running') return;
+  if (state.builds.some(build => build.turnId === turn.id)) return;
+  turn.status = 'cancelled';
+  turn.finishedAt = Date.now();
+  state.activeTurn = null;
+  append(state, 'turn.cancelled', { turnId: turn.id });
+}
+
 function download(res: ServerResponse, buildId: string): void {
   const entry = builds.get(buildId);
   if (!entry) throw new HttpError('build_not_found');
@@ -526,6 +536,17 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
       const after = Number(req.headers['last-event-id'] ?? url.searchParams.get('after') ?? 0);
       return streamEvents(req, res, getProject(id), Number.isFinite(after) ? after : 0);
     }
+  }
+
+  if (resource === 'turns' && id && sub === 'cancel' && segments.length === 4 && method === 'POST') {
+    for (const state of projects.values()) {
+      const turn = state.turns.get(id);
+      if (!turn) continue;
+      stopTurn(state, turn);
+      res.writeHead(202).end();
+      return;
+    }
+    throw new HttpError('turn_not_found');
   }
 
   if (resource === 'builds' && id && method === 'GET') {

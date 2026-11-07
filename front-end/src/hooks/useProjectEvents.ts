@@ -86,7 +86,7 @@ export function projectEventReducer(
       for (const message of action.messages) {
         if (message.turn && !outcomes[message.turn.id]) outcomes[message.turn.id] = {
           status: message.turn.status,
-          ...(message.turn.status === 'cancelled' ? { message: 'This request was cancelled.', failure: { message: 'This request was cancelled.', nextStep: 'send_again' as const } } : message.turn.error ? { message: readFailure(message.turn.error).message, failure: readFailure(message.turn.error) } : {}),
+          ...(message.turn.error ? { message: readFailure(message.turn.error).message, failure: readFailure(message.turn.error) } : {}),
         };
       }
       return { ...state, messages: mergeMessages(state.messages, action.messages), streamingMessages: state.streamingMessages.filter(message => !action.messages.some(saved => saved.id === message.id)), outcomes };
@@ -206,7 +206,8 @@ export function projectEventReducer(
     case 'turn.cancelled':
   return {
     ...state,
-    outcomes: { ...state.outcomes, [event.payload.turnId]: { status: 'cancelled', message: 'This request was cancelled.', failure: { message: 'This request was cancelled.', nextStep: 'send_again' as const } } },
+    outcomes: { ...state.outcomes, [event.payload.turnId]: { status: 'cancelled' } },
+    streamingMessages: state.streamingMessages.filter(message => message.turnId !== event.payload.turnId),
     turn: {
       id: event.payload.turnId,
       status: 'cancelled',
@@ -215,7 +216,7 @@ export function projectEventReducer(
     },
     statusLines: [
       ...state.statusLines,
-      { seq: event.seq, text: 'Build cancelled' },
+      { seq: event.seq, text: 'Request stopped' },
     ],
   };
 
