@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ApiError, createProject, sendMessage } from './api/client';
+import { ApiError, cancelTurn, createProject, sendMessage } from './api/client';
 import type { Build, Project } from '@cdk/contract';
 import { useProjectEvents } from './hooks/useProjectEvents';
 import type { ConnectionStatus } from './WorkingIndicator';
@@ -29,7 +29,7 @@ function BuildPanel({ build, turn, statusLines, connection, outcome, disabled, o
     <h2 className="panel-heading" id="build-title">Build</h2>
     {turn.status === 'running' && turn.startedAt !== null && <WorkingIndicator startedAt={turn.startedAt} step={turn.currentStep} connection={connection} />}
     {statusLines.length > 0 && <StatusFeed lines={statusLines} turnId={turn.id} />}
-    {turn.status !== 'running' && turn.status !== 'idle' && <p className="turn-summary">{turn.status === 'completed' ? 'Request complete' : outcome}</p>}
+    {turn.status !== 'running' && turn.status !== 'idle' && <p className="turn-summary">{turn.status === 'completed' ? 'Request complete' : turn.status === 'cancelled' ? 'Request stopped.' : outcome}</p>}
     {!build ? <p className="empty">No build yet.</p> :
       <article className={`build-result build-${build.status}`} aria-labelledby="build-result-title">
         <p className="result-label">Version {build.version}</p>
@@ -42,17 +42,24 @@ function BuildPanel({ build, turn, statusLines, connection, outcome, disabled, o
   </section>;
 }
 
-export function ProjectWorkspace({ initialProject = null }: { initialProject?: Project | null }) {
+export function ProjectWorkspace({ initialProject = null, initialTurnId }: { initialProject?: Project | null; initialTurnId?: string }) {
   const [project, setProject] = useState<Project | null>(initialProject);
   const draftKey = 'request-draft-' + (project?.id ?? 'new');
   const [title, setTitle] = useState('');
   const [requestText, setRequestText] = useState(() => sessionStorage.getItem(draftKey) ?? '');
   const [error, setError] = useState<ApiError | null>(null);
   const [sending, setSending] = useState(false);
-  const [pendingTurn, setPendingTurn] = useState<string | null>(null);
+  const [pendingTurn, setPendingTurn] = useState<string | null>(initialTurnId ?? null);
+  const [stopAttempt, setStopAttempt] = useState<{ turnId: string; error?: string } | null>(null);
   const messageBox = useRef<HTMLTextAreaElement>(null);
   const { statusLines, streamingMessages, messages, outcomes, builds, turn, connection, historyError, reconnect, addMessage } = useProjectEvents(project?.id ?? null);
-  const isBuilding = sending || turn.status === 'running' || (pendingTurn !== null && turn.id !== pendingTurn);
+  const pendingStatus = pendingTurn ? outcomes[pendingTurn]?.status : undefined;
+  const awaitingTurn = !pendingStatus || pendingStatus === 'queued' || pendingStatus === 'running';
+  const activeTurnId = pendingTurn !== null && turn.id !== pendingTurn && awaitingTurn
+    ? pendingTurn : turn.status === 'running' ? turn.id : null;
+  const isBuilding = sending || activeTurnId !== null;
+  const activeStop = stopAttempt?.turnId === activeTurnId ? stopAttempt : null;
+  const stopping = activeStop !== null && !activeStop.error;
   const latestBuild = [...builds].sort((a, b) => b.version - a.version)[0] ?? null;
   const readyBuild = [...builds].filter(build => build.status === 'ready').sort((a, b) => b.version - a.version)[0] ?? null;
   const latestAgent = messages.filter(message => message.role === 'agent').at(-1);
@@ -66,6 +73,19 @@ export function ProjectWorkspace({ initialProject = null }: { initialProject?: P
     setProject(null); setTitle(''); setPendingTurn(null); setError(null);
     window.history.replaceState(null, '', '/?new=1');
     messageBox.current?.focus();
+  }
+
+  async function stopRequest() {
+    if (!activeTurnId || stopping) return;
+    const turnId = activeTurnId;
+    setStopAttempt({ turnId });
+    messageBox.current?.focus();
+    try {
+      await cancelTurn(turnId);
+    } catch (caught) {
+      const message = caught instanceof ApiError ? caught.message : 'Try again.';
+      setStopAttempt(current => current?.turnId === turnId ? { turnId, error: message } : current);
+    }
   }
 
   function askForFix() {
@@ -115,7 +135,9 @@ export function ProjectWorkspace({ initialProject = null }: { initialProject?: P
           {messages.map(message => <article className={`chat-message message-${message.role}`} key={message.id}>
             <p className="speaker">{message.role === 'instructor' ? 'You' : 'CDK'}</p>
             <p>{message.content.filter(block => block.type === 'text').map(block => block.text).join('\n')}</p>
-            {message.role === 'instructor' && message.turnId && ['failed', 'cancelled'].includes(outcomes[message.turnId]?.status ?? '') &&
+            {message.role === 'instructor' && message.turnId && outcomes[message.turnId]?.status === 'cancelled' &&
+              <p className="stopped-request">Request stopped.</p>}
+            {message.role === 'instructor' && message.turnId && outcomes[message.turnId]?.status === 'failed' &&
               <ErrorNotice failure={outcomes[message.turnId]?.failure ?? { message: 'This request could not be completed.', nextStep: 'try_later' }} disabled={isBuilding}
                 onSendAgain={() => void submitRequest(message.content.filter(block => block.type === 'text').map(block => block.text).join('\n'))}
                 onEdit={() => { setRequestText(message.content.filter(block => block.type === 'text').map(block => block.text).join('\n')); messageBox.current?.focus(); }}
@@ -130,7 +152,12 @@ export function ProjectWorkspace({ initialProject = null }: { initialProject?: P
           {!project && <><label htmlFor="project-title">Project title</label><input id="project-title" value={title} onChange={event => setTitle(event.target.value)} placeholder="e.g., Cell division practice" maxLength={160} disabled={sending} /></>}
           <label htmlFor="request-text" className={project ? 'sr-only' : undefined}>{project ? 'Describe a change' : 'What should students learn or do?'}</label>
           <textarea ref={messageBox} id="request-text" value={requestText} onChange={event => setRequestText(event.target.value)} placeholder={project ? 'Describe a change or ask a question…' : 'Create a ten-question practice quiz on cell division…'} rows={3} maxLength={20000} />
-          <div className="composer-footer"><button disabled={isBuilding} type="submit">{sending ? 'Sending…' : isBuilding ? 'Working…' : 'Send'}</button></div>
+          <div className="composer-footer">
+            {activeTurnId && <button className="stop-request" type="button" disabled={stopping} onClick={() => void stopRequest()}>{stopping ? 'Stopping…' : 'Stop request'}</button>}
+            <button disabled={isBuilding} type="submit">{sending ? 'Sending…' : isBuilding ? 'Working…' : 'Send'}</button>
+          </div>
+          <div className="sr-only" role="status">{stopping ? 'Stopping request.' : turn.status === 'cancelled' && !activeTurnId ? 'Request stopped. You can send a follow-up.' : ''}</div>
+          {activeStop?.error && <p className="error" role="alert">Unable to stop the request. {activeStop.error}</p>}
           {error && <ErrorNotice failure={error} disabled={isBuilding} onSendAgain={() => void submitRequest(requestText)} onEdit={() => messageBox.current?.focus()} onNewProject={startNewProject} onAskForFix={askForFix} />}
         </form>
       </section>

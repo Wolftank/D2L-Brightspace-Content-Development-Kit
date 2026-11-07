@@ -24,7 +24,7 @@ export class ApiError extends Error {
   }
 }
 
-async function json<T>(url: string, init: RequestInit = {}): Promise<T> {
+async function request(url: string, init: RequestInit = {}): Promise<Response> {
   let response: Response;
   try {
     response = await fetch(url, init);
@@ -37,7 +37,15 @@ async function json<T>(url: string, init: RequestInit = {}): Promise<T> {
     const failure = readFailure(body?.error);
     throw new ApiError(body?.error?.code ?? 'request_failed', failure.message, undefined, failure.nextStep);
   }
-  return response.json() as Promise<T>;
+  return response;
+}
+
+async function json<T>(url: string, init?: RequestInit): Promise<T> {
+  return (await request(url, init)).json() as Promise<T>;
+}
+
+export async function cancelTurn(turnId: string): Promise<void> {
+  await request('/api/turns/' + encodeURIComponent(turnId) + '/cancel', { method: 'POST' });
 }
 
 export function createProject(input: CreateProjectRequest): Promise<CreateProjectResponse> {

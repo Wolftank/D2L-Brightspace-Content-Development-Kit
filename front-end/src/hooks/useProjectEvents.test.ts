@@ -314,7 +314,7 @@ it('handles build.updated by replacing the existing build', () => {
 
     expect(result.statusLines.at(-1)).toEqual({
       seq: 15,
-      text: 'Build cancelled',
+      text: 'Request stopped',
     });
   });
 

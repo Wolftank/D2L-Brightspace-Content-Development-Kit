@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Project } from '@cdk/contract';
+import type { ProjectResponse } from '@cdk/contract';
 import { getProject } from './api/client';
 import { ProjectWorkspace } from './ProjectWorkspace';
 import { ProjectList } from './projects/ProjectList';
@@ -15,16 +15,16 @@ export function App() {
 }
 
 function OpenProject({ projectId }: { projectId: string }) {
-  const [project, setProject] = useState<Project | null>(null);
+  const [result, setResult] = useState<ProjectResponse | null>(null);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let cancelled = false;
-    void getProject(projectId).then(result => { if (!cancelled) setProject(result.project); })
+    void getProject(projectId).then(response => { if (!cancelled) setResult(response); })
       .catch(() => { if (!cancelled) setFailed(true); });
     return () => { cancelled = true; };
   }, [projectId, attempt]);
-  if (project) return <ProjectWorkspace initialProject={project} />;
+  if (result) return <ProjectWorkspace initialProject={result.project} initialTurnId={result.activeTurn?.id} />;
   return <main className="app-shell"><AppHeader /><section className="intro" aria-labelledby="page-title">
     <h1 id="page-title">Open project</h1>
     {failed ? <><p role="alert">Unable to open this project. It may be unavailable, or the service could not be reached.</p>
