@@ -236,6 +236,124 @@ describe('Claude turns', () => {
   });
 });
 
+describe('Claude turns, cancelled', () => {
+  let dir: string;
+  let queryOptions: Record<string, unknown> | undefined;
+  let interrupt: () => Promise<unknown>;
+  let afterInit: (signal: AbortSignal) => AsyncIterable<unknown>;
+
+  /** The result the CLI sends for an interrupted turn. */
+  const INTERRUPTED = {
+    type: 'result',
+    subtype: 'error_during_execution',
+    is_error: true,
+    errors: ['[ede_diagnostic] result_type=user last_content_type=n/a stop_reason=null'],
+    session_id: 'session-1',
+    usage: { input_tokens: 5, output_tokens: 2 },
+    total_cost_usd: 0.01,
+    num_turns: 1,
+  };
+
+  /** Works until the query is aborted, then throws as an aborted query does. */
+  async function* untilAborted(signal: AbortSignal): AsyncGenerator<unknown> {
+    if (!signal.aborted) await new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }));
+    throw new Error('Operation aborted');
+  }
+
+  function queryAborted(): boolean {
+    return (queryOptions!.abortController as AbortController).signal.aborted;
+  }
+
+  /** Starts a turn in a new session and consumes its events. */
+  async function startTurn(signal: AbortSignal) {
+    const { createClaudeAgentDriver } = await import('./claude.js');
+    const session = await createClaudeAgentDriver().open({
+      workspaceDir: join(dir, 'workspace'),
+      sessionId: null,
+      instructions: 'Follow instructions exactly.',
+      skillsDir: join(dir, 'skills'),
+      skills: [],
+      tools: { name: 'cdk', tools: [] },
+    });
+    const turn = session.send({ text: 'Write a long essay', attachments: [] }, {}, signal);
+    const drained = (async () => {
+      for await (const event of turn.events) void event;
+    })();
+    return { result: turn.result, drained };
+  }
+
+  beforeEach(async () => {
+    dir = await fs.mkdtemp(join(tmpdir(), 'cdk-claude-cancel-'));
+    await fs.mkdir(join(dir, 'skills'));
+    queryOptions = undefined;
+    interrupt = async () => undefined;
+    afterInit = untilAborted;
+    const { BUILT_IN_TOOLS } = await import('./claude.js');
+    const init = { type: 'system', subtype: 'init', session_id: 'session-1', tools: BUILT_IN_TOOLS, mcp_servers: [], skills: [], agents: [], plugins: [] };
+    vi.resetModules();
+    vi.doMock('@anthropic-ai/claude-agent-sdk', () => ({
+      query: ({ options }: { options: Record<string, unknown> }) => {
+        queryOptions = options;
+        const stream = (async function* () {
+          yield init;
+          yield* afterInit((options.abortController as AbortController).signal);
+        })();
+        return Object.assign(stream, { interrupt: () => interrupt() });
+      },
+      createSdkMcpServer: (options: FakeToolServer) => options,
+      tool: (name: string) => ({ name }),
+    }));
+  });
+
+  afterEach(async () => {
+    vi.useRealTimers();
+    vi.doUnmock('@anthropic-ai/claude-agent-sdk');
+    vi.resetModules();
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  it('interrupts the turn when its signal fires and reports it cancelled with its session id and usage, leaving the query unaborted', async () => {
+    let interrupted!: () => void;
+    const interruption = new Promise<void>((resolve) => {
+      interrupted = resolve;
+    });
+    interrupt = async () => interrupted();
+    afterInit = async function* () {
+      await interruption;
+      yield INTERRUPTED;
+    };
+    const controller = new AbortController();
+    const turn = await startTurn(controller.signal);
+
+    controller.abort();
+    await turn.drained;
+
+    expect(await turn.result).toEqual({
+      status: 'cancelled',
+      sessionId: 'session-1',
+      text: '',
+      usage: { inputTokens: 5, outputTokens: 2, costUsd: 0.01, steps: 1 },
+    });
+    expect(queryAborted()).toBe(false);
+  });
+
+  it('aborts the query when an interrupted turn has not ended within the grace period', async () => {
+    const { INTERRUPT_GRACE_MS } = await import('./claude.js');
+    const controller = new AbortController();
+    const turn = await startTurn(controller.signal);
+    vi.useFakeTimers();
+
+    controller.abort();
+    await vi.advanceTimersByTimeAsync(INTERRUPT_GRACE_MS - 1);
+    expect(queryAborted()).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await turn.drained;
+
+    expect(queryAborted()).toBe(true);
+    expect(await turn.result).toEqual({ status: 'cancelled', sessionId: 'session-1', text: '' });
+  });
+});
+
 describe('confineToWorkspace', () => {
   let dir: string;
   let workspaceDir: string;

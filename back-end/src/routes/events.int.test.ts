@@ -51,6 +51,9 @@ describe('GET /api/projects/:projectId/events', () => {
         start: () => {
           throw new Error('not used by these tests');
         },
+        cancel: () => {
+          throw new Error('not used by these tests');
+        },
       },
       messages: {
         list: () => {

@@ -44,6 +44,7 @@ describe('errors an instructor can see', () => {
       payload_too_large: 'smaller_request',
       not_found: 'new_project',
       build_not_found: 'send_again',
+      turn_not_found: 'send_again',
       turn_active: 'wait',
       build_not_ready: 'try_later',
       build_failed: 'ask_for_fix',

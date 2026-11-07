@@ -1,3 +1,4 @@
+import type { Server } from 'node:http';
 import { join } from 'node:path';
 import { createAgentDriver } from './agent/drivers.js';
 import { createApp } from './app.js';
@@ -14,7 +15,7 @@ import { log } from './log.js';
 import { startLogging } from './log-file.js';
 import { createEventService } from './pipeline/events.js';
 import { createRunner, type Runner } from './pipeline/runner.js';
-import { createSessionService } from './pipeline/sessions.js';
+import { createSessionService, type SessionService } from './pipeline/sessions.js';
 import { createBuildService, type BuildService } from './services/builds.js';
 import { createMessageService } from './services/messages.js';
 import { createProjectService } from './services/projects.js';
@@ -22,7 +23,15 @@ import { createTurnService } from './services/turns.js';
 import { createWorkspaceService } from './services/workspaces.js';
 import { createCdkTools } from './tools/index.js';
 
-function buildDeps(cfg: Config): { deps: Deps; runner: Runner; builds: BuildService } {
+interface BackEnd {
+  deps: Deps;
+  db: ReturnType<typeof openDb>;
+  runner: Runner;
+  sessions: SessionService;
+  builds: BuildService;
+}
+
+function buildBackEnd(cfg: Config): BackEnd {
   const db = openDb(join(cfg.dataDir, 'cdk.db'));
   const projectsRepo = createProjectsRepo(db);
   const buildsRepo = createBuildsRepo(db);
@@ -33,16 +42,17 @@ function buildDeps(cfg: Config): { deps: Deps; runner: Runner; builds: BuildServ
   const builds = createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces, events });
   const driver = createAgentDriver(cfg.agent);
 
+  const sessions = createSessionService({
+    projects: projectsRepo,
+    workspaces,
+    driver,
+    tools: (projectId) => createCdkTools({ projects: projectsRepo, workspaces, builds }, projectId),
+  });
   const runner = createRunner({
     turns: turnsRepo,
     messages: messagesRepo,
     events,
-    sessions: createSessionService({
-      projects: projectsRepo,
-      workspaces,
-      driver,
-      tools: (projectId) => createCdkTools({ projects: projectsRepo, workspaces, builds }, projectId),
-    }),
+    sessions,
     workspaces,
     builds,
     turnLimits: cfg.turnLimits,
@@ -60,7 +70,24 @@ function buildDeps(cfg: Config): { deps: Deps; runner: Runner; builds: BuildServ
     launchToken: cfg.launchToken,
     appDir: cfg.appDir,
   };
-  return { deps, runner, builds };
+  return { deps, db, runner, sessions, builds };
+}
+
+/** Closes the server, cancels running turns, closes the sessions and the database, and exits. */
+async function shutDown(server: Server, { db, runner, sessions }: BackEnd, trigger: string): Promise<void> {
+  log.info({ trigger }, 'back-end stopping');
+  try {
+    server.close();
+    server.closeAllConnections();
+    await runner.cancelAll();
+    await sessions.closeAll();
+    db.$client.close();
+    log.info('back-end stopped');
+  } catch (err) {
+    log.error({ err }, 'The back end did not stop cleanly');
+    process.exitCode = 1;
+  }
+  process.exit();
 }
 
 /** A startup message for a port the server could not listen on. */
@@ -95,8 +122,9 @@ async function start(): Promise<void> {
   process.on('uncaughtExceptionMonitor', (err) => log.fatal({ err }, 'The back end crashed'));
   log.info({ settings: loggedSettings(cfg) }, 'back-end starting');
 
-  const { deps, runner, builds } = buildDeps(cfg);
-  createApp(deps).listen(cfg.port, '127.0.0.1', (err) => {
+  const backEnd = buildBackEnd(cfg);
+  const { runner, builds } = backEnd;
+  const server = createApp(backEnd.deps).listen(cfg.port, '127.0.0.1', (err) => {
     if (err) {
       const message = listenFailure(err, cfg.port);
       log.fatal({ err }, message);
@@ -107,6 +135,20 @@ async function start(): Promise<void> {
     builds.failInterrupted();
     log.info({ url: `http://127.0.0.1:${cfg.port}`, previewOrigin: cfg.previewOrigin }, 'back-end listening');
   });
+
+  let stopping = false;
+  function stop(trigger: string): void {
+    if (stopping) return;
+    stopping = true;
+    void shutDown(server, backEnd, trigger);
+  }
+  // The desktop app sends 'shutdown' when it quits; its channel closes if it crashes.
+  process.on('message', (message) => {
+    if (message === 'shutdown') stop('app quit');
+  });
+  process.once('disconnect', () => stop('app gone'));
+  process.once('SIGINT', () => stop('SIGINT'));
+  process.once('SIGTERM', () => stop('SIGTERM'));
 }
 
 await start();

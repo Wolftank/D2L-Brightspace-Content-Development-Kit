@@ -42,6 +42,9 @@ export interface SessionService {
    * For a turn whose agent process failed, and for a deleted project.
    */
   close(projectId: string): Promise<void>;
+
+  /** Closes every open session the way `close` does. */
+  closeAll(): Promise<void>;
 }
 
 interface OpenSession {
@@ -132,5 +135,15 @@ export function createSessionService(deps: SessionServiceDeps): SessionService {
     },
 
     close,
+
+    async closeAll() {
+      await Promise.all(
+        [...openSessions.keys()].map((projectId) =>
+          close(projectId).catch((err: unknown) => {
+            log.error({ projectId, err }, 'Failed to close the session');
+          }),
+        ),
+      );
+    },
   };
 }

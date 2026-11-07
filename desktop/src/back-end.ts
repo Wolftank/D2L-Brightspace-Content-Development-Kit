@@ -6,6 +6,12 @@ import { setTimeout as sleep } from 'node:timers/promises';
 /** How long the back end may take to answer `/api/health` after it is spawned. */
 export const STARTUP_TIMEOUT_MS = 30_000;
 
+/** The message the back end shuts down on. */
+export const SHUTDOWN_MESSAGE = 'shutdown';
+
+/** How long `stop` waits for the back end to exit before ending its process tree. */
+export const SHUTDOWN_TIMEOUT_MS = 5_000;
+
 /** The most of the back end's error output kept for a startup failure message. */
 const ERROR_OUTPUT_CHARS = 4_000;
 
@@ -22,8 +28,8 @@ export interface BackEnd {
   logsDir: Promise<string>;
   /** Settles when the back end's process exits, for any reason. */
   exited: Promise<void>;
-  /** Ends the back end's whole process tree: the back end, the agent, and every command either started. */
-  stop(): Promise<void>;
+  /** Asks the back end to shut down, and ends its whole process tree if it has not exited within `timeoutMs`. */
+  stop(timeoutMs?: number): Promise<void>;
 }
 
 /** The back end could not start. The message says why, with the end of its error output. */
@@ -137,12 +143,20 @@ export async function startBackEnd(
     launchToken,
     logsDir,
     exited,
-    async stop() {
-      if (!running || child.pid === undefined) return;
-      await killTree(child.pid);
-      await exited;
+    async stop(timeoutMs = SHUTDOWN_TIMEOUT_MS) {
+      if (!running) return;
+      // A failed send is covered by the timeout below.
+      if (child.connected) child.send(SHUTDOWN_MESSAGE, () => {});
+      const stopped = await Promise.race([exited.then(() => true), sleep(timeoutMs, false, { ref: false })]);
+      if (!stopped) await kill();
     },
   };
+
+  async function kill(): Promise<void> {
+    if (!running || child.pid === undefined) return;
+    await killTree(child.pid);
+    await exited;
+  }
 
   const deadline = Date.now() + timeoutMs;
   while (running && Date.now() < deadline) {
@@ -152,7 +166,7 @@ export async function startBackEnd(
   const message = running
     ? `The back end did not start within ${timeoutMs / 1000} seconds.`
     : `The back end stopped while starting.\n\n${errorOutput.trim()}`;
-  await backEnd.stop();
+  await kill();
   throw new BackEndStartError(message);
 }
 
