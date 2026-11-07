@@ -10,6 +10,22 @@ export type Avenue = 'topic' | 'scorm' | 'widget' | 'external';
 /** The avenues CDK can build: a project is created with one of these. */
 export type BuildableAvenue = Extract<Avenue, 'scorm' | 'topic'>;
 
+/** Who a preview runs as, by the D2L role name a topic reads from `Access.ClasslistRoleName`. */
+export type PreviewRole = 'Student' | 'Instructor';
+
+/** The query of `/preview/player.html` on the preview origin. */
+export interface PreviewPlayerQuery {
+  buildId: string;
+  /** A fresh id per launch, echoed in the player's `cdk-preview` messages. */
+  attempt: string;
+  /** The app's origin; the player answers only to it. */
+  parentOrigin: string;
+  /** The build's avenue. Defaults to `scorm`. */
+  avenue?: BuildableAvenue;
+  /** Defaults to `Student`. */
+  role?: PreviewRole;
+}
+
 export interface User {
   id: string;
   displayName: string;

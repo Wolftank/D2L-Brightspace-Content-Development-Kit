@@ -138,13 +138,19 @@ A build always runs the QA gate. The pedagogy check is a separate step on a buil
 Previews are served on their own origin, so an activity's scripts never run on the app's origin, where they could call the API or reach into the app's page. Locally the preview origin is `http://preview.localhost:<PORT>`: the back end's own port, under a hostname browsers resolve to this computer. The back end tells the two apart by the `Host` header. The preview origin serves only these routes, and the app origin serves none of them. When the back end also serves the built app (the `APP_DIR` setting, as in the desktop app), the app origin is `http://127.0.0.1:<PORT>` and the app finds the preview origin on its own port; under the Vite dev server, `VITE_PREVIEW_ORIGIN` names it.
 
 ```
-GET    /preview/player.html?buildId=&attempt=&parentOrigin=   the emulator player; 403 unless parentOrigin is the app origin
-GET    /preview/player.js, /preview/player.css                the player's script and style, from back-end/preview/
-GET    /preview/d2l-emulator.js, /preview/tenant-profile.json the kit's emulator and tenant profile, unchanged
-GET    /api/builds/:buildId/preview/*                         a file of a ready build; index.html is the launch page
+GET    /preview/player.html?buildId=&attempt=&parentOrigin=&avenue=&role=   the emulator player; 403 unless parentOrigin is the app origin
+GET    /preview/player.js, /preview/player.css, /preview/topic.js            the player's scripts and style, from back-end/preview/
+GET    /preview/d2l-emulator.js, /preview/tenant-profile.json                the kit's emulator and tenant profile, unchanged
+GET    /api/builds/:buildId/preview/*                                        a file of a ready build; index.html is the launch page of a SCORM build
+GET    /content/:term/:ou-:buildId/*                                         a file of a ready topic build, at D2L's content path; index.html is its launch page
 ```
 
-Every response is `no-store` and `nosniff`, with a Content-Security-Policy whose `frame-ancestors` is the app origin (the `APP_ORIGIN` setting), so only the app can frame the player. Only GET and HEAD are answered. A build file is served only when the build is `ready` and the path names one of the files its download contains; the QA report, links, and anything outside the build get 404. The player and the activity share the preview origin, because the activity finds the SCORM API on its parent window.
+The player's query is `PreviewPlayerQuery` in `@cdk/contract`. `avenue` is the build's avenue, `scorm` by default, and `role` is who the preview runs as, `Student` by default or `Instructor` (`PreviewRole`), the names a topic reads from D2L as `Access.ClasslistRoleName`. The player runs the kit's emulator as a viewer with that role and loads the build's `index.html` in its frame:
+
+- **SCORM package.** The player installs the emulator on its own window, so the package finds the SCORM API at parent depth 1, as in D2L. As `Instructor`, the emulator gives the instructor's preview launch: `credit` is `no-credit` and every write is discarded.
+- **Content topic.** The player loads the topic from `/content/0/1000-<buildId>/`, D2L's `/content/<term>/<ou>-<course>/` path, so a topic finds its org unit in its own URL as it does in D2L. Every HTML file of a topic build is served with two scripts first in its `<head>`, as D2L adds its own scripts to a topic: the emulator and `topic.js`, which installs it in the topic's window before the topic's own scripts run. The emulator answers the topic's Brightspace API calls, such as `users/whoami` and `enrollments/myenrollments/<ou>`, whose `Access.ClasslistRoleName` is the role.
+
+Every response is `no-store` and `nosniff`, with a Content-Security-Policy whose `frame-ancestors` is the app origin (the `APP_ORIGIN` setting), so only the app can frame the player. Only GET and HEAD are answered. A build file is served only when the build is `ready`, of a topic for a `/content/` path, and the path names one of the files its download contains; the QA report, links, and anything outside the build get 404. The player and the activity share the preview origin, because a SCORM package finds the SCORM API on its parent window and a topic's `topic.js` reads the viewer from it.
 
 In local mode a build's id is what names its files: the back end listens on 127.0.0.1 only, the `Host` must be the preview origin's, and build ids are random. Hosted mode needs two more things before it serves previews: a separate preview domain, and short-lived signed preview links tied to the build and the instructor, because a build id can leak.
 

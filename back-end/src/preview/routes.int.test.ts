@@ -1,6 +1,7 @@
 import * as fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { BuildableAvenue } from '@cdk/contract';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../app.js';
@@ -36,9 +37,9 @@ describe('preview origin', () => {
     return request(createApp(deps)).get(path).set('Host', PREVIEW_HOST);
   }
 
-  async function provisionedProject(id: string, ownerId: string): Promise<void> {
-    await workspaces.create(id, 'scorm');
-    projectsRepo.create({ id, ownerId, title: id, avenue: 'scorm' });
+  async function provisionedProject(id: string, ownerId: string, avenue: BuildableAvenue = 'scorm'): Promise<void> {
+    await workspaces.create(id, avenue);
+    projectsRepo.create({ id, ownerId, title: id, avenue });
   }
 
   beforeEach(async () => {
@@ -101,6 +102,7 @@ describe('preview origin', () => {
     it.each([
       ['player.js', /javascript/],
       ['player.css', /^text\/css/],
+      ['topic.js', /javascript/],
       ['d2l-emulator.js', /javascript/],
       ['tenant-profile.json', /^application\/json/],
     ])('serves %s', async (file, type) => {
@@ -163,6 +165,74 @@ describe('preview origin', () => {
       const build = await builds.create('not-mine');
 
       expect((await preview(`/api/builds/${build.id}/preview/index.html`)).status).toBe(404);
+    });
+  });
+
+  describe('topic files', () => {
+    const TOPIC_STARTER = join(KIT_DIR, 'skills', 'd2l-content-topic', 'assets', 'starter');
+    const EMULATOR_TAGS = '<script src="/preview/d2l-emulator.js"></script><script src="/preview/topic.js"></script>';
+
+    beforeEach(async () => {
+      const ownerId = createUsersRepo(db).ensureLocalUser().id;
+      await provisionedProject('topic', ownerId, 'topic');
+    });
+
+    it("serves a ready topic's page at D2L's content path, with the emulator's scripts first in its head", async () => {
+      const build = await builds.create('topic');
+      const starter = await fs.readFile(join(TOPIC_STARTER, 'index.html'), 'utf8');
+
+      const page = await preview(`/content/0/1000-${build.id}/index.html`);
+
+      expect(page.status).toBe(200);
+      expect(page.headers['content-type']).toMatch(/^text\/html/);
+      expect(page.headers['content-security-policy']).toContain(`frame-ancestors ${APP_ORIGIN} 'self'`);
+      expect(page.text).toBe(starter.replace('<head>', `<head>${EMULATOR_TAGS}`));
+    });
+
+    it("serves a topic's other files unchanged beside its page", async () => {
+      const build = await builds.create('topic');
+
+      const data = await preview(`/content/0/1000-${build.id}/data.js`);
+
+      expect(data.status).toBe(200);
+      expect(data.headers['content-type']).toMatch(/javascript/);
+      expect(data.text).toBe(await fs.readFile(join(TOPIC_STARTER, 'data.js'), 'utf8'));
+    });
+
+    it('puts the scripts after the doctype of a page with no head', async () => {
+      await fs.writeFile(join(workspaces.pathFor('topic'), 'out', 'bare.html'), '<!DOCTYPE html>\n<title>Bare</title><p>Hi</p>');
+      const build = await builds.create('topic');
+
+      const page = await preview(`/content/0/1000-${build.id}/bare.html`);
+
+      expect(page.text).toBe(`<!DOCTYPE html>${EMULATOR_TAGS}\n<title>Bare</title><p>Hi</p>`);
+    });
+
+    it.each([
+      ['a SCORM build', async () => `/content/0/1000-${(await builds.create('mine')).id}/index.html`],
+      ['another owner\'s build', async () => `/content/0/1000-${(await builds.create('not-mine')).id}/index.html`],
+      ['a path without an org unit', async () => `/content/0/${(await builds.create('topic')).id}/index.html`],
+      ['a term that is not a number', async () => `/content/term/1000-${(await builds.create('topic')).id}/index.html`],
+      ['the QA report', async () => `/content/0/1000-${(await builds.create('topic')).id}/qa.json`],
+      ['an unknown build', async () => '/content/0/1000-no-such-build/index.html'],
+    ])('refuses %s', async (_case, path) => {
+      expect((await preview(await path())).status).toBe(404);
+    });
+
+    it('refuses a topic that failed the QA gate', async () => {
+      const outDir = join(workspaces.pathFor('topic'), 'out');
+      await fs.rm(outDir, { recursive: true });
+      await fs.cp(join(KIT_DIR, 'qa', 'lint', 'fixtures', 'bad-topic'), outDir, { recursive: true });
+      const build = await builds.create('topic');
+
+      expect(build.status).toBe('failed');
+      expect((await preview(`/content/0/1000-${build.id}/index.html`)).status).toBe(404);
+    });
+
+    it('does not serve topic files on the app origin', async () => {
+      const build = await builds.create('topic');
+
+      expect((await request(createApp(deps)).get(`/content/0/1000-${build.id}/index.html`)).status).toBe(404);
     });
   });
 
