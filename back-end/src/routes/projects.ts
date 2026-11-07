@@ -2,11 +2,12 @@ import { Router } from 'express';
 import { z } from 'zod';
 import type { CreateProjectResponse, ProjectListResponse } from '@cdk/contract';
 import type { Deps } from '../deps.js';
+import { BUILDABLE_AVENUES } from '../kit.js';
 
-/** Creates SCORM or content-topic projects. Any other field, such as `targetCourse`, is dropped. */
+/** Creates a project with an avenue CDK can build. Any other field, such as `targetCourse`, is dropped. */
 const createProjectBody = z.object({
   title: z.string().trim().min(1, 'must not be blank'),
-  avenue: z.enum(['scorm', 'topic']).default('scorm'),
+  avenue: z.enum(BUILDABLE_AVENUES).default('scorm'),
 });
 
 export function projectsRouter(deps: Deps): Router {

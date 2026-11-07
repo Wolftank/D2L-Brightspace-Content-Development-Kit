@@ -103,10 +103,10 @@ describe('R3 regression: app, identity, error envelope', () => {
     };
 
     owner = deps.users.ensureLocalUser();
-    await workspaces.create('mine');
+    await workspaces.create('mine', 'scorm');
     projectsRepo.create({ id: 'mine', ownerId: owner.id, title: 'Cell division practice', avenue: 'scorm' });
     db.insert(usersTable).values({ id: 'someone-else', displayName: 'Someone Else', email: null, role: 'instructor' }).run();
-    await workspaces.create('not-mine');
+    await workspaces.create('not-mine', 'scorm');
     projectsRepo.create({ id: 'not-mine', ownerId: 'someone-else', title: 'Not yours', avenue: 'scorm' });
   });
 

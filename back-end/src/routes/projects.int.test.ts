@@ -13,6 +13,7 @@ import { testDb } from '../db/test-db.js';
 import { createTurnsRepo } from '../db/turns.js';
 import { createUsersRepo } from '../db/users.js';
 import type { Deps } from '../deps.js';
+import { KIT_DIR } from '../kit.js';
 import { createEventService } from '../pipeline/events.js';
 import { createBuildService } from '../services/builds.js';
 import { createProjectService } from '../services/projects.js';
@@ -92,10 +93,21 @@ describe('project routes', () => {
       expect(res.body.project).toMatchObject({ avenue: 'scorm', targetCourse: null });
     });
 
+    it('creates a content-topic project whose out/ holds exactly the content-topic starter', async () => {
+      const res = await request(app()).post('/api/projects').send({ title: 'Campus map', avenue: 'topic' });
+
+      expect(res.status).toBe(201);
+      expect(res.body.project).toMatchObject({ title: 'Campus map', avenue: 'topic' });
+      const starter = join(KIT_DIR, 'skills', 'd2l-content-topic', 'assets', 'starter');
+      const out = join(workspaces.pathFor(res.body.project.id), 'out');
+      expect((await fs.readdir(out)).sort()).toEqual((await fs.readdir(starter)).sort());
+      expect(await fs.readFile(join(out, 'index.html'), 'utf8')).toBe(await fs.readFile(join(starter, 'index.html'), 'utf8'));
+    });
+
     it.each([
       ['a blank title', { title: '   ' }],
       ['a missing title', {}],
-      ['another avenue', { title: 'Cell division practice', avenue: 'topic' }],
+      ['an avenue CDK cannot build', { title: 'Cell division practice', avenue: 'widget' }],
     ])('rejects %s with the validation envelope and creates nothing', async (_case, body) => {
       const res = await request(app()).post('/api/projects').send(body);
 

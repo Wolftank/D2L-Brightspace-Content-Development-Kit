@@ -33,7 +33,7 @@ describe('build routes', () => {
   let deps: Deps;
 
   async function provisionedProject(id: string, ownerId: string, title: string): Promise<void> {
-    await workspaces.create(id);
+    await workspaces.create(id, 'scorm');
     projectsRepo.create({ id, ownerId, title, avenue: 'scorm' });
   }
 

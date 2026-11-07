@@ -206,7 +206,7 @@ describe('R8 regression: project, message and build routes', () => {
       ['a blank title', { title: '   ' }],
       ['a missing title', {}],
       ['a title that is not text', { title: 42 }],
-      ['another avenue', { title: 'Cell division practice', avenue: 'topic' }],
+      ['an avenue CDK cannot build', { title: 'Cell division practice', avenue: 'widget' }],
     ])('rejects %s with 400 invalid_request and creates no project or workspace', async (_, body) => {
       const res = await request(app()).post('/api/projects').send(body);
 
@@ -234,7 +234,7 @@ describe('R8 regression: project, message and build routes', () => {
 
     beforeEach(async () => {
       db.insert(usersTable).values({ id: 'someone-else', displayName: 'Someone Else', email: null, role: 'instructor' }).run();
-      await workspaces.create('not-mine');
+      await workspaces.create('not-mine', 'scorm');
       projectsRepo.create({ id: 'not-mine', ownerId: 'someone-else', title: 'Not yours', avenue: 'scorm' });
       const othersBuild = await builds.create('not-mine');
       expect(othersBuild.status).toBe('ready');

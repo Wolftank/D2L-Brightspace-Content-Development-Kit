@@ -156,7 +156,7 @@ describe('runner, end to end', () => {
 
     const ownerId = createUsersRepo(db).ensureLocalUser().id;
     projectId = projects.create({ id: 'project-1', ownerId, title: 'Cell division practice', avenue: 'scorm' }).id;
-    await workspaces.create(projectId);
+    await workspaces.create(projectId, 'scorm');
   });
 
   afterEach(async () => {

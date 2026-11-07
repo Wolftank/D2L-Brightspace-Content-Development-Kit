@@ -4,13 +4,13 @@ import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { Readable } from 'node:stream';
 import { ZipArchive } from 'archiver';
 import { z } from 'zod';
-import type { Build as ApiBuild, BuildError, QaReport } from '@cdk/contract';
+import type { Build as ApiBuild, BuildableAvenue, BuildError, QaReport } from '@cdk/contract';
 import type { Logger } from 'pino';
 import type { BuildsRepo, FinishBuildInput } from '../db/builds.js';
 import type { ProjectsRepo } from '../db/projects.js';
 import type { Build, Project } from '../db/schema.js';
-import { BuildFailed, BuildIncomplete, BuildNotFound, BuildNotReady } from '../errors.js';
-import { KIT_DIR } from '../kit.js';
+import { BuildFailed, BuildIncomplete, BuildNotFound, BuildNotReady, NotFound } from '../errors.js';
+import { buildableAvenue, KIT_DIR } from '../kit.js';
 import { log } from '../log.js';
 import type { EventService } from '../pipeline/events.js';
 import type { WorkspaceService } from './workspaces.js';
@@ -76,7 +76,8 @@ export interface BuildDownload {
 export interface BuildService {
   /**
    * Stores the next build version as `checking`, copies the project's output
-   * into it, runs the QA gate on the copy, and returns the finished build.
+   * into it, runs the QA gate for the project's avenue on the copy, and
+   * returns the finished build.
    * Emits `build.created` once the build is stored, and `build.updated` once
    * its final status is stored. A failed copy finishes the build as `failed`.
    */
@@ -108,7 +109,7 @@ export interface BuildService {
   failInterrupted(): void;
 
   /**
-   * Runs the QA gate on the project's output in place, recording nothing.
+   * Runs the QA gate for the project's avenue on its output in place, recording nothing.
    * Throws `WorkspaceMissing` when the project has no workspace.
    */
   checkOutput(projectId: string): Promise<OutputCheck>;
@@ -131,7 +132,7 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
   const gateScript = join(deps.kitDir ?? KIT_DIR, 'qa', 'lint', 'lint.js');
   const gateTimeoutMs = deps.gateTimeoutMs ?? DEFAULT_GATE_TIMEOUT_MS;
 
-  function runGate(buildDir: string, avenue: string): Promise<GateRun> {
+  function runGate(buildDir: string, avenue: BuildableAvenue): Promise<GateRun> {
     return new Promise((done) => {
       execFile(
         process.execPath,
@@ -150,8 +151,8 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
     });
   }
 
-  /** Runs the QA gate on `dir` and reads its report. The technical detail of a gate failure goes to `logger`. */
-  async function inspect(dir: string, logger: Logger, avenue = 'scorm'): Promise<OutputCheck> {
+  /** Runs the QA gate for `avenue` on `dir` and reads its report. The technical detail of a gate failure goes to `logger`. */
+  async function inspect(dir: string, avenue: BuildableAvenue, logger: Logger): Promise<OutputCheck> {
     const run = await runGate(dir, avenue);
     const detail = run.failure ?? firstLine(run.stderr) ?? `exited with code ${run.exitCode}`;
 
@@ -188,8 +189,8 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
   }
 
   /** Checks a build's copy of the output and stores the QA report beside it. */
-  async function check(buildDir: string, logger: Logger, avenue = 'scorm'): Promise<Verdict> {
-    const result = await inspect(buildDir, logger, avenue);
+  async function check(buildDir: string, avenue: BuildableAvenue, logger: Logger): Promise<Verdict> {
+    const result = await inspect(buildDir, avenue, logger);
     if ('error' in result) return { status: 'failed', qa: null, error: result.error };
 
     await fs.writeFile(join(buildDir, QA_REPORT_FILE), JSON.stringify(result.qa, null, 2));
@@ -199,12 +200,20 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
   }
 
   async function checkOutput(projectId: string): Promise<OutputCheck> {
+    const avenue = buildableAvenue(projectById(projectId));
     const outDir = join(await deps.workspaces.locate(projectId), 'out');
     try {
-      return await inspect(outDir, log.child({ projectId }));
+      return await inspect(outDir, avenue, log.child({ projectId }));
     } catch (err) {
       return { error: loggedError(log.child({ projectId }), 'gate_crashed', `The QA gate could not run: ${(err as Error).message}`) };
     }
+  }
+
+  /** Unscoped lookup for pipeline code; throws `NotFound` when the project doesn't exist. */
+  function projectById(projectId: string): Project {
+    const project = deps.projects.getById(projectId);
+    if (!project) throw new NotFound('Project not found');
+    return project;
   }
 
   /** The build and its project, if the project is `ownerId`'s; otherwise throws `BuildNotFound`. */
@@ -217,7 +226,7 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
     return { build, project };
   }
 
-  async function copyAndCheck(projectId: string, version: number, logger: Logger, avenue = 'scorm'): Promise<FinishBuildInput> {
+  async function copyAndCheck(projectId: string, version: number, avenue: BuildableAvenue, logger: Logger): Promise<FinishBuildInput> {
     let buildDir: string;
     let outputHash: string;
     try {
@@ -228,15 +237,14 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
       return { ...verdict, outputHash: null };
     }
     try {
-      return { ...(await check(buildDir, logger, avenue)), outputHash };
+      return { ...(await check(buildDir, avenue, logger)), outputHash };
     } catch (err) {
       return { ...failure(logger, 'gate_crashed', `The QA gate could not run: ${(err as Error).message}`), outputHash };
     }
   }
 
   async function create(projectId: string, turnId?: string): Promise<ApiBuild> {
-    const project = deps.projects.getById(projectId);
-    const avenue = project?.avenue ?? 'scorm';
+    const avenue = buildableAvenue(projectById(projectId));
     // No await between choosing the version and storing the row, so concurrent
     // calls never pick the same version and a failed copy uses its version up.
     const version = deps.builds.nextVersion(projectId);
@@ -245,7 +253,7 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
     const buildLog = log.child({ projectId, turnId, buildId: build.id });
     buildLog.info({ version }, 'Build created');
 
-    const result = await copyAndCheck(projectId, version, buildLog, avenue);
+    const result = await copyAndCheck(projectId, version, avenue, buildLog);
     const finished = toApi(deps.builds.finish(build.id, result));
     buildLog.info(
       { status: finished.status, qaPassed: finished.qa?.passed, findings: finished.qa?.findings.length, errorCode: finished.error?.code },

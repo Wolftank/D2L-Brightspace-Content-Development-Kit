@@ -1,6 +1,7 @@
 import * as fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { BuildableAvenue } from '@cdk/contract';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ToolResult, ToolServerSpec } from '../agent/AgentDriver.js';
 import { createBuildsRepo } from '../db/builds.js';
@@ -8,6 +9,7 @@ import { createEventsRepo } from '../db/events.js';
 import { createProjectsRepo, type ProjectsRepo } from '../db/projects.js';
 import { testDb } from '../db/test-db.js';
 import { createUsersRepo } from '../db/users.js';
+import { KIT_DIR } from '../kit.js';
 import { createEventService } from '../pipeline/events.js';
 import { createBuildService, type BuildService } from '../services/builds.js';
 import { createWorkspaceService, type WorkspaceService } from '../services/workspaces.js';
@@ -19,10 +21,10 @@ describe('CDK tools', () => {
   let workspaces: WorkspaceService;
   let builds: BuildService;
 
-  async function addProject(id: string, title: string): Promise<string> {
+  async function addProject(id: string, title: string, avenue: BuildableAvenue = 'scorm'): Promise<string> {
     const ownerId = createUsersRepo(db).ensureLocalUser().id;
-    projects.create({ id, ownerId, title, avenue: 'scorm' });
-    await workspaces.create(id);
+    projects.create({ id, ownerId, title, avenue });
+    await workspaces.create(id, avenue);
     return join(workspaces.pathFor(id), 'out');
   }
 
@@ -109,6 +111,28 @@ describe('CDK tools', () => {
       const report = JSON.parse(result.content);
       expect(report.passed).toBe(false);
       expect(report.findings).toContainEqual(expect.objectContaining({ rule: 'scorm/manifest', severity: 'error' }));
+    });
+
+    it('checks a content topic with the topic rules, so the untouched starter passes', async () => {
+      await addProject('t1', 'Campus map', 'topic');
+
+      const report = JSON.parse((await call(toolsFor('t1'), 'check_output')).content);
+
+      expect(report).toMatchObject({ passed: true });
+      expect(report.findings.filter((f: { rule: string }) => f.rule.startsWith('scorm/'))).toEqual([]);
+    });
+
+    it('returns the topic findings of a content topic that fails the QA gate', async () => {
+      const outDir = await addProject('t1', 'Campus map', 'topic');
+      await fs.rm(outDir, { recursive: true });
+      await fs.cp(join(KIT_DIR, 'qa', 'lint', 'fixtures', 'bad-topic'), outDir, { recursive: true });
+
+      const report = JSON.parse((await call(toolsFor('t1'), 'check_output')).content);
+
+      expect(report.passed).toBe(false);
+      const rules = report.findings.map((f: { rule: string }) => f.rule);
+      expect(rules).toContain('topic/no-static-script-src');
+      expect(rules.filter((rule: string) => rule.startsWith('scorm/'))).toEqual([]);
     });
 
     it('checks only its own project', async () => {

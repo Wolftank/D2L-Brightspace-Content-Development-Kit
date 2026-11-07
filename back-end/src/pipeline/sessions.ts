@@ -3,7 +3,7 @@ import type { AgentDriver, AgentSession, ToolServerSpec } from '../agent/AgentDr
 import { renderProjectInstructions } from '../agent/instructions.js';
 import type { ProjectsRepo } from '../db/projects.js';
 import { NotFound } from '../errors.js';
-import { KIT_DIR, skillsForAvenue } from '../kit.js';
+import { buildableAvenue, KIT_DIR, skillsFor } from '../kit.js';
 import { log } from '../log.js';
 import type { WorkspaceService } from '../services/workspaces.js';
 
@@ -58,13 +58,14 @@ export function createSessionService(deps: SessionServiceDeps): SessionService {
     const project = deps.projects.getById(projectId);
     if (!project) throw new NotFound('Project not found');
 
+    const avenue = buildableAvenue(project);
     const workspaceDir = await deps.workspaces.locate(projectId);
     const session = await deps.driver.open({
       workspaceDir,
       sessionId: project.sessionId,
-      instructions: renderProjectInstructions({ project, workspaceDir }),
+      instructions: renderProjectInstructions({ project, avenue, workspaceDir }),
       skillsDir: join(KIT_DIR, 'skills'),
-      skills: skillsForAvenue(project.avenue),
+      skills: skillsFor(avenue),
       tools: deps.tools(projectId),
     });
     return { session, savedSessionId: project.sessionId };

@@ -7,6 +7,9 @@
 
 export type Avenue = 'topic' | 'scorm' | 'widget' | 'external';
 
+/** The avenues CDK can build: a project is created with one of these. */
+export type BuildableAvenue = Extract<Avenue, 'scorm' | 'topic'>;
+
 export interface User {
   id: string;
   displayName: string;
@@ -185,10 +188,10 @@ export interface MeResponse {
   agent: { name: string; ok: boolean; version?: string; detail?: string };
 }
 
-/** Creates a project. Any other field is ignored. */
+/** Creates a project. `avenue` defaults to `scorm`. Any other field is ignored. */
 export interface CreateProjectRequest {
   title: string;
-  avenue?: 'scorm' | 'topic';
+  avenue?: BuildableAvenue;
 }
 
 export interface CreateProjectResponse {

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Project as ApiProject, BuildSummary, ProjectListResponse, ProjectResponse } from '@cdk/contract';
+import type { Project as ApiProject, BuildableAvenue, BuildSummary, ProjectListResponse, ProjectResponse } from '@cdk/contract';
 import type { BuildsRepo } from '../db/builds.js';
 import type { ProjectsRepo } from '../db/projects.js';
 import type { Build, Project } from '../db/schema.js';
@@ -10,7 +10,7 @@ import type { WorkspaceService } from './workspaces.js';
 
 export interface CreateProjectInput {
   title: string;
-  avenue: 'scorm' | 'topic';
+  avenue: BuildableAvenue;
 }
 
 export interface ProjectServiceDeps {

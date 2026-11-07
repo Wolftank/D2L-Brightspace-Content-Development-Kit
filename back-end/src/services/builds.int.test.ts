@@ -19,6 +19,7 @@ import { createWorkspaceService, type WorkspaceService } from './workspaces.js';
 import { captureLog, type LogRecord } from '../test/log.js';
 
 const BAD_SCORM = join(KIT_DIR, 'qa', 'lint', 'fixtures', 'bad-scorm');
+const BAD_TOPIC = join(KIT_DIR, 'qa', 'lint', 'fixtures', 'bad-topic');
 
 describe('build service', () => {
   let dataDir: string;
@@ -63,8 +64,8 @@ describe('build service', () => {
     events = createEventService(createEventsRepo(db));
     workspaces = createWorkspaceService({ dataDir });
     ownerId = createUsersRepo(db).ensureLocalUser().id;
-    projectId = createProjectsRepo(db).create({ id: 'project-1', ownerId, title: 'Cell division practice' }).id;
-    await workspaces.create(projectId);
+    projectId = createProjectsRepo(db).create({ id: 'project-1', ownerId, title: 'Cell division practice', avenue: 'scorm' }).id;
+    await workspaces.create(projectId, 'scorm');
     builds = createService();
   });
 
@@ -237,6 +238,49 @@ describe('build service', () => {
 
       expect(build).toMatchObject({ status: 'failed', qa: null, error: { code: 'gate_inconsistent' } });
     });
+  });
+
+  describe('a content topic', () => {
+    const topicId = 'topic-1';
+
+    beforeEach(async () => {
+      createProjectsRepo(db).create({ id: topicId, ownerId, title: 'Campus map', avenue: 'topic' });
+      await workspaces.create(topicId, 'topic');
+    });
+
+    it('builds the content-topic starter as a ready topic build, checked with the topic rules', async () => {
+      const build = await builds.create(topicId, 'turn-1');
+
+      expect(build).toMatchObject({ projectId: topicId, version: 1, status: 'ready', avenue: 'topic', error: null });
+      expect(build.qa?.passed).toBe(true);
+      expect(build.qa?.findings.filter((f) => f.rule.startsWith('scorm/'))).toEqual([]);
+    });
+
+    it('fails a topic build with qa_failed and the topic findings for fixtures/bad-topic', async () => {
+      const outDir = join(workspaces.pathFor(topicId), 'out');
+      await fs.rm(outDir, { recursive: true });
+      await fs.cp(BAD_TOPIC, outDir, { recursive: true });
+
+      const build = await builds.create(topicId);
+
+      expect(build).toMatchObject({ status: 'failed', avenue: 'topic', error: { code: 'qa_failed', nextStep: 'ask_for_fix' } });
+      const rules = build.qa?.findings.map((f) => f.rule);
+      expect(rules).toEqual(expect.arrayContaining(['topic/no-static-script-src', 'shared/missing-assets']));
+      expect(rules?.filter((rule) => rule.startsWith('scorm/'))).toEqual([]);
+    });
+
+    it('checks a topic output in place with the topic rules', async () => {
+      await expect(builds.checkOutput(topicId)).resolves.toMatchObject({ qa: { passed: true } });
+    });
+  });
+
+  it('refuses to build or check a project whose avenue CDK cannot build, storing no build', async () => {
+    createProjectsRepo(db).create({ id: 'no-avenue', ownerId, title: 'Untitled' });
+    await workspaces.create('no-avenue', 'scorm');
+
+    await expect(builds.create('no-avenue')).rejects.toThrow('which CDK cannot build');
+    await expect(builds.checkOutput('no-avenue')).rejects.toThrow('which CDK cannot build');
+    expect(builds.latest('no-avenue')).toBeUndefined();
   });
 
   describe('failInterrupted', () => {

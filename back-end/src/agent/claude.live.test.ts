@@ -7,7 +7,7 @@ import { createEventsRepo } from '../db/events.js';
 import { createProjectsRepo } from '../db/projects.js';
 import { testDb } from '../db/test-db.js';
 import { createUsersRepo } from '../db/users.js';
-import { KIT_DIR, SCORM_SKILLS } from '../kit.js';
+import { KIT_DIR, skillsFor } from '../kit.js';
 import { createEventService } from '../pipeline/events.js';
 import { createBuildService } from '../services/builds.js';
 import { createWorkspaceService } from '../services/workspaces.js';
@@ -221,16 +221,16 @@ describe('ClaudeAgentDriver, live SDK, in a provisioned SCORM workspace', () => 
     const workspaces = createWorkspaceService({ dataDir });
     const builds = createBuildService({ builds: createBuildsRepo(db), projects, workspaces, events: createEventService(createEventsRepo(db)) });
     const project = projects.create({ id: 'live-project', ownerId: createUsersRepo(db).ensureLocalUser().id, title: 'Photosynthesis check', avenue: 'scorm' });
-    await workspaces.create(project.id);
+    await workspaces.create(project.id, 'scorm');
     const workspaceDir = workspaces.pathFor(project.id);
     await prepare(join(workspaceDir, 'out'));
     const checks: boolean[] = [];
     const session = await driver.open({
       workspaceDir,
       sessionId: null,
-      instructions: renderProjectInstructions({ project, workspaceDir }),
+      instructions: renderProjectInstructions({ project, avenue: 'scorm', workspaceDir }),
       skillsDir: join(KIT_DIR, 'skills'),
-      skills: SCORM_SKILLS,
+      skills: skillsFor('scorm'),
       tools: recordingChecks(createCdkTools({ projects, workspaces, builds }, project.id), checks),
     });
     return { project, workspaces, workspaceDir, builds, checks, session };

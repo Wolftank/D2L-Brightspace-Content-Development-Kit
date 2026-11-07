@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import { join } from 'node:path';
+import type { BuildableAvenue } from '@cdk/contract';
 import { WorkspaceMissing } from '../errors.js';
-import { KIT_DIR } from '../kit.js';
+import { AVENUE_SKILL, KIT_DIR } from '../kit.js';
 
 // Windows can hold a file open for a moment (the preview server, antivirus)
 // right after it was written. Three attempts, 100ms apart, clears that
@@ -31,7 +32,7 @@ export interface WorkspaceService {
    * Provisions a fresh workspace: an empty `files/` for instructor uploads,
    * the avenue's starter copied into `out/`, and the sibling `builds/` directory. Writes nothing agent-specific.
    */
-  create(projectId: string, avenue?: string): Promise<void>;
+  create(projectId: string, avenue: BuildableAvenue): Promise<void>;
 
   /** Removes the project's directory, its workspace and builds included. */
   remove(projectId: string): Promise<void>;
@@ -57,12 +58,6 @@ export class BuildVersionExists extends Error {
     this.name = 'BuildVersionExists';
   }
 }
-
-/** Maps an avenue to the skill directory that holds its starter files. */
-const STARTER_SKILL: Record<string, string> = {
-  scorm: 'd2l-scorm-package',
-  topic: 'd2l-content-topic',
-};
 
 export function createWorkspaceService(deps: WorkspaceServiceDeps): WorkspaceService {
   const kitDir = deps.kitDir ?? KIT_DIR;
@@ -91,9 +86,8 @@ export function createWorkspaceService(deps: WorkspaceServiceDeps): WorkspaceSer
     return workspaceDir;
   }
 
-  async function create(projectId: string, avenue = 'scorm'): Promise<void> {
-    const skill = STARTER_SKILL[avenue] ?? STARTER_SKILL.scorm;
-    const starterDir = join(kitDir, 'skills', skill, 'assets', 'starter');
+  async function create(projectId: string, avenue: BuildableAvenue): Promise<void> {
+    const starterDir = join(kitDir, 'skills', AVENUE_SKILL[avenue], 'assets', 'starter');
     const workspaceDir = pathFor(projectId);
     await fs.mkdir(join(workspaceDir, 'files'), { recursive: true });
     await copyWithRetry(starterDir, join(workspaceDir, 'out'));

@@ -37,7 +37,7 @@ describe('preview origin', () => {
   }
 
   async function provisionedProject(id: string, ownerId: string): Promise<void> {
-    await workspaces.create(id);
+    await workspaces.create(id, 'scorm');
     projectsRepo.create({ id, ownerId, title: id, avenue: 'scorm' });
   }
 
