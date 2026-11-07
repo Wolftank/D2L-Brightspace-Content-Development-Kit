@@ -168,6 +168,19 @@ describe('build routes', () => {
       expect(res.body.error.code).toBe('build_not_ready');
     });
 
+    it('refuses a topic build missing a file its page references with 409 build_incomplete', async () => {
+      const ownerId = createUsersRepo(db).ensureLocalUser().id;
+      await workspaces.create('topic', 'topic');
+      projectsRepo.create({ id: 'topic', ownerId, title: 'Campus map', avenue: 'topic' });
+      const build = await builds.create('topic');
+      await fs.rm(join(workspaces.buildPathFor('topic', '1'), 'data.js'));
+
+      const res = await request(createApp(deps)).get(`/api/builds/${build.id}/download`);
+
+      expect(res.status).toBe(409);
+      expect(res.body.error).toMatchObject({ code: 'build_incomplete', details: { missing: ['data.js'] } });
+    });
+
     it("returns 404 for another owner's build, even when it is ready", async () => {
       const others = await builds.create('not-mine');
 

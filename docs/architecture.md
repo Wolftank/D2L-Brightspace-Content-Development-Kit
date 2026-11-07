@@ -127,7 +127,7 @@ POST   /api/builds/:buildId/deploy            { targetCourse?, confirm: true } â
 GET    /api/deployments/:deploymentId         â†’ { deployment }
 ```
 
-The download is an attachment named `<title>-v<version>.zip`, with the project's title folded to lowercase ASCII letters and digits joined by dashes (`build` when none are left). It is refused with `404 build_not_found` for a build that doesn't exist, `409 build_not_ready` while the build is `checking`, `409 build_failed` when it failed, and `409 build_incomplete` when a file the manifest declares is missing.
+The download is an attachment named `<title>-v<version>.zip`, with the project's title folded to lowercase ASCII letters and digits joined by dashes (`build` when none are left). It is refused with `404 build_not_found` for a build that doesn't exist, `409 build_not_ready` while the build is `checking`, `409 build_failed` when it failed, and `409 build_incomplete` when a file the build needs is missing: for a SCORM package, `imsmanifest.xml` or a file it declares; for a content topic, a file one of its pages references, found by the QA gate's own `shared/missing-assets` rule. A SCORM package's zip has `imsmanifest.xml` at its root, and a content topic's zip has its pages and files at its root.
 
 A build always runs the QA gate. The pedagogy check is a separate step on a build, requested by the instructor here or by the agent through its tool, so an intermediate build costs nothing it does not need.
 
@@ -319,7 +319,7 @@ Tools are the functions the back end exposes to the agent, so that the agent act
 
 | Tool | Does | Side effect |
 |---|---|---|
-| `get_project` | Returns the title, the avenue, the latest build's version, status, QA findings, and error, and the tenant profile's sections for the avenue | none |
+| `get_project` | Returns the title, the avenue, the latest build's version, status, QA findings, and error, and the tenant profile's sections for the avenue: `scorm`, `fileLoading`, `storage`, and `rendering` for a SCORM package; `fileLoading`, `storage`, `brightspaceApi`, and `rendering` for a content topic | none |
 | `check_output` | Runs the QA gate on `out/` as it is and returns its findings | none |
 | `delete_files({ paths })` | Deletes files or folders inside `out/` | Files removed from `out/` |
 | `check_pedagogy({ buildId } \| { text })` | Planned: the pedagogy check on a build or on pasted text | On a build: report attached, `build.updated` |

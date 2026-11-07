@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import * as fs from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { Readable } from 'node:stream';
 import { ZipArchive } from 'archiver';
@@ -14,6 +15,14 @@ import { buildableAvenue, KIT_DIR } from '../kit.js';
 import { log } from '../log.js';
 import type { EventService } from '../pipeline/events.js';
 import type { WorkspaceService } from './workspaces.js';
+
+const kitRequire = createRequire(import.meta.url);
+
+/** The part of a QA gate rule that `download` runs in process. */
+interface MissingAssetsRule {
+  id: string;
+  test(ctx: { files: unknown[] }): Array<{ reference: string }>;
+}
 
 const MANIFEST = 'imsmanifest.xml';
 const QA_REPORT_FILE = 'qa.json';
@@ -90,10 +99,12 @@ export interface BuildService {
   latest(projectId: string): Build | undefined;
 
   /**
-   * A zip of a `ready` build with `imsmanifest.xml` at its root, named after
-   * the project's title and the build version. Throws `BuildNotFound`,
-   * `BuildNotReady`, `BuildFailed`, or `BuildIncomplete` before any byte
-   * is streamed.
+   * A zip of a `ready` build's files, with a SCORM build's `imsmanifest.xml`
+   * at its root, named after the project's title and the build version.
+   * Throws `BuildNotFound`, `BuildNotReady`, `BuildFailed`, or
+   * `BuildIncomplete` before any byte is streamed: for a SCORM build when a
+   * file its manifest declares is missing, and for a topic when a file one of
+   * its pages references is missing.
    */
   download(ownerId: string, buildId: string): Promise<BuildDownload>;
 
@@ -129,7 +140,8 @@ interface GateRun {
 type Verdict = Omit<FinishBuildInput, 'outputHash'>;
 
 export function createBuildService(deps: BuildServiceDeps): BuildService {
-  const gateScript = join(deps.kitDir ?? KIT_DIR, 'qa', 'lint', 'lint.js');
+  const kitDir = deps.kitDir ?? KIT_DIR;
+  const gateScript = join(kitDir, 'qa', 'lint', 'lint.js');
   const gateTimeoutMs = deps.gateTimeoutMs ?? DEFAULT_GATE_TIMEOUT_MS;
 
   function runGate(buildDir: string, avenue: BuildableAvenue): Promise<GateRun> {
@@ -263,6 +275,18 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
     return finished;
   }
 
+  /**
+   * Every relative reference in the topic's pages to a file that is not in
+   * `buildDir`, as found by the QA gate's own `shared/missing-assets` rule.
+   */
+  function missingReferences(buildDir: string): string[] {
+    const { collect } = kitRequire(gateScript) as { collect(root: string): unknown[] };
+    const { RULES } = kitRequire(join(kitDir, 'qa', 'lint', 'rules.js')) as { RULES: MissingAssetsRule[] };
+    const rule = RULES.find((candidate) => candidate.id === 'shared/missing-assets');
+    if (!rule) throw new Error('The QA gate has no shared/missing-assets rule');
+    return [...new Set(rule.test({ files: collect(buildDir) }).map((finding) => finding.reference))];
+  }
+
   async function download(ownerId: string, buildId: string): Promise<BuildDownload> {
     const { build, project } = owned(ownerId, buildId);
     if (build.status === 'failed') {
@@ -273,11 +297,9 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
     }
 
     const buildDir = deps.workspaces.buildPathFor(build.projectId, String(build.version));
-    if (build.avenue === 'scorm') {
-      const missing = await missingManifestFiles(buildDir);
-      if (missing.length > 0) {
-        throw new BuildIncomplete(missing);
-      }
+    const missing = build.avenue === 'scorm' ? await missingManifestFiles(buildDir) : missingReferences(buildDir);
+    if (missing.length > 0) {
+      throw new BuildIncomplete(missing);
     }
 
     const archive = new ZipArchive({ zlib: { level: 9 } });

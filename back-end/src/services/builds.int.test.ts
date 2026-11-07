@@ -269,6 +269,31 @@ describe('build service', () => {
       expect(rules?.filter((rule) => rule.startsWith('scorm/'))).toEqual([]);
     });
 
+    it("zips a ready topic's files at the root, named after its title and version", async () => {
+      const build = await builds.create(topicId);
+
+      const { filename, stream } = await builds.download(ownerId, build.id);
+
+      expect(filename).toBe('campus-map-v1.zip');
+      expect((await zipEntryNames(stream)).sort()).toEqual(['data.js', 'index.html']);
+    });
+
+    it('refuses a topic build missing a file its page references', async () => {
+      const build = await builds.create(topicId);
+      await fs.rm(join(workspaces.buildPathFor(topicId, '1'), 'data.js'));
+
+      await expect(builds.download(ownerId, build.id)).rejects.toMatchObject(new BuildIncomplete(['data.js']));
+    });
+
+    it('refuses a topic that failed the QA gate', async () => {
+      const outDir = join(workspaces.pathFor(topicId), 'out');
+      await fs.rm(outDir, { recursive: true });
+      await fs.cp(BAD_TOPIC, outDir, { recursive: true });
+      const build = await builds.create(topicId);
+
+      await expect(builds.download(ownerId, build.id)).rejects.toThrow(BuildFailed);
+    });
+
     it('checks a topic output in place with the topic rules', async () => {
       await expect(builds.checkOutput(topicId)).resolves.toMatchObject({ qa: { passed: true } });
     });
