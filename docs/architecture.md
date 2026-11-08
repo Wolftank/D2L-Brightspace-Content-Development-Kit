@@ -1,6 +1,6 @@
 # Architecture
 
-> **Status: proposal for team review** (drafted 2026-09-10). This file is the contract the front-end and back-end tracks build against. Change it by PR. Keeping it accurate matters more than keeping it complete. The first slice to build is scoped in [v1.md](v1.md); what was verified about each agent is in [drivers.md](drivers.md); the words used throughout are defined in [Terms](#terms) at the end.
+> **Status: proposal for team review** (drafted 2026-09-10). This file is the contract the front-end and back-end tracks build against. Change it by PR. Keeping it accurate matters more than keeping it complete. What was verified about each agent is in [drivers.md](drivers.md); the words used throughout are defined in [Terms](#terms) at the end.
 
 ## The split
 
@@ -441,10 +441,6 @@ How `back-end/src` is laid out, so that each concern above has exactly one home.
 
 Wiring lives in one `createApp(deps)` function. `server.js` calls it with real drivers; tests call it with fakes.
 
-## V1
-
-V1 is the first end-to-end version: the smallest slice of this design that takes an instructor's request to a usable file. What it includes, what it deliberately leaves out, and the order the rest is added in are in [v1.md](v1.md).
-
 ## Terms
 
 Every document in `docs/` and every comment in `back-end/src/` uses these words, and no synonyms for them.
@@ -481,4 +477,4 @@ Every document in `docs/` and every comment in `back-end/src/` uses these words,
 | **event stream** | The per-project Server-Sent Events feed. |
 | **local mode** | The app running on the instructor's own machine, for one instructor. |
 | **hosted mode** | The app running on a campus server, for many instructors. |
-| **V1** | The first end-to-end version, scoped in [v1.md](v1.md). |
+| **V1** | The first end-to-end version: the smallest slice of this design that takes an instructor's request to a usable file. |

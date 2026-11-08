@@ -126,4 +126,4 @@ The folder stays small. A new file starts each day and whenever the current one 
 - `tilt-udl/` — the pedagogy check
 - `deploy/` — the D2L API client; see its own README for why this is the piece most likely to need real design work
 
-Wiring lives in one `createApp(deps)` function; `server.ts` calls it with real dependencies, tests call it with fakes. Full design in [`../docs/architecture.md`](../docs/architecture.md); the first slice being built is scoped in [`../docs/v1.md`](../docs/v1.md).
+Wiring lives in one `createApp(deps)` function; `server.ts` calls it with real dependencies, tests call it with fakes. Full design in [`../docs/architecture.md`](../docs/architecture.md).

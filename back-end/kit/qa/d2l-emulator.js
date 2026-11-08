@@ -31,16 +31,8 @@
        mode: 'browse'         // optional; inferred from role if omitted
      });
 
-   Content topic: avenue 'topic' emulates a page served same-origin with
-   the tenant instead of a SCORM package. No SCORM API is installed, and
-   the Brightspace API is reachable per brightspaceApi.sessionAuthWorks,
-   answering whoami and myenrollments/{ou} with learner.role as
-   Access.ClasslistRoleName. Install it in the topic's own window:
-     var emu = D2LEmulator.install({
-       avenue: 'topic',
-       profile: profile,
-       learner: { id: 'zzqa-02', name: 'Gill, Mark', role: 'Instructor' }
-     });
+   Content topic: pass avenue: 'topic' and install it in the topic's own
+   window. It answers whoami and myenrollments/{ou} with learner.role.
    ===================================================================== */
 
 (function (global) {
@@ -406,8 +398,6 @@
         return Promise.reject(new TypeError('Failed to fetch'));
       }
 
-      /* MEASURED (tenant-profile.json: roleDetection): the caller's enrollment
-         in an org unit, with its role as Access.ClasslistRoleName. */
       var enrollment = /\/enrollments\/myenrollments\/(\d+)\/?$/.exec(url.split(/[?#]/)[0]);
       if (enrollment) {
         return jsonResponse(200, {
