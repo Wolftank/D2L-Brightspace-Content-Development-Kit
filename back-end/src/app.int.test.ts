@@ -61,6 +61,9 @@ function fakeDeps(): Deps {
       start: () => {
         throw new Error('not used by these tests');
       },
+      cancel: () => {
+        throw new Error('not used by these tests');
+      },
     },
     messages: {
       list: () => {

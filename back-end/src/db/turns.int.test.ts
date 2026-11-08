@@ -101,6 +101,16 @@ describe('turns repo', () => {
     expect(turns.start('missing')).toBeUndefined();
   });
 
+  it('cancels a turn only while it is queued, so the runner cannot start it', () => {
+    insertTurn('queued', 'queued');
+    insertTurn('running', 'running');
+
+    expect(turns.cancelQueued('queued')).toMatchObject({ id: 'queued', status: 'cancelled', finishedAt: expect.any(Number) });
+    expect(turns.start('queued')).toBeUndefined();
+    expect(turns.cancelQueued('running')).toBeUndefined();
+    expect(turns.get('running')?.status).toBe('running');
+  });
+
   it('stores the final status, finish time, error, usage, and reply', () => {
     insertTurn('turn-1', 'running');
 

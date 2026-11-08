@@ -18,6 +18,14 @@ export class NotFound extends Error {
   }
 }
 
+/** The requested turn does not exist or is not the caller's. */
+export class TurnNotFound extends Error {
+  constructor() {
+    super('Turn not found');
+    this.name = 'TurnNotFound';
+  }
+}
+
 /** A project already has a `queued` or `running` turn; the caller must wait for it. */
 export class TurnActive extends Error {
   constructor(public readonly turnId: string) {
@@ -73,6 +81,7 @@ export const API_ERRORS = {
   payload_too_large: { status: 413, message: 'The request is too large.', nextStep: 'smaller_request' },
   not_found: { status: 404, message: "This project doesn't exist.", nextStep: 'new_project' },
   build_not_found: { status: 404, message: "This build doesn't exist.", nextStep: 'send_again' },
+  turn_not_found: { status: 404, message: "This request doesn't exist.", nextStep: 'send_again' },
   turn_active: { status: 409, message: 'A request is already running for this project.', nextStep: 'wait' },
   build_not_ready: { status: 409, message: "This build isn't ready to download.", nextStep: 'try_later' },
   build_failed: { status: 409, message: "This build failed, so it can't be downloaded.", nextStep: 'ask_for_fix' },
@@ -98,6 +107,7 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   if (err instanceof Forbidden) return send(res, 'forbidden');
   if (err instanceof NotFound) return send(res, 'not_found');
   if (err instanceof BuildNotFound) return send(res, 'build_not_found');
+  if (err instanceof TurnNotFound) return send(res, 'turn_not_found');
   if (err instanceof TurnActive) return send(res, 'turn_active', { turnId: err.turnId });
   if (err instanceof BuildNotReady) return send(res, 'build_not_ready');
   if (err instanceof BuildFailed) return send(res, 'build_failed');

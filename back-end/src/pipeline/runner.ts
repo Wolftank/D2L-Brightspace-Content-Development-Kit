@@ -30,10 +30,10 @@ export const TURN_ERRORS: Record<RunnerErrorCode, Omit<TurnError, 'code'>> = {
 };
 
 export interface RunnerDeps {
-  turns: Pick<TurnsRepo, 'start' | 'finish' | 'failActive'>;
+  turns: Pick<TurnsRepo, 'start' | 'cancelQueued' | 'finish' | 'failActive'>;
   messages: Pick<MessagesRepo, 'get' | 'create'>;
   events: Pick<EventService, 'append'>;
-  sessions: SessionService;
+  sessions: Pick<SessionService, 'acquire' | 'release' | 'close'>;
   workspaces: Pick<WorkspaceService, 'hashOutput'>;
   builds: Pick<BuildService, 'create' | 'latest'>;
   /** The caps on every turn. */
@@ -48,6 +48,10 @@ export interface Runner {
    * turn and reported through the event stream.
    */
   executeTurn(turnId: string): Promise<void>;
+  /** Cancels a `queued` or `running` turn, and does nothing for any other. */
+  cancel(turnId: string): void;
+  /** Cancels every running turn and resolves once each has ended. */
+  cancelAll(): Promise<void>;
   /** Fails every `queued` or `running` turn with code `interrupted`. Call once at startup, after the back end holds its port and before it handles a request. */
   failInterrupted(): void;
 }
@@ -158,8 +162,14 @@ export function createRunner(deps: RunnerDeps): Runner {
   }
 
   /** Sends the request and reports the agent's progress, failing any tool call left unfinished when the agent's events end. On a thrown error the turn's agent work is aborted. */
-  async function converse(turn: Turn, session: AgentSession, input: TurnInput, replyId: string, feed: StatusFeed): Promise<Conversation> {
-    const controller = new AbortController();
+  async function converse(
+    turn: Turn,
+    session: AgentSession,
+    input: TurnInput,
+    replyId: string,
+    feed: StatusFeed,
+    controller: AbortController,
+  ): Promise<Conversation> {
     const replies: StreamedReply[] = [{ id: replyId, text: '' }];
     try {
       const agentTurn = session.send(input, deps.turnLimits, controller.signal);
@@ -180,11 +190,17 @@ export function createRunner(deps: RunnerDeps): Runner {
   }
 
   /** Acquires the project's session for the conversation, then releases it after a completed result and closes it otherwise. */
-  async function converseInSession(turn: Turn, input: TurnInput, replyId: string, feed: StatusFeed): Promise<Conversation> {
+  async function converseInSession(
+    turn: Turn,
+    input: TurnInput,
+    replyId: string,
+    feed: StatusFeed,
+    controller: AbortController,
+  ): Promise<Conversation> {
     const session = await deps.sessions.acquire(turn.projectId);
     let conversation: Conversation | undefined;
     try {
-      conversation = await converse(turn, session, input, replyId, feed);
+      conversation = await converse(turn, session, input, replyId, feed, controller);
       return conversation;
     } finally {
       if (conversation?.result.status === 'completed') {
@@ -206,7 +222,7 @@ export function createRunner(deps: RunnerDeps): Runner {
     await deps.builds.create(turn.projectId, turn.id);
   }
 
-  async function run(turn: RunningTurn): Promise<FinishTurnInput> {
+  async function run(turn: RunningTurn, controller: AbortController): Promise<FinishTurnInput> {
     append(turn, 'turn.started', { turnId: turn.id, startedAt: turn.startedAt });
     turnLog(turn).info('Turn started');
     const startHash = await deps.workspaces.hashOutput(turn.projectId);
@@ -214,7 +230,7 @@ export function createRunner(deps: RunnerDeps): Runner {
     turnLog(turn).debug({ messageId: turn.messageId, text: input.text }, 'Instructor message');
     let replyId: string = randomUUID();
     const feed = statusFeed(turn);
-    const { result, replies } = await converseInSession(turn, input, replyId, feed);
+    const { result, replies } = await converseInSession(turn, input, replyId, feed, controller);
 
     if (result.status === 'cancelled') return { status: 'cancelled', usage: result.usage };
     if (result.status === 'failed') {
@@ -267,21 +283,52 @@ export function createRunner(deps: RunnerDeps): Runner {
     }
   }
 
+  async function runToEnd(turn: RunningTurn, controller: AbortController): Promise<void> {
+    let outcome: FinishTurnInput;
+    try {
+      outcome = await run(turn, controller);
+    } catch (err) {
+      outcome = failure(turn, thrownCode(err), err);
+    }
+    finish(turn, outcome);
+  }
+
+  const running = new Map<string, { controller: AbortController; ended: Promise<void> }>();
+
   return {
     async executeTurn(turnId) {
       try {
         const turn = deps.turns.start(turnId);
         if (!turn) return;
-        let outcome: FinishTurnInput;
+        const controller = new AbortController();
+        const ended = runToEnd(turn, controller);
+        running.set(turnId, { controller, ended });
         try {
-          outcome = await run(turn);
-        } catch (err) {
-          outcome = failure(turn, thrownCode(err), err);
+          await ended;
+        } finally {
+          running.delete(turnId);
         }
-        finish(turn, outcome);
       } catch (err) {
         log.error({ turnId, err }, 'Failed to run the turn');
       }
+    },
+
+    cancel(turnId) {
+      const turn = running.get(turnId);
+      if (turn) {
+        turn.controller.abort();
+        return;
+      }
+      const cancelled = deps.turns.cancelQueued(turnId);
+      if (!cancelled) return;
+      turnLog(cancelled).info('Turn cancelled');
+      append(cancelled, 'turn.cancelled', { turnId });
+    },
+
+    async cancelAll() {
+      const turns = [...running.values()];
+      for (const { controller } of turns) controller.abort();
+      await Promise.allSettled(turns.map(({ ended }) => ended));
     },
 
     failInterrupted() {

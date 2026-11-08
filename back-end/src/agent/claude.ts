@@ -10,6 +10,7 @@ import {
   type HookJSONOutput,
   type McpSdkServerConfigWithInstance,
   type Options,
+  type Query,
   type SDKAssistantMessageError,
   type SDKMessage,
   type SDKPermissionDeniedMessage,
@@ -372,6 +373,16 @@ function buildPrompt(input: TurnInput): string {
   return `${input.text}\n\nAttached files:\n${list}`;
 }
 
+/** How long an interrupted turn may take to end before its query is aborted. */
+export const INTERRUPT_GRACE_MS = 3_000;
+
+/** Interrupts the turn as Claude Code's Esc key does, aborting the query if that fails or takes longer than `INTERRUPT_GRACE_MS`. */
+function interrupt(stream: Query, controller: AbortController, ended: Promise<unknown>): void {
+  const fallback = setTimeout(() => controller.abort(), INTERRUPT_GRACE_MS);
+  void ended.finally(() => clearTimeout(fallback));
+  stream.interrupt().catch(() => controller.abort());
+}
+
 /** Confirmed 2026-09-15 (docs/drivers.md, "Cancellation"): an aborted query
  *  throws a plain `Error('Operation aborted')`, not a DOMException. Checking
  *  `signal.aborted` alongside the message covers a race between the two. */
@@ -490,6 +501,7 @@ interface StreamingToolCall {
  * Messages from a subagent (a non-null `parent_tool_use_id`) produce no
  * events. A tool call's `tool_start` is emitted from its streaming input as
  * soon as its summary is known, or else from the completed assistant message.
+ * A failed result after `signal` fires resolves `cancelled`.
  */
 export async function* mapClaudeStream(
   messages: AsyncIterable<SDKMessage>,
@@ -589,10 +601,16 @@ export async function* mapClaudeStream(
           }
           break;
         }
-        case 'result':
+        case 'result': {
           onSessionId(message.session_id);
-          resolveResult(mapResult(message, textBuf, assistantError));
+          const result = mapResult(message, textBuf, assistantError);
+          resolveResult(
+            signal.aborted && result.status === 'failed'
+              ? { status: 'cancelled', sessionId: result.sessionId, text: textBuf, usage: result.usage }
+              : result,
+          );
           return;
+        }
         default:
           break;
       }
@@ -650,7 +668,6 @@ function createClaudeSession(req: SessionRequest, settings: ClaudeSettings): Age
     send(input: TurnInput, limits: TurnLimits, signal: AbortSignal): AgentTurn {
       const controller = new AbortController();
       if (signal.aborted) controller.abort();
-      signal.addEventListener('abort', () => controller.abort(), { once: true });
 
       const options: Options = {
         cwd: req.workspaceDir,
@@ -680,6 +697,7 @@ function createClaudeSession(req: SessionRequest, settings: ClaudeSettings): Age
       // query() itself never throws synchronously (it returns an async
       // generator); a spawn failure surfaces from the first `for await` step.
       const stream = query({ prompt: buildPrompt(input), options });
+      signal.addEventListener('abort', () => interrupt(stream, controller, result), { once: true });
       const checked = enforceCapabilities(stream, allowedCapabilities(req), controller);
       const events = mapClaudeStream(
         checked,

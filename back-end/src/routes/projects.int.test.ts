@@ -39,7 +39,7 @@ describe('project routes', () => {
       }),
       builds: createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces: workspaceService, events }),
       events,
-      turns: createTurnService({ projects: projectsRepo, turns: createTurnsRepo(db), runner: { executeTurn: async () => {} } }),
+      turns: createTurnService({ projects: projectsRepo, turns: createTurnsRepo(db), runner: { executeTurn: async () => {}, cancel: () => {} } }),
       messages: {
         list: () => {
           throw new Error('not used by these tests');

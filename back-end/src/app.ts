@@ -10,6 +10,7 @@ import { healthRouter } from './routes/health.js';
 import { meRouter } from './routes/me.js';
 import { messagesRouter } from './routes/messages.js';
 import { projectsRouter } from './routes/projects.js';
+import { turnsRouter } from './routes/turns.js';
 import { requestLog } from './request-log.js';
 
 /** Builds the app from `deps` without listening. Real deps come from
@@ -27,6 +28,7 @@ export function createApp(deps: Deps): Express {
   app.use('/api', meRouter(deps));
   app.use('/api', projectsRouter(deps));
   app.use('/api', messagesRouter(deps));
+  app.use('/api', turnsRouter(deps));
   app.use('/api', buildsRouter(deps));
   app.use('/api', eventsRouter(deps));
   app.use('/api', (_req, _res, next) => next(new NotFound('Not found')));

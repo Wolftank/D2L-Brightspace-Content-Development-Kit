@@ -4,12 +4,13 @@ import { createServer, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { CreateProjectResponse, SendMessageResponse } from '@cdk/contract';
 import type Database from 'better-sqlite3';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBuildsRepo } from './db/builds.js';
 import { type Db, openDb } from './db/index.js';
 import { createProjectsRepo } from './db/projects.js';
-import { builds as buildsTable, turns as turnsTable, type Build, type Turn } from './db/schema.js';
+import { builds as buildsTable, events as eventsTable, turns as turnsTable, type Build, type Turn } from './db/schema.js';
 import { createTurnsRepo } from './db/turns.js';
 import { createUsersRepo } from './db/users.js';
 
@@ -29,8 +30,12 @@ describe('server startup', () => {
     }
   }
 
-  function storedTurn(): Turn {
-    return withDb((db) => db.select().from(turnsTable).all()[0]!);
+  function storedTurn(id = 'turn-1'): Turn {
+    return withDb((db) => db.select().from(turnsTable).all().find((turn) => turn.id === id)!);
+  }
+
+  function storedEventKinds(turnId: string): string[] {
+    return withDb((db) => db.select().from(eventsTable).all().filter((event) => event.turnId === turnId).map((event) => event.kind));
   }
 
 
@@ -56,14 +61,19 @@ describe('server startup', () => {
     return new Promise((resolve) => blocker!.close(() => resolve()));
   }
 
-  /** Runs `src/server.ts` with `settings` until it exits or logs that it is listening. */
-  function runServer(port: number, settings: Record<string, string> = {}): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  /** Runs `src/server.ts` with `settings` until it exits or logs that it is listening. With `channel`, it has an IPC channel, as under the desktop app. */
+  function runServer(
+    port: number,
+    settings: Record<string, string> = {},
+    { channel = false } = {},
+  ): Promise<{ code: number | null; stdout: string; stderr: string }> {
     return new Promise((resolve) => {
       let stdout = '';
       let stderr = '';
       child = spawn(process.execPath, ['--import', 'tsx', 'src/server.ts'], {
         cwd: BACK_END,
         env: { ...process.env, PORT: String(port), DATA_DIR: dataDir, ...settings },
+        stdio: channel ? ['ignore', 'pipe', 'pipe', 'ipc'] : 'pipe',
       });
       child.stdout!.on('data', (chunk) => {
         stdout += chunk;
@@ -121,6 +131,42 @@ describe('server startup', () => {
     expect(await logRecords()).toContainEqual(expect.objectContaining({ msg: 'back-end listening', url: `http://127.0.0.1:${port}` }));
     expect(storedTurn()).toMatchObject({ status: 'failed', error: { code: 'interrupted' } });
     expect(storedBuild()).toMatchObject({ status: 'failed', error: { code: 'interrupted' } });
+  }, 30_000);
+
+  it.each([
+    ['sends the shutdown message, as the app does when it quits', 'app quit', (server: ChildProcess) => server.send('shutdown')],
+    ['closes its channel, as when the app crashes', 'app gone', (server: ChildProcess) => server.disconnect()],
+  ])('cancels the running turn and exits when the app %s, so the next start leaves the turn cancelled, not interrupted', async (_case, trigger, stop) => {
+    const port = await listenOnFreePort();
+    await closeBlocker();
+    await runServer(port, { AGENT_DRIVER: 'scripted' }, { channel: true });
+    const post = async <T>(path: string, body: unknown): Promise<T> => {
+      const res = await fetch(`http://127.0.0.1:${port}/api${path}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      return (await res.json()) as T;
+    };
+    const { project } = await post<CreateProjectResponse>('/projects', { title: 'Cell division practice' });
+    const { turn } = await post<SendMessageResponse>(`/projects/${project.id}/messages`, { content: [{ type: 'text', text: '[long-step] Create a practice set' }] });
+    // The scripted agent's second status line starts its long step.
+    await vi.waitFor(() => expect(storedEventKinds(turn.id).filter((kind) => kind === 'turn.status')).toHaveLength(2), { timeout: 10_000, interval: 50 });
+
+    const exited = new Promise((resolve) => child!.once('exit', resolve));
+    stop(child!);
+
+    expect(await exited).toBe(0);
+    expect(storedTurn(turn.id)).toMatchObject({ status: 'cancelled', error: null });
+    expect(storedEventKinds(turn.id).at(-1)).toBe('turn.cancelled');
+    const records = await logRecords();
+    expect(records).toContainEqual(expect.objectContaining({ msg: 'back-end stopping', trigger }));
+    expect(records).toContainEqual(expect.objectContaining({ msg: 'Turn cancelled', turnId: turn.id }));
+    expect(records.at(-1)).toMatchObject({ msg: 'back-end stopped' });
+
+    await runServer(port, { AGENT_DRIVER: 'scripted' });
+
+    expect(storedTurn(turn.id)).toMatchObject({ status: 'cancelled', error: null });
   }, 30_000);
 
   it('logs its data folder and settings at startup, and no secret from the environment', async () => {

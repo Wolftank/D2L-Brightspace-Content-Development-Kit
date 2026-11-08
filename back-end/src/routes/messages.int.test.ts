@@ -33,7 +33,7 @@ describe('POST /api/projects/:projectId/messages', () => {
     const deps: Deps = {
       users: createUsersRepo(db),
       projects: { create: unused, get: unused, list: unused },
-      turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, runner: { executeTurn } }),
+      turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, runner: { executeTurn, cancel: unused } }),
       messages: { list: unused },
       builds: { get: unused, download: unused, previewFile: unused },
       events,
@@ -201,7 +201,7 @@ describe('GET /api/projects/:projectId/messages', () => {
     const deps: Deps = {
       users: createUsersRepo(db),
       projects: { create: unused, get: unused, list: unused },
-      turns: { start: unused },
+      turns: { start: unused, cancel: unused },
       messages: createMessageService({ projects: projectsRepo, messages: messagesRepo }),
       builds: { get: unused, download: unused, previewFile: unused },
       events: createEventService(createEventsRepo(db)),

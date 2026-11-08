@@ -115,10 +115,28 @@ describe('F10 conversation', () => {
     expect(screen.getByLabelText('Describe a change')).toHaveValue('Make it shorter next.');
     expect(screen.getByRole('button', { name: 'Working…' })).toBeDisabled();
   });
+  it('can stop a queued request and waits for confirmation before allowing a follow-up', async () => {
+    render(<ProjectWorkspace initialProject={project} initialTurnId="queued-turn" />);
+    const stop = screen.getByRole('button', { name: 'Stop request' });
+    fetchMock.mockResolvedValueOnce(Response.json({ error: { message: 'Service unavailable.', nextStep: 'try_later' } }, { status: 503 }));
+    fireEvent.click(stop);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unable to stop the request. Service unavailable.');
+    expect(stop).toBeEnabled();
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 202 }));
+    await act(async () => { fireEvent.click(stop); });
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/turns/queued-turn/cancel', { method: 'POST' });
+    expect(screen.getByRole('button', { name: 'Stopping…' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Working…' })).toBeDisabled();
+    emit({ seq: 1, kind: 'turn.cancelled', payload: { turnId: 'queued-turn' } });
+    expect(screen.queryByRole('button', { name: 'Stopping…' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled();
+    expect(screen.getByText('Request stopped. You can send a follow-up.')).toHaveAttribute('role', 'status');
+  });
+
   it('shows a cancelled request in the conversation', async () => {
     render(<ProjectWorkspace />); await firstRequest();
     emit({ seq: 2, kind: 'turn.cancelled', payload: { turnId: 't1' } });
-    expect(within(screen.getByLabelText('Conversation history')).getByText('This request was cancelled.')).toBeVisible();
+    expect(within(screen.getByLabelText('Conversation history')).getByText('Request stopped.')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled();
   });
   it('replaces the latest build while retaining the last ready preview after QA failure', async () => {

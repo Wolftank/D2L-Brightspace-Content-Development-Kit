@@ -106,6 +106,38 @@ describe('ClaudeAgentDriver, live SDK', () => {
     expect(result2.text.toLowerCase()).toContain('hello.txt');
   }, 60_000);
 
+  it('ends a turn cancelled when its signal fires mid-turn, then continues the same session on the next turn', async () => {
+    const session = await driver.open(baseRequest(workspaceDir, skillsDir));
+    const controller = new AbortController();
+
+    const turn1 = session.send(
+      {
+        text: 'My favourite colour is teal. Use the Write tool to create out/essay.txt containing a 2,000-word essay on the history of the colour teal. Do not ask questions.',
+        attachments: [],
+      },
+      { maxSteps: 6, maxBudgetUsd: 1 },
+      controller.signal,
+    );
+    for await (const event of turn1.events) {
+      if (event.kind === 'tool_start' || event.kind === 'text_delta') controller.abort();
+    }
+    const result1 = await turn1.result;
+    expect(result1.status).toBe('cancelled');
+    expect(result1.sessionId).toBeTruthy();
+
+    const reopened = await driver.open(baseRequest(workspaceDir, skillsDir, result1.sessionId));
+    const turn2 = reopened.send(
+      { text: 'What did I say my favourite colour is? Reply with only the colour.', attachments: [] },
+      { maxSteps: 4, maxBudgetUsd: 1 },
+      new AbortController().signal,
+    );
+    await drain(turn2.events);
+    const result2 = await turn2.result;
+    expect(result2.status).toBe('completed');
+    expect(result2.sessionId).toBe(result1.sessionId);
+    expect(result2.text.toLowerCase()).toContain('teal');
+  }, 90_000);
+
   it('refuses a Write outside the workspace', async () => {
     // `Write(/**)`/`Edit(/**)` are workspace-relative (docs/drivers.md:
     // "`/` is workspace-relative"), so a path outside workspaceDir matches

@@ -591,6 +591,30 @@ describe('mapClaudeStream: cancellation', () => {
     expect(result?.status).toBe('cancelled');
   });
 
+  it('keeps a turn that completed as its signal fired completed', async () => {
+    const { mapClaudeStream } = await import('./claude.js');
+
+    async function* completedStream(): AsyncGenerator<SDKMessage> {
+      yield {
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        result: 'Done.',
+        session_id: 'session-1',
+        usage: { input_tokens: 5, output_tokens: 2 },
+        total_cost_usd: 0.01,
+        num_turns: 1,
+      } as unknown as SDKMessage;
+    }
+
+    const controller = new AbortController();
+    controller.abort();
+    let result: TurnResult | undefined;
+    for await (const event of mapClaudeStream(completedStream(), controller.signal, (r) => (result = r), () => {})) void event;
+
+    expect(result).toMatchObject({ status: 'completed', text: 'Done.' });
+  });
+
   it('resolves failed for a non-abort error', async () => {
     const { mapClaudeStream } = await import('./claude.js');
 
