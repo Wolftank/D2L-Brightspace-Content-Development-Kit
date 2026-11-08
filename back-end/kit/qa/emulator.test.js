@@ -142,6 +142,44 @@ console.log('\n== 6. API boundary ==');
   check('instructor gets 200 on classlist', res.status === 200);
   emu.uninstall();
 
+  console.log('\n== 7. content topic ==');
+  emu = D2LEmulator.install({ avenue: 'topic', profile, learner: { id: 'zzqa-11', name: 'Doe, Jane', role: 'Student' } });
+  check('no SCORM 1.2 API for a topic', window.API === undefined);
+  check('no SCORM 2004 API for a topic', window.API_1484_11 === undefined);
+  res = await fetch('/d2l/api/lp/1.5/users/whoami', { credentials: 'include' });
+  let me = await res.json();
+  check('topic whoami 200 with session auth', res.status === 200);
+  check('  -> names the viewer', me.Identifier === 'zzqa-11' && me.FirstName === 'Jane' && me.LastName === 'Doe');
+  res = await fetch('/d2l/api/lp/1.44/enrollments/myenrollments/2613967', { credentials: 'include' });
+  let enr = await res.json();
+  check('topic myenrollments 200', res.status === 200);
+  check('  -> student role as ClasslistRoleName', enr.Access.ClasslistRoleName === 'Student');
+  check('  -> for the org unit asked about', enr.OrgUnit.Id === 2613967);
+  check('  -> active and accessible', enr.Access.IsActive === true && enr.Access.CanAccess === true);
+  check('no api-from-scorm violation for a topic', !emu.report().violations.some(v => v.kind === 'api-from-scorm'));
+  check('report names the avenue', emu.report().avenue === 'topic');
+  res = await fetch('/d2l/api/lp/1.44/enrollments/orgUnits/2613967/users/');
+  check('unemulated route answers 404', res.status === 404);
+  emu.uninstall();
+
+  emu = D2LEmulator.install({ avenue: 'topic', profile, learner: { id: 'zzqa-12', name: 'Gill, Mark', role: 'Instructor' } });
+  enr = await (await fetch('/d2l/api/lp/1.44/enrollments/myenrollments/2613967')).json();
+  check('instructor role as ClasslistRoleName', enr.Access.ClasslistRoleName === 'Instructor');
+  check('  -> with the LIS instructor role', enr.Access.LISRoles[0] === 'urn:lti:role:ims/lis/Instructor');
+  emu.uninstall();
+
+  const p4 = JSON.parse(JSON.stringify(profile));
+  p4.brightspaceApi.sessionAuthWorks = { value: false, verified: false };
+  emu = D2LEmulator.install({ avenue: 'topic', profile: p4, learner: { id: 'zzqa-13', name: 'Ng, Nia', role: 'Student' } });
+  res = await fetch('/d2l/api/lp/1.5/users/whoami');
+  check('topic gets 401 when session auth does not work', res.status === 401);
+  check('  -> and the unverified constraint is warned', emu.report().violations.some(v => v.kind === 'unverified-constraint'));
+  emu.uninstall();
+
+  let refused = false;
+  try { D2LEmulator.install({ avenue: 'widget', profile }); } catch (e) { refused = true; }
+  check('an avenue it does not emulate is refused', refused);
+
   console.log('\n' + (fail === 0 ? 'ALL PASS' : fail + ' FAILED') + '  (' + pass + ' passed)\n');
   process.exit(fail === 0 ? 0 : 1);
 })();

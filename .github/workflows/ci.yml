@@ -117,11 +117,11 @@ jobs:
         with:
           node-version: 24
       - name: Kit QA gate tests (lint.test.js)
-        run: node harness/lint/lint.test.js
+        run: node qa/lint/lint.test.js
         working-directory: back-end/kit
       - name: Kit emulator tests (emulator.test.js)
         if: success() || failure()
-        run: node harness/emulator.test.js
+        run: node qa/emulator.test.js
         working-directory: back-end/kit
       - name: Kit routing tests (routing.test.js)
         if: success() || failure()

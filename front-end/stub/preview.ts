@@ -6,10 +6,10 @@ const fixture = new URL('./fixtures/preview/', import.meta.url);
 const files = new Map(['index.html', 'imsmanifest.xml', 'sample.css'].map((name) => [name, readFileSync(new URL(name, fixture))]));
 export const previewZip = readFileSync(new URL('./fixtures/preview.zip', import.meta.url));
 const player = new URL('../../back-end/preview/', import.meta.url);
-const harness = new URL('../../back-end/kit/harness/', import.meta.url);
+const qaDir = new URL('../../back-end/kit/qa/', import.meta.url);
 const playerFiles = new Map([
   ...['player.html', 'player.js', 'player.css'].map((name) => [name, readFileSync(new URL(name, player))] as const),
-  ...['d2l-emulator.js', 'tenant-profile.json'].map((name) => [name, readFileSync(new URL(name, harness))] as const),
+  ...['d2l-emulator.js', 'tenant-profile.json'].map((name) => [name, readFileSync(new URL(name, qaDir))] as const),
 ]);
 const contentTypes: Record<string, string> = { html: 'text/html', js: 'text/javascript', css: 'text/css', json: 'application/json', xml: 'application/xml' };
 

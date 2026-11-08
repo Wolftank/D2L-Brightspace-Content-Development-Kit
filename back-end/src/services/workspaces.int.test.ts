@@ -48,7 +48,7 @@ describe('workspace service', () => {
 
   describe('create', () => {
     it('provisions files/, out/ with the SCORM starter, and a sibling builds/ dir, and nothing else', async () => {
-      await workspaces.create(projectId);
+      await workspaces.create(projectId, 'scorm');
       const workspaceDir = workspaces.pathFor(projectId);
 
       expect((await fs.stat(join(workspaceDir, 'files'))).isDirectory()).toBe(true);
@@ -66,7 +66,7 @@ describe('workspace service', () => {
     });
 
     it('never writes agent-specific files', async () => {
-      await workspaces.create(projectId);
+      await workspaces.create(projectId, 'scorm');
       const workspaceDir = workspaces.pathFor(projectId);
 
       await expect(fs.access(join(workspaceDir, 'CLAUDE.md'))).rejects.toThrow();
@@ -86,7 +86,7 @@ describe('workspace service', () => {
         return realCp(...args);
       };
 
-      await expect(workspaces.create(projectId)).resolves.toBeUndefined();
+      await expect(workspaces.create(projectId, 'scorm')).resolves.toBeUndefined();
       expect(calls).toBeGreaterThan(1);
     });
 
@@ -99,7 +99,7 @@ describe('workspace service', () => {
         throw err;
       };
 
-      await expect(workspaces.create(projectId)).rejects.toMatchObject({ code: 'EBUSY' });
+      await expect(workspaces.create(projectId, 'scorm')).rejects.toMatchObject({ code: 'EBUSY' });
       expect(calls).toBe(LOCK_RETRY_ATTEMPTS);
     });
 
@@ -112,14 +112,14 @@ describe('workspace service', () => {
         throw err;
       };
 
-      await expect(workspaces.create(projectId)).rejects.toMatchObject({ code: 'ENOSPC' });
+      await expect(workspaces.create(projectId, 'scorm')).rejects.toMatchObject({ code: 'ENOSPC' });
       expect(calls).toBe(1);
     });
   });
 
   describe('remove', () => {
     it('removes the workspace and builds, and does nothing for a project with no directory', async () => {
-      await workspaces.create(projectId);
+      await workspaces.create(projectId, 'scorm');
       await workspaces.copyOutput(projectId, '1');
 
       await workspaces.remove(projectId);
@@ -131,7 +131,7 @@ describe('workspace service', () => {
 
   describe('locate', () => {
     it('returns the workspace path once it is provisioned', async () => {
-      await workspaces.create(projectId);
+      await workspaces.create(projectId, 'scorm');
       await expect(workspaces.locate(projectId)).resolves.toBe(workspaces.pathFor(projectId));
     });
 
@@ -146,14 +146,14 @@ describe('workspace service', () => {
     });
 
     it('is stable across calls when out/ is unchanged', async () => {
-      await workspaces.create(projectId);
+      await workspaces.create(projectId, 'scorm');
       const first = await workspaces.hashOutput(projectId);
       const second = await workspaces.hashOutput(projectId);
       expect(second).toBe(first);
     });
 
     it('changes when a file under out/ is edited', async () => {
-      await workspaces.create(projectId);
+      await workspaces.create(projectId, 'scorm');
       const outDir = join(workspaces.pathFor(projectId), 'out');
       const before = await workspaces.hashOutput(projectId);
 
@@ -164,7 +164,7 @@ describe('workspace service', () => {
     });
 
     it('changes when a file is added under out/', async () => {
-      await workspaces.create(projectId);
+      await workspaces.create(projectId, 'scorm');
       const outDir = join(workspaces.pathFor(projectId), 'out');
       const before = await workspaces.hashOutput(projectId);
 
@@ -174,7 +174,7 @@ describe('workspace service', () => {
     });
 
     it('changes when a file is deleted under out/', async () => {
-      await workspaces.create(projectId);
+      await workspaces.create(projectId, 'scorm');
       const outDir = join(workspaces.pathFor(projectId), 'out');
       const before = await workspaces.hashOutput(projectId);
 
@@ -184,7 +184,7 @@ describe('workspace service', () => {
     });
 
     it('changes when a file under out/ is renamed', async () => {
-      await workspaces.create(projectId);
+      await workspaces.create(projectId, 'scorm');
       const outDir = join(workspaces.pathFor(projectId), 'out');
       const before = await workspaces.hashOutput(projectId);
 
@@ -200,7 +200,7 @@ describe('workspace service', () => {
     });
 
     it('copies out/ into builds/<version>/, containing only the generated output', async () => {
-      await workspaces.create(projectId);
+      await workspaces.create(projectId, 'scorm');
       const dest = await workspaces.copyOutput(projectId, '1');
 
       expect(dest).toBe(join(dataDir, 'projects', projectId, 'builds', '1'));
@@ -211,7 +211,7 @@ describe('workspace service', () => {
     });
 
     it('is unaffected by later edits to the workspace', async () => {
-      await workspaces.create(projectId);
+      await workspaces.create(projectId, 'scorm');
       const dest = await workspaces.copyOutput(projectId, '1');
       const originalContent = await fs.readFile(join(dest, 'index.html'), 'utf8');
 
@@ -222,7 +222,7 @@ describe('workspace service', () => {
     });
 
     it('refuses to overwrite an existing build version', async () => {
-      await workspaces.create(projectId);
+      await workspaces.create(projectId, 'scorm');
       await workspaces.copyOutput(projectId, '1');
 
       await expect(workspaces.copyOutput(projectId, '1')).rejects.toThrow(BuildVersionExists);

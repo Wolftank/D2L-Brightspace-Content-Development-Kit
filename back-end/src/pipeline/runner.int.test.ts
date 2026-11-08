@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { inArray } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { AgentDriver, AgentEvent, AgentSession, TurnErrorCode, TurnLimits, TurnResult } from '../agent/AgentDriver.js';
+import { createScriptedAgentDriver } from '../agent/scripted.js';
 import { createBuildsRepo } from '../db/builds.js';
 import { createEventsRepo } from '../db/events.js';
 import type { Db } from '../db/index.js';
@@ -198,7 +199,7 @@ describe('runner, end to end', () => {
 
     const ownerId = createUsersRepo(db).ensureLocalUser().id;
     projectId = projects.create({ id: 'project-1', ownerId, title: 'Cell division practice', avenue: 'scorm' }).id;
-    await workspaces.create(projectId);
+    await workspaces.create(projectId, 'scorm');
   });
 
   afterEach(async () => {
@@ -235,6 +236,41 @@ describe('runner, end to end', () => {
     expect(projects.getById(projectId)?.sessionId).toBe('agent-session-1');
   });
 
+
+  describe('for a content topic, with the scripted agent', () => {
+    beforeEach(async () => {
+      useAgent(createScriptedAgentDriver(), { maxSteps: 60, maxBudgetUsd: 10 });
+      const ownerId = createUsersRepo(db).ensureLocalUser().id;
+      projectId = projects.create({ id: 'topic-1', ownerId, title: 'Lab safety orientation', avenue: 'topic' }).id;
+      await workspaces.create(projectId, 'topic');
+    });
+
+    it('builds a ready topic checked in topic mode, then version 2 for a follow-up', async () => {
+      queueTurn('turn-1', 'queued', 'Create a lab safety orientation');
+      await runner.executeTurn('turn-1');
+      queueTurn('turn-2', 'queued', 'Add the safety contract to the instructor notes [follow-up]');
+      await runner.executeTurn('turn-2');
+
+      const stored = createBuildsRepo(db).listByProject(projectId);
+      expect(stored.map(({ version, status, avenue, turnId }) => ({ version, status, avenue, turnId }))).toEqual([
+        { version: 1, status: 'ready', avenue: 'topic', turnId: 'turn-1' },
+        { version: 2, status: 'ready', avenue: 'topic', turnId: 'turn-2' },
+      ]);
+      expect(stored.flatMap((build) => build.qa!.findings).filter((f) => f.rule.startsWith('scorm/'))).toEqual([]);
+      const secondPage = await fs.readFile(join(workspaces.buildPathFor(projectId, '2'), 'index.html'), 'utf8');
+      expect(secondPage).toContain('safety contract');
+    });
+
+    it('fails the build of a topic the QA gate rejects with qa_failed and its topic findings', async () => {
+      queueTurn('turn-1', 'queued', 'Create a lab safety orientation [qa-fail]');
+      await runner.executeTurn('turn-1');
+
+      const [build] = createBuildsRepo(db).listByProject(projectId);
+      expect(build).toMatchObject({ version: 1, status: 'failed', avenue: 'topic', error: { code: 'qa_failed' } });
+      expect(build!.qa!.findings).toContainEqual(expect.objectContaining({ rule: 'topic/no-static-script-src', severity: 'error' }));
+      expect(turnRow('turn-1').status).toBe('completed');
+    });
+  });
 
   it('creates no build for a turn that leaves the output unchanged', async () => {
     useAgent(steppingDriver(), { maxSteps: 60, maxBudgetUsd: 10 });

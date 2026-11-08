@@ -1,10 +1,11 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import type { BuildableAvenue } from '@cdk/contract';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { KIT_DIR } from '../kit.js';
+import { AVENUE_SKILL, KIT_DIR, skillsFor } from '../kit.js';
 import { createScriptedAgentDriver } from './scripted.js';
 import type { AgentEvent, AgentSession, SessionRequest } from './AgentDriver.js';
 
@@ -21,11 +22,11 @@ async function play(session: AgentSession, text: string, signal = new AbortContr
   return { events, result: await turn.result };
 }
 
-/** The QA gate's report on `outDir` for a SCORM package. */
-async function gate(outDir: string): Promise<{ pass: boolean; findings: Array<{ rule: string; severity: string }> }> {
-  const lint = join(KIT_DIR, 'harness', 'lint', 'lint.js');
+/** The QA gate's report on `outDir` for `avenue`. */
+async function gate(outDir: string, avenue: BuildableAvenue = 'scorm'): Promise<{ pass: boolean; findings: Array<{ rule: string; severity: string }> }> {
+  const lint = join(KIT_DIR, 'qa', 'lint', 'lint.js');
   try {
-    const { stdout } = await execFileAsync(process.execPath, [lint, outDir, '--avenue', 'scorm', '--json']);
+    const { stdout } = await execFileAsync(process.execPath, [lint, outDir, '--avenue', avenue, '--json']);
     return JSON.parse(stdout);
   } catch (err) {
     return JSON.parse((err as { stdout: string }).stdout);
@@ -149,5 +150,51 @@ describe('scripted agent driver', () => {
     } finally {
       await rm(otherDir, { recursive: true, force: true });
     }
+  });
+
+  describe('for a content topic', () => {
+    /** A session offered the content-topic skills, in a workspace provisioned with the content-topic starter. */
+    async function openTopic(): Promise<AgentSession> {
+      await cp(join(KIT_DIR, 'skills', AVENUE_SKILL.topic, 'assets', 'starter'), join(dir, 'out'), { recursive: true });
+      return createScriptedAgentDriver().open({ ...request(dir), skills: skillsFor('topic') });
+    }
+
+    it('builds a topic from the content-topic starter that passes the QA gate in topic mode', async () => {
+      const session = await openTopic();
+
+      const { events, result } = await play(session, 'Create a lab safety orientation');
+
+      expect(result).toMatchObject({ status: 'completed' });
+      expect(result.text).toContain('lab safety orientation');
+      expect(events).toContainEqual({ kind: 'status', text: 'Building from the content-topic starter', category: 'building' });
+      expect(events.filter((event) => event.kind === 'tool_start').map((event) => event.summary)).toEqual(['Writing index.html']);
+      const html = await readFile(join(dir, 'out', 'index.html'), 'utf8');
+      expect(html).toContain('<title>Lab Safety Orientation</title>');
+      expect(html).toContain('myenrollments');
+      expect(await gate(join(dir, 'out'), 'topic')).toMatchObject({ pass: true });
+    });
+
+    it('builds a topic the QA gate rejects for [qa-fail]', async () => {
+      const session = await openTopic();
+
+      await play(session, 'Build something [qa-fail]');
+
+      const report = await gate(join(dir, 'out'), 'topic');
+      expect(report.pass).toBe(false);
+      expect(report.findings).toContainEqual(expect.objectContaining({ rule: 'topic/no-static-script-src', severity: 'error' }));
+    });
+
+    it('changes the topic for [follow-up], and it still passes', async () => {
+      const session = await openTopic();
+      await play(session, 'Create a lab safety orientation');
+      const first = await readFile(join(dir, 'out', 'index.html'), 'utf8');
+
+      await play(session, 'Add the safety contract [follow-up]');
+
+      const second = await readFile(join(dir, 'out', 'index.html'), 'utf8');
+      expect(second).not.toBe(first);
+      expect(second).toContain('safety contract');
+      expect(await gate(join(dir, 'out'), 'topic')).toMatchObject({ pass: true });
+    });
   });
 });

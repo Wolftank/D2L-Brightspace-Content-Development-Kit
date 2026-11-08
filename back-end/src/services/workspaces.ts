@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import { join } from 'node:path';
+import type { BuildableAvenue } from '@cdk/contract';
 import { WorkspaceMissing } from '../errors.js';
-import { KIT_DIR } from '../kit.js';
+import { AVENUE_SKILL, KIT_DIR } from '../kit.js';
 
 // Windows can hold a file open for a moment (the preview server, antivirus)
 // right after it was written. Three attempts, 100ms apart, clears that
@@ -29,9 +30,9 @@ export interface WorkspaceService {
 
   /**
    * Provisions a fresh workspace: an empty `files/` for instructor uploads,
-   * the SCORM starter copied into `out/`, and the sibling `builds/` directory. Writes nothing agent-specific.
+   * the avenue's starter copied into `out/`, and the sibling `builds/` directory. Writes nothing agent-specific.
    */
-  create(projectId: string): Promise<void>;
+  create(projectId: string, avenue: BuildableAvenue): Promise<void>;
 
   /** Removes the project's directory, its workspace and builds included. */
   remove(projectId: string): Promise<void>;
@@ -60,7 +61,6 @@ export class BuildVersionExists extends Error {
 
 export function createWorkspaceService(deps: WorkspaceServiceDeps): WorkspaceService {
   const kitDir = deps.kitDir ?? KIT_DIR;
-  const starterDir = join(kitDir, 'skills', 'd2l-scorm-package', 'assets', 'starter');
 
   function projectDir(projectId: string): string {
     return join(deps.dataDir, 'projects', projectId);
@@ -86,7 +86,8 @@ export function createWorkspaceService(deps: WorkspaceServiceDeps): WorkspaceSer
     return workspaceDir;
   }
 
-  async function create(projectId: string): Promise<void> {
+  async function create(projectId: string, avenue: BuildableAvenue): Promise<void> {
+    const starterDir = join(kitDir, 'skills', AVENUE_SKILL[avenue], 'assets', 'starter');
     const workspaceDir = pathFor(projectId);
     await fs.mkdir(join(workspaceDir, 'files'), { recursive: true });
     await copyWithRetry(starterDir, join(workspaceDir, 'out'));

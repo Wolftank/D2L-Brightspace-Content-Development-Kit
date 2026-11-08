@@ -2,7 +2,7 @@
 
 The back end (`src/`): runs turns with the agent, runs the QA gate and the pedagogy check against `kit/`, creates builds, deploys to D2L, and translates findings into plain language for the front end.
 
-`kit/` is the actual D2L Content Development Kit — the skills, lint/harness, and probes carried over from the internship prototype. It's hardened and extended in place as part of this project, not treated as a frozen reference copy. It stays plain CommonJS JavaScript (its own `kit/package.json` sets `"type": "commonjs"`) and is not part of the TypeScript toolchain below.
+`kit/` is the actual D2L Content Development Kit — the skills, QA/lint gate, and probes carried over from the internship prototype. It's hardened and extended in place as part of this project, not treated as a frozen reference copy. It stays plain CommonJS JavaScript (its own `kit/package.json` sets `"type": "commonjs"`) and is not part of the TypeScript toolchain below.
 
 ## Setup
 
@@ -53,18 +53,18 @@ Copy-Item .env.example .env
 
 ### The scripted agent
 
-`AGENT_DRIVER=scripted` replaces the agent with fixed turns that make no AI calls, so the real runner, build service, QA gate, and event stream run end to end for free. A marker in the instructor's message picks the scenario, and the same scenario always gives the same events and files. Markers shared with the front end's stub behave the same in both, so a browser spec runs against either.
+`AGENT_DRIVER=scripted` replaces the agent with fixed turns that make no AI calls, so the real runner, build service, QA gate, and event stream run end to end for free. A marker in the instructor's message picks the scenario, and the same scenario always gives the same events and files. Markers shared with the front end's stub behave the same in both, so a browser spec runs against either. In a `topic` project the scripted agent builds from the content-topic starter instead of the SCORM starter.
 
-| Marker | Turn |
-|---|---|
-| none | Writes a workplace safety quiz that passes the QA gate |
-| `[qa-fail]` | Writes a quiz that marks itself completed on load, which the QA gate rejects |
-| `[follow-up]` | Adds two questions to the quiz, so the next build is a new version |
-| `[turn-fail]` | Fails with `agent_error` |
-| `[signed-out]` | Fails with `agent_signed_out` |
-| `[busy]` | Fails with `agent_busy` |
-| `[long-step]` | Goes silent for 20 seconds, then finishes like the default turn |
-| `[cancelled]` | Ends as `cancelled` |
+| Marker | Turn in a `scorm` project | Turn in a `topic` project |
+|---|---|---|
+| none | Writes a workplace safety quiz that passes the QA gate | Writes a lab safety orientation, with instructor notes, that passes the QA gate |
+| `[qa-fail]` | Writes a quiz that marks itself completed on load, which the QA gate rejects | Writes a page that loads its data with a static script tag, which the QA gate rejects |
+| `[follow-up]` | Adds two questions to the quiz, so the next build is a new version | Adds a reminder to the instructor notes, so the next build is a new version |
+| `[turn-fail]` | Fails with `agent_error` | The same |
+| `[signed-out]` | Fails with `agent_signed_out` | The same |
+| `[busy]` | Fails with `agent_busy` | The same |
+| `[long-step]` | Goes silent for 20 seconds, then finishes like the default turn | The same |
+| `[cancelled]` | Ends as `cancelled` | The same |
 
 ### Logs
 
@@ -126,4 +126,4 @@ The folder stays small. A new file starts each day and whenever the current one 
 - `tilt-udl/` — the pedagogy check
 - `deploy/` — the D2L API client; see its own README for why this is the piece most likely to need real design work
 
-Wiring lives in one `createApp(deps)` function; `server.ts` calls it with real dependencies, tests call it with fakes. Full design in [`../docs/architecture.md`](../docs/architecture.md); the first slice being built is scoped in [`../docs/v1.md`](../docs/v1.md).
+Wiring lives in one `createApp(deps)` function; `server.ts` calls it with real dependencies, tests call it with fakes. Full design in [`../docs/architecture.md`](../docs/architecture.md).

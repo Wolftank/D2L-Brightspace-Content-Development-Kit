@@ -30,6 +30,9 @@
        credit: 'no-credit',   // optional; inferred from role if omitted
        mode: 'browse'         // optional; inferred from role if omitted
      });
+
+   Content topic: pass avenue: 'topic' and install it in the topic's own
+   window. It answers whoami and myenrollments/{ou} with learner.role.
    ===================================================================== */
 
 (function (global) {
@@ -134,6 +137,11 @@
     var sc = profile.scorm || {};
     var fl = profile.fileLoading || {};
     var api = profile.brightspaceApi || {};
+    var avenue = opts.avenue || 'scorm';
+    if (avenue !== 'scorm' && avenue !== 'topic') {
+      throw new Error('D2LEmulator emulates avenue scorm or topic, not ' + avenue);
+    }
+    var isTopic = (avenue === 'topic');
 
     var version   = unwrap(sc.version, '1.2').value;
     var is2004    = (version === '2004');
@@ -341,7 +349,7 @@
     /* ---------------------------------------------- install the API -- */
 
     var apiObject = null;
-    if (available) {
+    if (available && !isTopic) {
       if (is2004) {
         apiObject = {
           Initialize: doInitialize, Terminate: doTerminate,
@@ -367,6 +375,7 @@
 
     var realFetch = global.fetch ? global.fetch.bind(global) : null;
     var reachableFromScorm = unwrap(api.reachableFromScorm, false).value;
+    var sessionAuthWorks = unwrap(api.sessionAuthWorks, false).value;
     var studentBlocked = unwrap(api.studentBlockedFromClassData, true).value;
 
     function jsonResponse(status, body) {
@@ -377,12 +386,35 @@
     }
 
     function handleD2lApi(url) {
-      if (!reachableFromScorm) {
+      if (isTopic && !sessionAuthWorks) {
+        noteUnverified('brightspaceApi.sessionAuthWorks', api.sessionAuthWorks);
+        return jsonResponse(401, { Errors: [{ Message: 'Not authenticated' }] });
+      }
+      if (!isTopic && !reachableFromScorm) {
         noteUnverified('brightspaceApi.reachableFromScorm', api.reachableFromScorm);
         violate('api-from-scorm',
           'Package called ' + url + '. The tenant profile says the Brightspace API is ' +
           'not reachable from inside a SCORM package. Do not build on this.');
         return Promise.reject(new TypeError('Failed to fetch'));
+      }
+
+      var enrollment = /\/enrollments\/myenrollments\/(\d+)\/?$/.exec(url.split(/[?#]/)[0]);
+      if (enrollment) {
+        return jsonResponse(200, {
+          OrgUnit: {
+            Id: Number(enrollment[1]),
+            Type: { Id: 3, Code: 'Course Offering', Name: 'Course Offering' },
+            Name: 'Emulated course',
+            Code: 'EMU-' + enrollment[1]
+          },
+          Access: {
+            IsActive: true,
+            CanAccess: true,
+            ClasslistRoleName: role,
+            LISRoles: [role === 'Instructor' ? 'urn:lti:role:ims/lis/Instructor' : 'urn:lti:role:ims/lis/Learner'],
+            LastAccessed: nowIso()
+          }
+        });
       }
 
       if (/\/users\/whoami/.test(url)) {
@@ -464,6 +496,7 @@
         var errors = violations.filter(function (v) { return v.severity === 'error'; });
         var warnings = violations.filter(function (v) { return v.severity === 'warning'; });
         return {
+          avenue: avenue,
           learner: learner,
           attempt: attemptNo,
           version: version,

@@ -30,7 +30,7 @@ Every agent gets the same list, and nothing else. The session request carries th
 | | Allowed | Not loaded |
 |---|---|---|
 | Tools | File tools, reading inside the workspace and writing inside its `out/`; the `cdk` tools | The shell, web browsing and search, subagents, task lists, notebooks, scheduling, worktrees, and every other built-in tool |
-| Skills | The kit's skills for the project's output format: `d2l-scorm-package` and `d2l-tenant-qa` for SCORM (`SCORM_SKILLS` in `back-end/src/kit.ts`) | The agent CLI's own skills, the instructor's personal skills, and skills synced from their Claude account |
+| Skills | The kit's skills for the project's output format: `d2l-scorm-package` and `d2l-tenant-qa` for SCORM, `d2l-content-topic` and `d2l-tenant-qa` for a content topic (`skillsFor` in `back-end/src/kit.ts`) | The agent CLI's own skills, the instructor's personal skills, and skills synced from their Claude account |
 | MCP servers | `cdk` | The account's outside connectors, `.mcp.json`, and servers from user settings or plugins |
 | Plugins | None | The agent CLI's built-in plugins and the instructor's own plugins |
 | Context | The project instructions | Account details such as name and email, and the agent's auto memory |

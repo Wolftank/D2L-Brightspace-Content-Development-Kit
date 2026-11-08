@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Project as ApiProject, BuildSummary, ProjectListResponse, ProjectResponse } from '@cdk/contract';
+import type { Project as ApiProject, BuildableAvenue, BuildSummary, ProjectListResponse, ProjectResponse } from '@cdk/contract';
 import type { BuildsRepo } from '../db/builds.js';
 import type { ProjectsRepo } from '../db/projects.js';
 import type { Build, Project } from '../db/schema.js';
@@ -10,7 +10,7 @@ import type { WorkspaceService } from './workspaces.js';
 
 export interface CreateProjectInput {
   title: string;
-  avenue: 'scorm';
+  avenue: BuildableAvenue;
 }
 
 export interface ProjectServiceDeps {
@@ -38,7 +38,7 @@ export function createProjectService(deps: ProjectServiceDeps): ProjectService {
     async create(ownerId, { title, avenue }) {
       const id = randomUUID();
       try {
-        await deps.workspaces.create(id);
+        await deps.workspaces.create(id, avenue);
         return toApi(deps.projects.create({ id, ownerId, title, avenue }));
       } catch (err) {
         await deps.workspaces.remove(id).catch((removeErr: unknown) => {
