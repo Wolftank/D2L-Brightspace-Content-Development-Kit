@@ -1,25 +1,76 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Build } from '@cdk/contract';
+import type { Build, BuildableAvenue, PreviewRole } from '@cdk/contract';
 import { previewSession } from './session';
 import './preview.css';
 
-type Selection = Pick<Build, 'id' | 'version'>;
+type Selection = Pick<Build, 'id' | 'version' | 'avenue'>;
 
 export function PreviewPanel({ build }: { build: Selection | null }) {
   const [attempt, setAttempt] = useState(0);
+  const [role, setRole] = useState<PreviewRole>('Student');
+
   if (!build) return null;
+
+  const avenue: BuildableAvenue = build.avenue === 'topic' ? 'topic' : 'scorm';
+
+  function changeRole(nextRole: PreviewRole) {
+    setRole(nextRole);
+    setAttempt(value => value + 1);
+  }
+
   return <section className="card preview-panel" aria-labelledby="preview-title" tabIndex={0}>
     <div className="preview-header">
       <div><h2 id="preview-title">{'Preview · Version ' + build.version}</h2></div>
       <button type="button" onClick={() => setAttempt(value => value + 1)}>Restart preview</button>
     </div>
-    <PreviewAttempt key={build.id + ':' + attempt} build={build} onRetry={() => setAttempt(value => value + 1)} />
+
+    {avenue === 'topic' && <fieldset>
+      <legend>Preview as</legend>
+      <label>
+        <input
+          type="radio"
+          name="preview-role"
+          value="Student"
+          checked={role === 'Student'}
+          onChange={() => changeRole('Student')}
+        />
+        Student
+      </label>
+      <label>
+        <input
+          type="radio"
+          name="preview-role"
+          value="Instructor"
+          checked={role === 'Instructor'}
+          onChange={() => changeRole('Instructor')}
+        />
+        Instructor
+      </label>
+    </fieldset>}
+
+    <PreviewAttempt
+      key={build.id + ':' + avenue + ':' + role + ':' + attempt}
+      build={build}
+      avenue={avenue}
+      role={role}
+      onRetry={() => setAttempt(value => value + 1)}
+    />
   </section>;
 }
 
-function PreviewAttempt({ build, onRetry }: { build: Selection; onRetry: () => void }) {
+function PreviewAttempt({
+  build,
+  avenue,
+  role,
+  onRetry,
+}: {
+  build: Selection;
+  avenue: BuildableAvenue;
+  role: PreviewRole;
+  onRetry: () => void;
+}) {
   const [session] = useState(() => {
-    try { return { ...previewSession(build.id), error: null }; }
+    try { return { ...previewSession(build.id, avenue, role), error: null }; }
     catch (error) { return { url: '', origin: '', attempt: '', error: (error as Error).message }; }
   });
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(session.error ? 'error' : 'loading');

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ApiError, cancelTurn, createProject, sendMessage } from './api/client';
-import type { Build, Project } from '@cdk/contract';
+import type { Build, BuildableAvenue, Project } from '@cdk/contract';
 import { useProjectEvents } from './hooks/useProjectEvents';
 import type { ConnectionStatus } from './WorkingIndicator';
 import type { ProjectEventState } from './hooks/useProjectEvents';
@@ -46,6 +46,7 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
   const [project, setProject] = useState<Project | null>(initialProject);
   const draftKey = 'request-draft-' + (project?.id ?? 'new');
   const [title, setTitle] = useState('');
+  const [avenue, setAvenue] = useState<BuildableAvenue>('scorm');
   const [requestText, setRequestText] = useState(() => sessionStorage.getItem(draftKey) ?? '');
   const [error, setError] = useState<ApiError | null>(null);
   const [sending, setSending] = useState(false);
@@ -106,7 +107,7 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
     }
     setError(null); setSending(true);
     try {
-      const currentProject = project ?? (await createProject({ title: title.trim(), avenue: 'scorm' })).project;
+      const currentProject = project ?? (await createProject({ title: title.trim(), avenue })).project;
       if (!project) sessionStorage.removeItem('request-draft-new');
       setProject(currentProject);
       window.history.replaceState(null, '', '/?project=' + encodeURIComponent(currentProject.id));
@@ -127,6 +128,18 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
     <section className="intro" aria-labelledby="page-title">
       <p className="workspace-eyebrow">{project ? 'Project:' : 'Course material workspace'}</p>
       <h1 id="page-title">{project?.title ?? 'Create an activity'}</h1>
+      {project?.avenue && (
+  <p className="project-format">
+    Output format:{' '}
+    <strong>
+      {project.avenue === 'topic'
+        ? 'Content topic'
+        : project.avenue === 'scorm'
+          ? 'SCORM package'
+          : project.avenue}
+    </strong>
+  </p>
+)}
     </section>
     <div className="workspace">
       <section className="card chat-panel" aria-labelledby="chat-title" tabIndex={0}>
@@ -149,7 +162,43 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
         {project && connection !== 'connected' && <div className="connection-notice"><p role="status">{connection === 'reconnecting' ? 'Reconnecting to your request…' : 'Connection lost. Try connecting again.'}</p>{connection === 'lost' && <button type="button" onClick={reconnect}>Try again</button>}</div>}
         {historyError && <div><p className="error" role="alert">Unable to load the conversation.</p><button type="button" onClick={reconnect}>Try loading the conversation again</button></div>}
         <form onSubmit={handleSend} className={hasMessages ? 'composer' : 'composer composer-empty'}>
-          {!project && <><label htmlFor="project-title">Project title</label><input id="project-title" value={title} onChange={event => setTitle(event.target.value)} placeholder="e.g., Cell division practice" maxLength={160} disabled={sending} /></>}
+          {!project && <>
+  <label htmlFor="project-title">Project title</label>
+  <input
+    id="project-title"
+    value={title}
+    onChange={event => setTitle(event.target.value)}
+    placeholder="e.g., Cell division practice"
+    maxLength={160}
+    disabled={sending}
+  />
+
+  <fieldset disabled={sending}>
+    <legend>Output format</legend>
+
+    <label>
+      <input
+        type="radio"
+        name="avenue"
+        value="scorm"
+        checked={avenue === 'scorm'}
+        onChange={() => setAvenue('scorm')}
+      />
+      SCORM package
+    </label>
+
+    <label>
+      <input
+        type="radio"
+        name="avenue"
+        value="topic"
+        checked={avenue === 'topic'}
+        onChange={() => setAvenue('topic')}
+      />
+      Content topic
+    </label>
+  </fieldset>
+</>}
           <label htmlFor="request-text" className={project ? 'sr-only' : undefined}>{project ? 'Describe a change' : 'What should students learn or do?'}</label>
           <textarea ref={messageBox} id="request-text" value={requestText} onChange={event => setRequestText(event.target.value)} placeholder={project ? 'Describe a change or ask a question…' : 'Create a ten-question practice quiz on cell division…'} rows={3} maxLength={20000} />
           <div className="composer-footer">
