@@ -18,8 +18,37 @@ function report(status: string, overrides: MessageEventInit = {}, reason?: strin
 }
 
 describe('PreviewPanel', () => {
+  it('includes the SCORM avenue and Student role in the preview URL', () => {
+    render(<PreviewPanel build={{ id: 'saved-3', version: 3, avenue: 'scorm' }} />);
+    const url = new URL(frame().src);
+    expect(url.searchParams.get('avenue')).toBe('scorm');
+    expect(url.searchParams.get('role')).toBe('Student');
+  });
+
+  it('switches a Content Topic preview between Student and Instructor roles', () => {
+    render(<PreviewPanel build={{ id: 'saved-3', version: 3, avenue: 'topic' }} />);
+    const student = screen.getByRole('radio', { name: 'Student' });
+    const instructor = screen.getByRole('radio', { name: 'Instructor' });
+    expect(student).toBeChecked();
+    expect(instructor).not.toBeChecked();
+    expect(new URL(frame().src).searchParams.get('avenue')).toBe('topic');
+    expect(new URL(frame().src).searchParams.get('role')).toBe('Student');
+    const previous = frame();
+    fireEvent.click(instructor);
+    expect(instructor).toBeChecked();
+    expect(student).not.toBeChecked();
+    expect(frame()).not.toBe(previous);
+    expect(new URL(frame().src).searchParams.get('role')).toBe('Instructor');
+  });
+
+  it('does not show preview role controls for SCORM', () => {
+    render(<PreviewPanel build={{ id: 'saved-3', version: 3, avenue: 'scorm' }} />);
+    expect(screen.queryByRole('radio', { name: 'Student' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: 'Instructor' })).not.toBeInTheDocument();
+  });
+
   it('loads the latest ready version in an isolated, titled frame', () => {
-    render(<PreviewPanel build={{ id: 'saved-3', version: 3 }} />);
+    render(<PreviewPanel build={{ id: 'saved-3', version: 3, avenue: 'scorm' }} />);
     expect(screen.getByRole('heading')).not.toHaveFocus();
     expect(screen.queryByText('Local preview — results are not sent to Brightspace.')).not.toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Loading preview');
@@ -32,7 +61,7 @@ describe('PreviewPanel', () => {
   });
 
   it('ignores messages from another origin, window, build or attempt', () => {
-    render(<PreviewPanel build={{ id: 'saved-3', version: 3 }} />);
+    render(<PreviewPanel build={{ id: 'saved-3', version: 3, avenue: 'scorm' }} />);
     report('ready', { origin: window.location.origin });
     report('ready', { source: window });
     report('ready', { data: { type: 'cdk-preview', status: 'ready', buildId: 'other' } });
@@ -41,7 +70,7 @@ describe('PreviewPanel', () => {
   });
 
   it('restarts with a new frame and attempt, preserving the selected build', () => {
-    render(<PreviewPanel build={{ id: 'saved-3', version: 3 }} />);
+    render(<PreviewPanel build={{ id: 'saved-3', version: 3, avenue: 'scorm' }} />);
     const previous = frame();
     const url = previous.src;
     report('ready');
@@ -53,7 +82,7 @@ describe('PreviewPanel', () => {
   });
 
   it.each(['unavailable', 'launch'])('offers retry after %s failure', (reason) => {
-    render(<PreviewPanel build={{ id: 'saved-3', version: 3 }} />);
+    render(<PreviewPanel build={{ id: 'saved-3', version: 3, avenue: 'scorm' }} />);
     const previous = frame();
     report('error', {}, reason);
     expect(screen.getByRole('alert')).toHaveTextContent(reason === 'unavailable' ? 'saved build is unavailable' : 'could not be opened');
@@ -64,7 +93,7 @@ describe('PreviewPanel', () => {
 
   it('times out an unreachable service and cleans up on unmount', () => {
     vi.useFakeTimers();
-    const { unmount } = render(<PreviewPanel build={{ id: 'saved-3', version: 3 }} />);
+    const { unmount } = render(<PreviewPanel build={{ id: 'saved-3', version: 3, avenue: 'scorm' }} />);
     act(() => vi.advanceTimersByTime(20_000));
     expect(screen.getByRole('alert')).toHaveTextContent('could not be opened');
     unmount();

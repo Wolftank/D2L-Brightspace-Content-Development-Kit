@@ -1,3 +1,5 @@
+import type { BuildableAvenue, PreviewPlayerQuery, PreviewRole } from '@cdk/contract';
+
 /**
  * The preview origin: `VITE_PREVIEW_ORIGIN` when the dev server sets it,
  * otherwise `preview.localhost` on the app's own port, where the back end that
@@ -12,13 +14,34 @@ function previewOrigin(): URL {
 }
 
 /** Creates a fresh attempt on the isolated preview origin. */
-export function previewSession(buildId: string) {
+export function previewSession(
+  buildId: string,
+  avenue: BuildableAvenue = 'scorm',
+  role: PreviewRole = 'Student',
+) {
   const origin = previewOrigin();
   if (!['http:', 'https:'].includes(origin.protocol) || origin.origin === window.location.origin || origin.username || origin.password) {
     throw new Error('Preview is unavailable. It requires a separate preview origin.');
   }
+
   const attempt = crypto.randomUUID();
+
+  const query: PreviewPlayerQuery = {
+    buildId,
+    attempt,
+    parentOrigin: window.location.origin,
+    avenue,
+    role,
+  };
+
   const url = new URL('/preview/player.html', origin);
-  url.search = new URLSearchParams({ buildId, attempt, parentOrigin: window.location.origin }).toString();
+  url.search = new URLSearchParams({
+    buildId: query.buildId,
+    attempt: query.attempt,
+    parentOrigin: query.parentOrigin,
+    avenue: query.avenue ?? 'scorm',
+    role: query.role ?? 'Student',
+  }).toString();
+
   return { url: url.href, origin: origin.origin, attempt };
 }
