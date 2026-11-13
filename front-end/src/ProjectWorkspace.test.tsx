@@ -154,7 +154,7 @@ describe('F10 conversation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Restart preview' }));
     expect(screen.getByTitle('Interactive preview of build 3')).not.toBe(frame);
   });
-  it('asks a signed-out instructor to sign in, and enables Send once Check again finds them signed in', async () => {
+  it('asks a signed-out instructor to sign in, and enables Send when they come back to the window signed in', async () => {
     let signedIn = false;
     fetchMock.mockImplementation(async (url: string) => {
       if (url !== '/api/agent/sign-in') return Response.json({ agent: { name: 'claude', ok: signedIn } });
@@ -165,9 +165,8 @@ describe('F10 conversation', () => {
     expect(await screen.findByText('Sign in to Claude to send requests.')).toHaveAttribute('role', 'status');
     expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Sign in to Claude' }));
-    expect(await screen.findByText('Finish signing in in your browser, then press Check again.')).toBeVisible();
-    fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled());
+    expect(await screen.findByText('Finish signing in in your browser, then come back here.')).toBeVisible();
+    await waitFor(() => { fireEvent.focus(window); expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled(); });
     expect(screen.queryByRole('button', { name: 'Sign in to Claude' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('What should students learn or do?')).toHaveFocus();
   });

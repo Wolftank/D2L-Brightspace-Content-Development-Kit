@@ -70,6 +70,7 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
   const chatHistory = useRef<HTMLDivElement>(null);
 
   useEffect(() => { sessionStorage.setItem(draftKey, requestText); }, [draftKey, requestText]);
+  useEffect(() => { if (agent.confirmed) messageBox.current?.focus(); }, [agent.confirmed]);
   useEffect(() => { const element = chatHistory.current; if (element) element.scrollTop = element.scrollHeight; }, [messages, streamingMessages]);
 
   function startNewProject() {
@@ -89,10 +90,6 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
       const message = caught instanceof ApiError ? caught.message : 'Try again.';
       setStopAttempt(current => current?.turnId === turnId ? { turnId, error: message } : current);
     }
-  }
-
-  async function checkSignIn() {
-    if (await agent.checkAgain()) messageBox.current?.focus();
   }
 
   function askForFix() {
@@ -159,7 +156,7 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
           <p role="status">{agent.notice}</p>
           {!agent.ready && <>
             <button type="button" disabled={agent.busy} onClick={() => void agent.start()}>Sign in to Claude</button>
-            <button type="button" disabled={agent.busy} onClick={() => void checkSignIn()}>Check again</button>
+            <button type="button" disabled={agent.busy} onClick={() => void agent.checkAgain()}>Check again</button>
           </>}
         </div>
         <form onSubmit={handleSend} className={hasMessages ? 'composer' : 'composer composer-empty'}>

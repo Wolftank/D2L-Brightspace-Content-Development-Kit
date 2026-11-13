@@ -18,7 +18,7 @@ test('a signed-out instructor signs in from the Design panel and can send again'
   expect(scan.violations).toEqual([]);
 
   await notice.getByRole('button', { name: 'Sign in to Claude' }).click();
-  await expect(notice.getByRole('status')).toHaveText('Finish signing in in your browser, then press Check again.');
+  await expect(notice.getByRole('status')).toHaveText('Finish signing in in your browser, then come back here.');
   await notice.getByRole('button', { name: 'Check again' }).click();
   await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
   await expect(page.getByLabel('Describe a change')).toBeFocused();

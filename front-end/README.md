@@ -45,7 +45,7 @@ The build panel shows the newest build. The preview shows the newest ready build
 - `[multi-message]`: two distinct agent messages around a tool call, preserved after reload and reopening.
 - `[qa-fail]`: failed QA build; an ordinary follow-up produces the next ready version.
 - `[turn-fail]`: agent failure; an ordinary follow-up continues the same project.
-- `[signed-out]`: fails with `agent_signed_out` and signs the stub agent out for that browser, so a reload shows the Design panel's sign-in notice with Send disabled. **Sign in to Claude** signs it back in, and **Check again** clears the notice.
+- `[signed-out]`: fails with `agent_signed_out` and signs the stub agent out for that browser, so a reload shows the Design panel's sign-in notice with Send disabled. **Sign in to Claude** signs it back in, and coming back to the window or pressing **Check again** clears the notice.
 - `[long-step]`: 20-second pause for checking the timer, reload and drafts.
 - `[long-feed]`: 60 progress lines for checking scrolling. The feed follows at the bottom, pauses when scrolled up, and resumes with Jump to latest or a new turn.
 
