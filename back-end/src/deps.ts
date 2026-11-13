@@ -15,7 +15,7 @@ export interface Deps {
   messages: MessageService;
   builds: Pick<BuildService, 'get' | 'download' | 'previewFile'>;
   events: EventService;
-  driver: Pick<AgentDriver, 'name' | 'probe'>;
+  driver: Pick<AgentDriver, 'name' | 'probe' | 'signIn'>;
   preview: PreviewSettings;
   /** When set, the origin guard requires this token in the `cdk_launch` cookie on every API request. */
   launchToken?: string;

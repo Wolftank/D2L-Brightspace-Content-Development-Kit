@@ -14,6 +14,7 @@ import { testDb } from './db/test-db.js';
 import { createTurnsRepo } from './db/turns.js';
 import { createUsersRepo } from './db/users.js';
 import type { Deps } from './deps.js';
+import { fakeDeps, idleRunner } from './test/deps.js';
 import { NotFound } from './errors.js';
 import { createEventService } from './pipeline/events.js';
 import { createBuildService } from './services/builds.js';
@@ -91,16 +92,14 @@ describe('R3 regression: app, identity, error envelope', () => {
     const turnsRepo = createTurnsRepo(db);
     workspaces = createWorkspaceService({ dataDir });
     const events = createEventService(createEventsRepo(db));
-    deps = {
+    deps = fakeDeps({
       users: createUsersRepo(db),
       projects: createProjectService({ projects: projectsRepo, workspaces, builds: buildsRepo, turns: turnsRepo }),
-      turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, runner: { executeTurn: async () => {}, cancel: () => {} } }),
+      turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, runner: idleRunner }),
       builds: createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces, events }),
       events,
       messages: createMessageService({ projects: projectsRepo, messages: createMessagesRepo(db) }),
-      driver: { name: 'claude', probe: async () => ({ ok: true, version: '0.0.0' }) },
-      preview: { origin: 'http://preview.localhost:3000', appOrigin: 'http://127.0.0.1:5173' },
-    };
+    });
 
     owner = deps.users.ensureLocalUser();
     await workspaces.create('mine', 'scorm');

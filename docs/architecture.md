@@ -73,9 +73,12 @@ Only the app may call the API. A request gets `403 forbidden` when its `Host` is
 Who is calling, and which agent this install runs.
 
 ```
-GET  /api/me              → { user, mode: 'local'|'hosted', agent: { name, ok, version?, detail? } }
+GET  /api/me              → { user, mode: 'local'|'hosted', agent: { name, ok, detail? } }
+POST /api/agent/sign-in   → 202
 GET  /api/health
 ```
+
+`agent.ok` is whether the agent is signed in, read from its stored login without a request to its provider. `POST /api/agent/sign-in` starts the agent's own sign-in, which opens in the instructor's browser. A second call replaces a sign-in still waiting, and a waiting sign-in ends when the back end shuts down.
 
 ### Projects and files
 
@@ -370,7 +373,9 @@ A project whose workspace is missing cannot run a turn; the turn fails with `err
 ```ts
 interface AgentDriver {
   name: 'claude' | 'copilot';
-  probe(): Promise<{ ok: boolean; version?: string; detail?: string }>;
+  probe(): Promise<{ ok: boolean; detail?: string }>;
+  signIn(): void;
+  endSignIn(): void;
   open(req: SessionRequest): Promise<AgentSession>;
 }
 interface AgentSession {

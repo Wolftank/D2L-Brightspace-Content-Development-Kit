@@ -22,9 +22,8 @@ for (const step of ['send_again', 'smaller_request', 'sign_in', 'try_later', 'wa
       await expect(page.getByLabel('Describe a change')).toHaveValue(/Please fix the problems/);
       await expect(page.getByLabel('Describe a change')).toBeFocused();
     } else if (step === 'sign_in') {
-      const popup = page.waitForEvent('popup');
-      await chat.getByRole('link', { name: 'Sign in to the agent' }).click();
-      await expect((await popup).getByRole('heading', { name: 'Agent sign-in' })).toBeVisible();
+      await chat.getByRole('button', { name: 'Sign in to Claude' }).click();
+      await expect(page.getByText('Finish signing in in your browser, then come back here.')).toBeVisible();
     } else if (step === 'new_project') {
       await chat.getByRole('button', { name: 'Start a new project' }).click();
       await expect(page.getByLabel('Project title')).toBeEditable();

@@ -12,7 +12,7 @@ import { projects as projectsTable, turns as turnsTable, users as usersTable, ty
 import { testDb } from '../db/test-db.js';
 import { createTurnsRepo } from '../db/turns.js';
 import { createUsersRepo } from '../db/users.js';
-import type { Deps } from '../deps.js';
+import { fakeDeps, idleRunner } from '../test/deps.js';
 import { KIT_DIR } from '../kit.js';
 import { createEventService } from '../pipeline/events.js';
 import { createBuildService } from '../services/builds.js';
@@ -30,7 +30,7 @@ describe('project routes', () => {
   function app(workspaceService: WorkspaceService = workspaces) {
     const events = createEventService(createEventsRepo(db));
     const buildsRepo = createBuildsRepo(db);
-    const deps: Deps = {
+    const deps = fakeDeps({
       users: createUsersRepo(db),
       projects: createProjectService({
         projects: projectsRepo,
@@ -40,15 +40,8 @@ describe('project routes', () => {
       }),
       builds: createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces: workspaceService, events }),
       events,
-      turns: createTurnService({ projects: projectsRepo, turns: createTurnsRepo(db), runner: { executeTurn: async () => {}, cancel: () => {} } }),
-      messages: {
-        list: () => {
-          throw new Error('not used by these tests');
-        },
-      },
-      driver: { name: 'claude', probe: async () => ({ ok: true }) },
-      preview: { origin: 'http://preview.localhost:3000', appOrigin: 'http://127.0.0.1:5173' },
-    };
+      turns: createTurnService({ projects: projectsRepo, turns: createTurnsRepo(db), runner: idleRunner }),
+    });
     return createApp(deps);
   }
 

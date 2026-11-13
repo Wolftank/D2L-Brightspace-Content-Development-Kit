@@ -15,13 +15,18 @@ export interface AgentDriver {
   /** Reports whether the agent is installed and signed in on this host. */
   probe(): Promise<ProbeResult>;
 
+  /** Starts the agent's own sign-in in the instructor's browser, replacing one still waiting. */
+  signIn(): void;
+
+  /** Ends a sign-in that is still waiting. */
+  endSignIn(): void;
+
   /** Opens a session in a workspace, reopening `sessionId` when given. */
   open(req: SessionRequest): Promise<AgentSession>;
 }
 
 export interface ProbeResult {
   ok: boolean;
-  version?: string;
   /** Human-readable explanation when `ok` is false. */
   detail?: string;
 }

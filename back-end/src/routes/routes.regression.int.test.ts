@@ -18,6 +18,7 @@ import { testDb } from '../db/test-db.js';
 import { createTurnsRepo } from '../db/turns.js';
 import { createUsersRepo } from '../db/users.js';
 import type { Deps } from '../deps.js';
+import { fakeDeps } from '../test/deps.js';
 import { KIT_DIR } from '../kit.js';
 import { createEventService, type EventService } from '../pipeline/events.js';
 import { createRunner } from '../pipeline/runner.js';
@@ -181,16 +182,14 @@ describe('R8 regression: project, message and build routes', () => {
       builds,
       turnLimits: { maxSteps: 60, maxBudgetUsd: 10 },
     });
-    deps = {
+    deps = fakeDeps({
       users: createUsersRepo(db),
       projects: createProjectService({ projects: projectsRepo, workspaces, builds: buildsRepo, turns: turnsRepo }),
       turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, runner }),
       messages: createMessageService({ projects: projectsRepo, messages: messagesRepo }),
       builds,
       events,
-      driver: { name: 'claude', probe: async () => ({ ok: true, version: '0.0.0' }) },
-      preview: { origin: 'http://preview.localhost:3000', appOrigin: 'http://127.0.0.1:5173' },
-    };
+    });
     deps.users.ensureLocalUser();
   });
 

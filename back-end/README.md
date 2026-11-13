@@ -22,7 +22,7 @@ npm start
 
 `npm start` runs the server from source and logs its address and data directory. `npm run dev` does the same and restarts the server when a file under `src/` changes; a restart can end a running turn as `interrupted`, so use `npm start` when running real turns.
 
-The agent needs a Claude sign-in on this machine (sign in once with the Claude CLI) or `ANTHROPIC_API_KEY` set in the environment or in `.env`. `GET /api/me` reports whether the agent is ready; each call sends the agent one small, billed request.
+The agent needs a Claude sign-in on this machine or `ANTHROPIC_API_KEY` set in the environment or in `.env`. `GET /api/me` reports whether it is signed in, from the packaged Claude Code's `auth status`, and `POST /api/agent/sign-in` starts its sign-in in the browser.
 
 ### Settings
 
@@ -37,7 +37,7 @@ Copy-Item .env.example .env
 | Setting | Default | Rule |
 |---|---|---|
 | `AGENT_DRIVER` | `claude` | The agent that runs turns: `claude`, or `scripted` for development and tests (see [The scripted agent](#the-scripted-agent)) |
-| `AGENT_MODEL` | the agent's default for the account | A model name, such as `claude-sonnet-5`. The agent checks the name on each turn and on `GET /api/me`, not at startup |
+| `AGENT_MODEL` | `claude-sonnet-5-5` | A model name. The agent checks the name on each turn, not at startup |
 | `AGENT_EFFORT` | the agent's default | `low`, `medium`, `high`, `xhigh`, or `max` |
 | `AGENT_MAX_STEPS` | `60` | The most model calls one request may make: a whole number, 1 or more. A request that needs more stops with a plain message. `.env.example` explains the default |
 | `AGENT_MAX_BUDGET_USD` | `10` | The most one request may spend, in US dollars: a number greater than 0, such as `2.5`. Claude applies it to the cost it reports at API prices, even when the account is billed by subscription; an agent that reports no cost is not limited by it |
@@ -78,6 +78,7 @@ What is logged:
 | `Request completed` for each response: method, path without the query, status, and duration | `reqId` |
 | `Unexpected error`, with the error and its stack, for each `internal_error` | `reqId` |
 | `Turn queued`, `Turn started`, `Turn cancel requested`, `Turn completed`, `Turn cancelled`, and `Turn failed` with its code and the technical detail the instructor never sees | `reqId` on `Turn queued` and `Turn cancel requested`, then `projectId` and `turnId` |
+| `Agent sign-in started`, and `Claude sign-in ended` with its exit code | `reqId` on the first |
 | `Build created` and `Build checked`, with the status, the QA result, and any error code, and `Build error` with the technical detail of a failed copy or QA gate run | `projectId`, `turnId`, and `buildId` |
 | `A CDK tool failed`, and `Agent process error output` for what the agent process writes to standard error | the tool, or the workspace |
 | `Instructor message` and `Agent reply`, with their text, at `debug` only | `turnId` and `messageId` |
