@@ -294,8 +294,12 @@ export function createScriptedAgentDriver(): AgentDriver {
     name: 'scripted',
 
     async probe(): Promise<ProbeResult> {
-      return { ok: true, version: 'scripted' };
+      return { ok: true };
     },
+
+    signIn() {},
+
+    endSignIn() {},
 
     async open(req: SessionRequest): Promise<AgentSession> {
       const avenue = req.skills.includes(AVENUE_SKILL.topic) ? 'topic' : 'scorm';

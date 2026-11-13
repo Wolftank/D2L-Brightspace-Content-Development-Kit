@@ -1,5 +1,6 @@
 import type { Server } from 'node:http';
 import { join } from 'node:path';
+import type { AgentDriver } from './agent/AgentDriver.js';
 import { createAgentDriver } from './agent/drivers.js';
 import { createApp } from './app.js';
 import { checkDataDir, type Config, ConfigError, loadConfig, loadEnvFile, loggedSettings } from './config.js';
@@ -25,6 +26,7 @@ import { createCdkTools } from './tools/index.js';
 
 interface BackEnd {
   deps: Deps;
+  driver: AgentDriver;
   db: ReturnType<typeof openDb>;
   runner: Runner;
   sessions: SessionService;
@@ -70,15 +72,16 @@ function buildBackEnd(cfg: Config): BackEnd {
     launchToken: cfg.launchToken,
     appDir: cfg.appDir,
   };
-  return { deps, db, runner, sessions, builds };
+  return { deps, driver, db, runner, sessions, builds };
 }
 
-/** Closes the server, cancels running turns, closes the sessions and the database, and exits. */
-async function shutDown(server: Server, { db, runner, sessions }: BackEnd, trigger: string): Promise<void> {
+/** Closes the server, ends a waiting sign-in, cancels running turns, closes the sessions and the database, and exits. */
+async function shutDown(server: Server, { driver, db, runner, sessions }: BackEnd, trigger: string): Promise<void> {
   log.info({ trigger }, 'back-end stopping');
   try {
     server.close();
     server.closeAllConnections();
+    driver.endSignIn();
     await runner.cancelAll();
     await sessions.closeAll();
     db.$client.close();

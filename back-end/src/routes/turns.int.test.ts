@@ -116,7 +116,7 @@ describe('POST /api/turns/:turnId/cancel', () => {
       messages: createMessageService({ projects: projectsRepo, messages: messagesRepo }),
       builds,
       events,
-      driver: { name: 'claude', probe: async () => ({ ok: true }) },
+      driver: { name: 'claude', probe: async () => ({ ok: true }), signIn: () => {} },
       preview: { origin: 'http://preview.localhost:3000', appOrigin: 'http://127.0.0.1:5173' },
     };
     deps.users.ensureLocalUser();

@@ -60,7 +60,7 @@ describe('GET /api/projects/:projectId/events', () => {
           throw new Error('not used by these tests');
         },
       },
-      driver: { name: 'claude', probe: async () => ({ ok: true }) },
+      driver: { name: 'claude', probe: async () => ({ ok: true }), signIn: () => {} },
       preview: { origin: 'http://preview.localhost:3000', appOrigin: 'http://127.0.0.1:5173' },
       ...overrides,
     };

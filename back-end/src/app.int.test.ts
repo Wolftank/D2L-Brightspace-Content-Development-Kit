@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import request from 'supertest';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createApp } from './app.js';
 import type { Deps } from './deps.js';
 import type { User } from './db/schema.js';
@@ -72,7 +72,8 @@ function fakeDeps(): Deps {
     },
     driver: {
       name: 'claude',
-      probe: async () => ({ ok: true, version: '0.0.0' }),
+      probe: async () => ({ ok: true }),
+      signIn: () => {},
     },
     preview: { origin: 'http://preview.localhost:3000', appOrigin: 'http://127.0.0.1:5173' },
   };
@@ -88,8 +89,22 @@ describe('createApp', () => {
     expect(res.body).toEqual({
       user: fakeUser,
       mode: 'local',
-      agent: { name: 'claude', ok: true, version: '0.0.0' },
+      agent: { name: 'claude', ok: true },
     });
+  });
+
+  it('reports a signed-out agent from /api/me, and starts its sign-in on POST /api/agent/sign-in', async () => {
+    const deps = fakeDeps();
+    const signIn = vi.fn();
+    deps.driver = { name: 'claude', probe: async () => ({ ok: false, detail: 'Claude Code is not signed in' }), signIn };
+    const app = createApp(deps);
+
+    const me = await request(app).get('/api/me');
+    const started = await request(app).post('/api/agent/sign-in');
+
+    expect(me.body.agent).toEqual({ name: 'claude', ok: false, detail: 'Claude Code is not signed in' });
+    expect(started.status).toBe(202);
+    expect(signIn).toHaveBeenCalledOnce();
   });
 
   it('returns 200 from /api/health', async () => {

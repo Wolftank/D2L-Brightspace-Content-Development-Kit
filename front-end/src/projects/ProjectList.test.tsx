@@ -51,7 +51,7 @@ it('opens an explicit new project without fetching the list or reusing another p
   vi.stubGlobal('fetch', fetch);
   render(<App />);
   expect(screen.getByLabelText('What should students learn or do?')).toHaveValue('');
-  expect(fetch).not.toHaveBeenCalled();
+  expect(fetch.mock.calls.map(([url]) => url)).not.toContain('/api/projects');
 });
 
 it('retries opening a project using fresh server metadata and its own draft', async () => {

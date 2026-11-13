@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ApiError, cancelTurn, createProject, sendMessage } from './api/client';
 import type { Build, Project } from '@cdk/contract';
+import { useAgentSignIn } from './hooks/useAgentSignIn';
 import { useProjectEvents } from './hooks/useProjectEvents';
 import type { ConnectionStatus } from './WorkingIndicator';
 import type { ProjectEventState } from './hooks/useProjectEvents';
@@ -52,12 +53,14 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
   const [pendingTurn, setPendingTurn] = useState<string | null>(initialTurnId ?? null);
   const [stopAttempt, setStopAttempt] = useState<{ turnId: string; error?: string } | null>(null);
   const messageBox = useRef<HTMLTextAreaElement>(null);
+  const agent = useAgentSignIn();
   const { statusLines, streamingMessages, messages, outcomes, builds, turn, connection, historyError, reconnect, addMessage } = useProjectEvents(project?.id ?? null);
   const pendingStatus = pendingTurn ? outcomes[pendingTurn]?.status : undefined;
   const awaitingTurn = !pendingStatus || pendingStatus === 'queued' || pendingStatus === 'running';
   const activeTurnId = pendingTurn !== null && turn.id !== pendingTurn && awaitingTurn
     ? pendingTurn : turn.status === 'running' ? turn.id : null;
   const isBuilding = sending || activeTurnId !== null;
+  const cannotSend = isBuilding || !agent.ready;
   const activeStop = stopAttempt?.turnId === activeTurnId ? stopAttempt : null;
   const stopping = activeStop !== null && !activeStop.error;
   const latestBuild = [...builds].sort((a, b) => b.version - a.version)[0] ?? null;
@@ -88,6 +91,10 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
     }
   }
 
+  async function checkSignIn() {
+    if (await agent.checkAgain()) messageBox.current?.focus();
+  }
+
   function askForFix() {
     setRequestText(current => current.trim() ? current : 'Please fix the problems reported by the QA check' + (latestBuild ? ' in build ' + latestBuild.version : '') + '.');
     messageBox.current?.focus();
@@ -99,7 +106,7 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
   }
 
   async function submitRequest(request: string) {
-    if (isBuilding) return;
+    if (cannotSend) return;
     const text = request.trim();
     if (!text || (!project && !title.trim())) {
       setError(new ApiError('invalid_request', 'Enter a project title and a request before building.')); return;
@@ -138,7 +145,7 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
             {message.role === 'instructor' && message.turnId && outcomes[message.turnId]?.status === 'cancelled' &&
               <p className="stopped-request">Request stopped.</p>}
             {message.role === 'instructor' && message.turnId && outcomes[message.turnId]?.status === 'failed' &&
-              <ErrorNotice failure={outcomes[message.turnId]?.failure ?? { message: 'This request could not be completed.', nextStep: 'try_later' }} disabled={isBuilding}
+              <ErrorNotice failure={outcomes[message.turnId]?.failure ?? { message: 'This request could not be completed.', nextStep: 'try_later' }} disabled={cannotSend} onSignIn={() => void agent.start()}
                 onSendAgain={() => void submitRequest(message.content.filter(block => block.type === 'text').map(block => block.text).join('\n'))}
                 onEdit={() => { setRequestText(message.content.filter(block => block.type === 'text').map(block => block.text).join('\n')); messageBox.current?.focus(); }}
                 onNewProject={startNewProject} onAskForFix={askForFix} />}
@@ -148,17 +155,24 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
         <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{latestAgent ? `CDK: ${latestAgent.content.filter(block => block.type === 'text').map(block => block.text).join('')}` : ''}</div>
         {project && connection !== 'connected' && <div className="connection-notice"><p role="status">{connection === 'reconnecting' ? 'Reconnecting to your request…' : 'Connection lost. Try connecting again.'}</p>{connection === 'lost' && <button type="button" onClick={reconnect}>Try again</button>}</div>}
         {historyError && <div><p className="error" role="alert">Unable to load the conversation.</p><button type="button" onClick={reconnect}>Try loading the conversation again</button></div>}
+        <div className={agent.ready ? 'sr-only' : 'sign-in-notice'}>
+          <p role="status">{agent.notice}</p>
+          {!agent.ready && <>
+            <button type="button" disabled={agent.busy} onClick={() => void agent.start()}>Sign in to Claude</button>
+            <button type="button" disabled={agent.busy} onClick={() => void checkSignIn()}>Check again</button>
+          </>}
+        </div>
         <form onSubmit={handleSend} className={hasMessages ? 'composer' : 'composer composer-empty'}>
           {!project && <><label htmlFor="project-title">Project title</label><input id="project-title" value={title} onChange={event => setTitle(event.target.value)} placeholder="e.g., Cell division practice" maxLength={160} disabled={sending} /></>}
           <label htmlFor="request-text" className={project ? 'sr-only' : undefined}>{project ? 'Describe a change' : 'What should students learn or do?'}</label>
           <textarea ref={messageBox} id="request-text" value={requestText} onChange={event => setRequestText(event.target.value)} placeholder={project ? 'Describe a change or ask a question…' : 'Create a ten-question practice quiz on cell division…'} rows={3} maxLength={20000} />
           <div className="composer-footer">
             {activeTurnId && <button className="stop-request" type="button" disabled={stopping} onClick={() => void stopRequest()}>{stopping ? 'Stopping…' : 'Stop request'}</button>}
-            <button disabled={isBuilding} type="submit">{sending ? 'Sending…' : isBuilding ? 'Working…' : 'Send'}</button>
+            <button disabled={cannotSend} type="submit">{sending ? 'Sending…' : isBuilding ? 'Working…' : 'Send'}</button>
           </div>
           <div className="sr-only" role="status">{stopping ? 'Stopping request.' : turn.status === 'cancelled' && !activeTurnId ? 'Request stopped. You can send a follow-up.' : ''}</div>
           {activeStop?.error && <p className="error" role="alert">Unable to stop the request. {activeStop.error}</p>}
-          {error && <ErrorNotice failure={error} disabled={isBuilding} onSendAgain={() => void submitRequest(requestText)} onEdit={() => messageBox.current?.focus()} onNewProject={startNewProject} onAskForFix={askForFix} />}
+          {error && <ErrorNotice failure={error} disabled={cannotSend} onSendAgain={() => void submitRequest(requestText)} onEdit={() => messageBox.current?.focus()} onNewProject={startNewProject} onAskForFix={askForFix} onSignIn={() => void agent.start()} />}
         </form>
       </section>
       <BuildPanel build={latestBuild} turn={turn} statusLines={statusLines} connection={connection} outcome={outcomes[turn.id ?? '']?.message} disabled={isBuilding} onAskForFix={askForFix}

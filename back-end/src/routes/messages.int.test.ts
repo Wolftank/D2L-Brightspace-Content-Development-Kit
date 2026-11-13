@@ -37,7 +37,7 @@ describe('POST /api/projects/:projectId/messages', () => {
       messages: { list: unused },
       builds: { get: unused, download: unused, previewFile: unused },
       events,
-      driver: { name: 'claude', probe: async () => ({ ok: true }) },
+      driver: { name: 'claude', probe: async () => ({ ok: true }), signIn: () => {} },
       preview: { origin: 'http://preview.localhost:3000', appOrigin: 'http://127.0.0.1:5173' },
     };
     return createApp(deps);
@@ -205,7 +205,7 @@ describe('GET /api/projects/:projectId/messages', () => {
       messages: createMessageService({ projects: projectsRepo, messages: messagesRepo }),
       builds: { get: unused, download: unused, previewFile: unused },
       events: createEventService(createEventsRepo(db)),
-      driver: { name: 'claude', probe: async () => ({ ok: true }) },
+      driver: { name: 'claude', probe: async () => ({ ok: true }), signIn: () => {} },
       preview: { origin: 'http://preview.localhost:3000', appOrigin: 'http://127.0.0.1:5173' },
     };
     return createApp(deps);

@@ -48,7 +48,7 @@ describe('scripted agent driver', () => {
     const driver = createScriptedAgentDriver();
 
     expect(driver.name).toBe('scripted');
-    expect(await driver.probe()).toEqual({ ok: true, version: 'scripted' });
+    expect(await driver.probe()).toEqual({ ok: true });
   });
 
   it('builds a package that passes the QA gate when the message has no marker', async () => {

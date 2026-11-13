@@ -35,7 +35,7 @@ const KEEPALIVE_MS = 15_000;
 
 const user: User = { id: 'stub-user', displayName: 'Stub Instructor', email: null, role: 'instructor' };
 
-type Scenario = 'error-action' | 'cancelled' | 'meaningful-progress' | 'ok' | 'qa-fail' | 'turn-fail' | 'long-step' | 'long-feed' | 'multi-message' | 'drop' | 'drop-lost';
+type Scenario = 'error-action' | 'signed-out' | 'cancelled' | 'meaningful-progress' | 'ok' | 'qa-fail' | 'turn-fail' | 'long-step' | 'long-feed' | 'multi-message' | 'drop' | 'drop-lost';
 
 interface StoredEvent {
   seq: number;
@@ -80,6 +80,9 @@ class HttpError extends Error {
     super(API_ERRORS[code].message);
   }
 }
+
+/** The cookie that marks the stub agent signed out for one browser, so specs running side by side keep their own state. */
+const SIGNED_OUT_COOKIE = 'stub_signed_out';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -126,6 +129,7 @@ function textOf(content: ContentBlock[]): string {
 
 function scenarioFor(text: string): Scenario {
   if ((Object.keys(NEXT_STEPS) as NextStep[]).some(step => text.includes('[' + step + ']'))) return 'error-action';
+  if (text.includes('[signed-out]')) return 'signed-out';
   if (text.includes('[cancelled]')) return 'cancelled';
   if (text.includes('[drop-lost]')) return 'drop-lost';
   if (text.includes('[drop]')) return 'drop';
@@ -218,14 +222,16 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
 
   if (scenario === 'cancelled') {
     steps.push([4800, () => stopTurn(state, turn)]);
-  } else if (scenario === 'turn-fail' || scenario === 'error-action') {
+  } else if (scenario === 'turn-fail' || scenario === 'error-action' || scenario === 'signed-out') {
     steps.push([
       4800,
       () => {
         turn.status = 'failed';
         turn.finishedAt = Date.now();
         const requestedStep = (Object.keys(NEXT_STEPS) as NextStep[]).find(step => textOf(state.messages.find(message => message.id === turn.messageId)!.content).includes('[' + step + ']'));
-        const failure: { code: string; message: string; nextStep: NextStep } = { code: 'agent_error', message: 'The agent stopped before it finished.', nextStep: requestedStep ?? 'send_again' };
+        const failure: { code: string; message: string; nextStep: NextStep } = scenario === 'signed-out'
+          ? { code: 'agent_signed_out', message: "The agent isn't signed in, or its account can't be used.", nextStep: 'sign_in' }
+          : { code: 'agent_error', message: 'The agent stopped before it finished.', nextStep: requestedStep ?? 'send_again' };
         turn.error = failure;
         state.activeTurn = null;
         append(state, 'turn.failed', { turnId: turn.id, error: turn.error });
@@ -505,15 +511,16 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (segments[0] !== 'api') throw new HttpError('not_found');
   const [, resource, id, sub] = segments;
 
-  if (resource === 'agent' && id === 'sign-in' && method === 'GET') {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end('<!doctype html><html lang="en"><title>Agent sign-in</title><h1>Agent sign-in</h1><p>This is the stub sign-in page. Return to the conversation to continue testing.</p></html>'); return;
+  if (resource === 'agent' && id === 'sign-in' && method === 'POST') {
+    res.writeHead(202, { 'Set-Cookie': SIGNED_OUT_COOKIE + '=; Path=/; Max-Age=0' }).end();
+    return;
   }
 
   if (resource === 'health' && method === 'GET' && !id) return sendJson(res, 200, { ok: true });
 
   if (resource === 'me' && method === 'GET' && !id) {
-    const body: MeResponse = { user, mode: 'local', agent: { name: 'stub', ok: true, version: 'stub' } };
+    const signedOut = (req.headers.cookie ?? '').includes(SIGNED_OUT_COOKIE + '=1');
+    const body: MeResponse = { user, mode: 'local', agent: { name: 'stub', ok: !signedOut } };
     return sendJson(res, 200, body);
   }
 
@@ -530,7 +537,9 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
       return sendJson(res, 200, { items } satisfies MessageHistoryResponse);
     }
     if (id && sub === 'messages' && method === 'POST') {
-      return sendJson(res, 202, sendMessage(getProject(id), await readJson(req)));
+      const sent = sendMessage(getProject(id), await readJson(req));
+      if (textOf(sent.message.content).includes('[signed-out]')) res.setHeader('Set-Cookie', SIGNED_OUT_COOKIE + '=1; Path=/');
+      return sendJson(res, 202, sent);
     }
     if (id && sub === 'events' && method === 'GET') {
       const after = Number(req.headers['last-event-id'] ?? url.searchParams.get('after') ?? 0);
@@ -578,7 +587,7 @@ const server = createServer((req, res) => {
 
 server.listen(PORT, HOST, () => {
   console.log(`stub back end listening on http://${HOST}:${PORT}`);
-  console.log('Scenarios: include [qa-fail] or [turn-fail] in the message text to play a failure.');
+  console.log('Scenarios: include [qa-fail], [turn-fail] or [signed-out] in the message text to play a failure.');
 });
 
 const previewServer = startPreviewServer((id) => builds.get(id)?.build);

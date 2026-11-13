@@ -1,4 +1,6 @@
+import { type ChildProcess, execFile, spawn } from 'node:child_process';
 import { cp, lstat, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import {
@@ -742,100 +744,67 @@ async function writeWorkspaceFiles(req: SessionRequest): Promise<void> {
   await writeFile(settingsPath, JSON.stringify(WORKSPACE_SETTINGS, null, 2), 'utf8');
 }
 
-/** How long probe() waits for the CLI to report readiness before giving up.
- *  A missing/misconfigured binary can otherwise hang indefinitely instead
- *  of settling. */
-export const PROBE_TIMEOUT_MS = 15_000;
+/** How long `claude auth status` may take to answer. */
+const PROBE_TIMEOUT_MS = 15_000;
 
-/**
- * Probes the bundled CLI, aborting as soon as the stream proves the session
- * is live rather than waiting for a full reply. A real turn is the only
- * verified way to learn sign-in status — the SDK has no dedicated
- * zero-cost credential check (an earlier design tried holding a
- * streaming-input query open and calling the control-request `accountInfo()`
- * without ever sending a prompt; recording the fixture for this PR showed
- * that hangs even against a signed-in CLI, so it was dropped). Recording
- * that same fixture also showed the message order: `system/init`, a couple
- * of housekeeping `system` messages, then `rate_limit_event` — a live,
- * per-account signal — arriving *before* the first `stream_event` content
- * delta. Aborting on whichever of `rate_limit_event`, `stream_event`,
- * `assistant`, or `result` arrives first keeps the spend to at most the
- * first partial chunk of a one-word reply, capped again by `maxBudgetUsd`.
- */
-async function probeClaude(model: string | undefined): Promise<ProbeResult> {
-  const controller = new AbortController();
-
-  const attempt = async (): Promise<ProbeResult> => {
-    const q = query({
-      prompt: 'Reply with the single word: ready',
-      options: {
-        maxTurns: 1,
-        maxBudgetUsd: 0.01,
-        settingSources: [],
-        permissionMode: 'dontAsk',
-        strictMcpConfig: true,
-        env: agentEnv(),
-        persistSession: false,
-        ...modelOptions({ model }),
-        abortController: controller,
-      },
-    });
-
-    let version: string | undefined;
-    for (;;) {
-      const next = await q.next();
-      if (next.done) {
-        return { ok: false, detail: 'Claude CLI exited before reporting readiness' };
-      }
-
-      const message = next.value;
-      if (message.type === 'system' && message.subtype === 'init') {
-        version = message.claude_code_version;
-        continue;
-      }
-      if (message.type === 'stream_event' || message.type === 'rate_limit_event') {
-        return { ok: true, version };
-      }
-      if (message.type === 'assistant') {
-        if (message.error) {
-          return { ok: false, detail: `Claude CLI reported ${message.error}` };
-        }
-        return { ok: true, version };
-      }
-      if (message.type === 'result') {
-        if (message.subtype === 'success') return { ok: true, version };
-        const detail = message.errors.length > 0 ? message.errors.join('; ') : message.subtype;
-        return { ok: false, detail };
-      }
-      // Other telemetry (system/status, thinking_tokens, ...) settles
-      // nothing either way; keep waiting for a decisive message.
+/** The packaged Claude Code the SDK runs: the binary in the SDK's package for this platform. */
+function claudeExecutable(): string {
+  const sdk = `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}`;
+  const binary = process.platform === 'win32' ? 'claude.exe' : 'claude';
+  const require = createRequire(import.meta.url);
+  for (const candidate of [sdk, `${sdk}-musl`]) {
+    try {
+      return require.resolve(`${candidate}/${binary}`);
+    } catch {
+      continue;
     }
-  };
-
-  const timeout = new Promise<ProbeResult>((resolve) => {
-    const timer = setTimeout(
-      () => resolve({ ok: false, detail: `Claude CLI did not respond within ${PROBE_TIMEOUT_MS}ms` }),
-      PROBE_TIMEOUT_MS,
-    );
-    timer.unref?.();
-  });
-
-  try {
-    return await Promise.race([attempt(), timeout]);
-  } catch (err) {
-    return { ok: false, detail: err instanceof Error ? err.message : String(err) };
-  } finally {
-    controller.abort();
   }
+  throw new Error(`The packaged Claude Code for ${process.platform}-${process.arch} is not installed`);
+}
+
+/** Reads sign-in from `claude auth status`, which answers from the stored login. */
+function probeClaude(): Promise<ProbeResult> {
+  return new Promise((resolve) => {
+    const options = { env: agentEnv(), windowsHide: true, timeout: PROBE_TIMEOUT_MS };
+    execFile(claudeExecutable(), ['auth', 'status'], options, (err, stdout) => {
+      try {
+        const { loggedIn } = JSON.parse(stdout) as { loggedIn: boolean };
+        resolve(loggedIn ? { ok: true } : { ok: false, detail: 'Claude Code is not signed in' });
+      } catch {
+        resolve({ ok: false, detail: err?.message ?? 'Claude Code did not report its sign-in status' });
+      }
+    });
+  });
 }
 
 export function createClaudeAgentDriver(settings: ClaudeSettings = {}): AgentDriver {
+  let signIn: ChildProcess | undefined;
+
+  function endSignIn(): void {
+    signIn?.kill();
+    signIn = undefined;
+  }
+
   return {
     name: 'claude',
 
-    probe(): Promise<ProbeResult> {
-      return probeClaude(settings.model);
+    async probe(): Promise<ProbeResult> {
+      try {
+        return await probeClaude();
+      } catch (err) {
+        return { ok: false, detail: err instanceof Error ? err.message : String(err) };
+      }
     },
+
+    signIn() {
+      endSignIn();
+      const child = spawn(claudeExecutable(), ['auth', 'login', '--claudeai'], { env: agentEnv(), stdio: 'ignore', windowsHide: true });
+      child.on('error', (err) => log.error({ err }, 'Claude sign-in could not start'));
+      child.on('exit', (code) => log.info({ code }, 'Claude sign-in ended'));
+      signIn = child;
+    },
+
+    endSignIn,
 
     async open(req: SessionRequest): Promise<AgentSession> {
       // Written on every open(), including a reopen of an existing

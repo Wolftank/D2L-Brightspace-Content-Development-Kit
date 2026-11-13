@@ -154,6 +154,23 @@ describe('F10 conversation', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Restart preview' }));
     expect(screen.getByTitle('Interactive preview of build 3')).not.toBe(frame);
   });
+  it('asks a signed-out instructor to sign in, and enables Send once Check again finds them signed in', async () => {
+    let signedIn = false;
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url !== '/api/agent/sign-in') return Response.json({ agent: { name: 'claude', ok: signedIn } });
+      signedIn = true;
+      return new Response(null, { status: 202 });
+    });
+    render(<ProjectWorkspace />);
+    expect(await screen.findByText('Sign in to Claude to send requests.')).toHaveAttribute('role', 'status');
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in to Claude' }));
+    expect(await screen.findByText('Finish signing in in your browser, then press Check again.')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled());
+    expect(screen.queryByRole('button', { name: 'Sign in to Claude' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('What should students learn or do?')).toHaveFocus();
+  });
   it('shows a failed request and allows a follow-up with the draft kept on send failure', async () => {
     render(<ProjectWorkspace />); await firstRequest();
     emit({ seq: 2, kind: 'turn.failed', payload: { turnId: 't1', error: { code: 'agent_error', message: 'The agent stopped before it finished.', nextStep: 'send_again' } } });

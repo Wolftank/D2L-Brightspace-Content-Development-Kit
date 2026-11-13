@@ -201,7 +201,7 @@ export interface ApiErrorBody {
 export interface MeResponse {
   user: User;
   mode: 'local' | 'hosted';
-  agent: { name: string; ok: boolean; version?: string; detail?: string };
+  agent: { name: string; ok: boolean; detail?: string };
 }
 
 /** Creates a project. `avenue` defaults to `scorm`. Any other field is ignored. */
