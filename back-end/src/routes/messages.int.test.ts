@@ -9,7 +9,7 @@ import { messages as messagesTable, turns as turnsTable, users as usersTable, ty
 import { testDb } from '../db/test-db.js';
 import { createTurnsRepo, type TurnsRepo } from '../db/turns.js';
 import { createUsersRepo } from '../db/users.js';
-import type { Deps } from '../deps.js';
+import { fakeDeps, idleRunner } from '../test/deps.js';
 import { WorkspaceMissing } from '../errors.js';
 import { createEventService, type EventService } from '../pipeline/events.js';
 import { createRunner, type RunnerDeps } from '../pipeline/runner.js';
@@ -30,17 +30,13 @@ describe('POST /api/projects/:projectId/messages', () => {
   };
 
   function app() {
-    const deps: Deps = {
-      users: createUsersRepo(db),
-      projects: { create: unused, get: unused, list: unused },
-      turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, runner: { executeTurn, cancel: unused } }),
-      messages: { list: unused },
-      builds: { get: unused, download: unused, previewFile: unused },
-      events,
-      driver: { name: 'claude', probe: async () => ({ ok: true }), signIn: () => {} },
-      preview: { origin: 'http://preview.localhost:3000', appOrigin: 'http://127.0.0.1:5173' },
-    };
-    return createApp(deps);
+    return createApp(
+      fakeDeps({
+        users: createUsersRepo(db),
+        turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, runner: { ...idleRunner, executeTurn } }),
+        events,
+      }),
+    );
   }
 
   function post(projectId = 'project-1', body: unknown = BODY) {
@@ -193,22 +189,14 @@ describe('GET /api/projects/:projectId/messages', () => {
   let turnsRepo: TurnsRepo;
   let messagesRepo: MessagesRepo;
 
-  const unused = () => {
-    throw new Error('not used by these tests');
-  };
-
   function app() {
-    const deps: Deps = {
-      users: createUsersRepo(db),
-      projects: { create: unused, get: unused, list: unused },
-      turns: { start: unused, cancel: unused },
-      messages: createMessageService({ projects: projectsRepo, messages: messagesRepo }),
-      builds: { get: unused, download: unused, previewFile: unused },
-      events: createEventService(createEventsRepo(db)),
-      driver: { name: 'claude', probe: async () => ({ ok: true }), signIn: () => {} },
-      preview: { origin: 'http://preview.localhost:3000', appOrigin: 'http://127.0.0.1:5173' },
-    };
-    return createApp(deps);
+    return createApp(
+      fakeDeps({
+        users: createUsersRepo(db),
+        messages: createMessageService({ projects: projectsRepo, messages: messagesRepo }),
+        events: createEventService(createEventsRepo(db)),
+      }),
+    );
   }
 
   function list(projectId = 'project-1', query: Record<string, string> = {}) {

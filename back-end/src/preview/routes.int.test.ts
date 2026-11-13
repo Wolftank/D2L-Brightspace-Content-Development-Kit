@@ -14,6 +14,7 @@ import { testDb } from '../db/test-db.js';
 import { createTurnsRepo } from '../db/turns.js';
 import { createUsersRepo } from '../db/users.js';
 import type { Deps } from '../deps.js';
+import { fakeDeps } from '../test/deps.js';
 import { KIT_DIR } from '../kit.js';
 import { createEventService } from '../pipeline/events.js';
 import { createBuildService, type BuildService } from '../services/builds.js';
@@ -52,27 +53,13 @@ describe('preview origin', () => {
     workspaces = createWorkspaceService({ dataDir });
     const events = createEventService(createEventsRepo(db));
     builds = createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces, events });
-    deps = {
+    deps = fakeDeps({
       users: createUsersRepo(db),
       projects: createProjectService({ projects: projectsRepo, workspaces, builds: buildsRepo, turns: createTurnsRepo(db) }),
       builds,
       events,
-      turns: {
-        start: () => {
-          throw new Error('not used by these tests');
-        },
-        cancel: () => {
-          throw new Error('not used by these tests');
-        },
-      },
-      messages: {
-        list: () => {
-          throw new Error('not used by these tests');
-        },
-      },
-      driver: { name: 'claude', probe: async () => ({ ok: true }), signIn: () => {} },
       preview: { origin: `http://${PREVIEW_HOST}`, appOrigin: APP_ORIGIN },
-    };
+    });
 
     const ownerId = createUsersRepo(db).ensureLocalUser().id;
     await provisionedProject('mine', ownerId);

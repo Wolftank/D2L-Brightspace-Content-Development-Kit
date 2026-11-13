@@ -18,6 +18,7 @@ import { testDb } from '../db/test-db.js';
 import { createTurnsRepo } from '../db/turns.js';
 import { createUsersRepo } from '../db/users.js';
 import type { Deps } from '../deps.js';
+import { fakeDeps } from '../test/deps.js';
 import { createEventService } from '../pipeline/events.js';
 import { createBuildService, type BuildService } from '../services/builds.js';
 import { createProjectService } from '../services/projects.js';
@@ -45,27 +46,12 @@ describe('build routes', () => {
     workspaces = createWorkspaceService({ dataDir });
     const events = createEventService(createEventsRepo(db));
     builds = createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces, events });
-    deps = {
+    deps = fakeDeps({
       users: createUsersRepo(db),
       projects: createProjectService({ projects: projectsRepo, workspaces, builds: buildsRepo, turns: createTurnsRepo(db) }),
       builds,
       events,
-      turns: {
-        start: () => {
-          throw new Error('not used by these tests');
-        },
-        cancel: () => {
-          throw new Error('not used by these tests');
-        },
-      },
-      messages: {
-        list: () => {
-          throw new Error('not used by these tests');
-        },
-      },
-      driver: { name: 'claude', probe: async () => ({ ok: true }), signIn: () => {} },
-      preview: { origin: 'http://preview.localhost:3000', appOrigin: 'http://127.0.0.1:5173' },
-    };
+    });
 
     const ownerId = createUsersRepo(db).ensureLocalUser().id;
     await provisionedProject('mine', ownerId, 'Cell division practice');

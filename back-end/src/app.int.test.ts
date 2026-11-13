@@ -4,80 +4,10 @@ import { join } from 'node:path';
 import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from './app.js';
-import type { Deps } from './deps.js';
-import type { User } from './db/schema.js';
+import { FAKE_USER, fakeDeps } from './test/deps.js';
 import { captureLog } from './test/log.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-
-const fakeUser: User = {
-  id: 'user-1',
-  displayName: 'Test Instructor',
-  email: null,
-  role: 'instructor',
-};
-
-function fakeDeps(): Deps {
-  return {
-    users: {
-      ensureLocalUser: () => fakeUser,
-      get: (id) => (id === fakeUser.id ? fakeUser : undefined),
-    },
-    projects: {
-      create: async () => {
-        throw new Error('not used by these tests');
-      },
-      get: () => {
-        throw new Error('not used by these tests');
-      },
-      list: () => {
-        throw new Error('not used by these tests');
-      },
-    },
-    builds: {
-      get: () => {
-        throw new Error('not used by these tests');
-      },
-      download: async () => {
-        throw new Error('not used by these tests');
-      },
-      previewFile: async () => {
-        throw new Error('not used by these tests');
-      },
-    },
-    events: {
-      append: (input) => ({
-        seq: 1,
-        projectId: input.projectId,
-        turnId: input.turnId ?? null,
-        kind: input.kind,
-        payload: input.payload,
-        ts: Date.now(),
-      }),
-      after: () => [],
-      subscribe: () => () => {},
-    },
-    turns: {
-      start: () => {
-        throw new Error('not used by these tests');
-      },
-      cancel: () => {
-        throw new Error('not used by these tests');
-      },
-    },
-    messages: {
-      list: () => {
-        throw new Error('not used by these tests');
-      },
-    },
-    driver: {
-      name: 'claude',
-      probe: async () => ({ ok: true }),
-      signIn: () => {},
-    },
-    preview: { origin: 'http://preview.localhost:3000', appOrigin: 'http://127.0.0.1:5173' },
-  };
-}
 
 describe('createApp', () => {
   it('returns the stub user, mode, and agent probe from /api/me', async () => {
@@ -87,7 +17,7 @@ describe('createApp', () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
-      user: fakeUser,
+      user: FAKE_USER,
       mode: 'local',
       agent: { name: 'claude', ok: true },
     });
