@@ -646,15 +646,18 @@ export async function* mapClaudeStream(
   }
 }
 
-/** The model and reasoning effort Claude runs with. An omitted field keeps the account's default. */
+/** The model Claude runs with when no model is set. */
+export const DEFAULT_MODEL = 'claude-sonnet-5-5';
+
+/** The model and reasoning effort Claude runs with. An omitted model is `DEFAULT_MODEL`; an omitted effort keeps Claude's default. */
 export interface ClaudeSettings {
   model?: string;
   effort?: EffortLevel;
 }
 
-/** The query options for a model and effort, leaving out any that is unset. */
-function modelOptions({ model, effort }: ClaudeSettings): Pick<Options, 'model' | 'effort'> {
-  return { ...(model ? { model } : {}), ...(effort ? { effort } : {}) };
+/** The query options for a model and effort, leaving out an unset effort. */
+function modelOptions({ model = DEFAULT_MODEL, effort }: ClaudeSettings): Pick<Options, 'model' | 'effort'> {
+  return { model, ...(effort ? { effort } : {}) };
 }
 
 function createClaudeSession(req: SessionRequest, settings: ClaudeSettings): AgentSession {

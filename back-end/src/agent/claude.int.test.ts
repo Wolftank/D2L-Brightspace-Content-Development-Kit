@@ -107,10 +107,10 @@ describe('Claude turns', () => {
     expect(options).toMatchObject({ model: 'claude-sonnet-5', effort: 'medium' });
   });
 
-  it("leaves model and effort to the account's defaults when unset", async () => {
+  it("runs the default model, and leaves effort to Claude's default, when neither is set", async () => {
     const { options } = await runTurn();
 
-    expect(options).not.toHaveProperty('model');
+    expect(options).toMatchObject({ model: 'claude-sonnet-5-5' });
     expect(options).not.toHaveProperty('effort');
   });
 

@@ -37,7 +37,7 @@ Copy-Item .env.example .env
 | Setting | Default | Rule |
 |---|---|---|
 | `AGENT_DRIVER` | `claude` | The agent that runs turns: `claude`, or `scripted` for development and tests (see [The scripted agent](#the-scripted-agent)) |
-| `AGENT_MODEL` | the agent's default for the account | A model name, such as `claude-sonnet-5`. The agent checks the name on each turn, not at startup |
+| `AGENT_MODEL` | `claude-sonnet-5-5` | A model name. The agent checks the name on each turn, not at startup |
 | `AGENT_EFFORT` | the agent's default | `low`, `medium`, `high`, `xhigh`, or `max` |
 | `AGENT_MAX_STEPS` | `60` | The most model calls one request may make: a whole number, 1 or more. A request that needs more stops with a plain message. `.env.example` explains the default |
 | `AGENT_MAX_BUDGET_USD` | `10` | The most one request may spend, in US dollars: a number greater than 0, such as `2.5`. Claude applies it to the cost it reports at API prices, even when the account is billed by subscription; an agent that reports no cost is not limited by it |
