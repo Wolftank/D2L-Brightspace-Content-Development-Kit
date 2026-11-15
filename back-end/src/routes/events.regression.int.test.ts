@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app.js';
+import { createFilesRepo } from '../db/files.js';
 import { createBuildsRepo } from '../db/builds.js';
 import { createEventsRepo } from '../db/events.js';
 import { createMessagesRepo } from '../db/messages.js';
@@ -78,7 +79,7 @@ describe('R7 regression: event stream and reconnect', () => {
     deps = {
       users: createUsersRepo(db),
       projects: createProjectService({ projects: projectsRepo, workspaces, builds: buildsRepo, turns: turnsRepo }),
-      turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, runner: { executeTurn: async () => {}, cancel: () => {} } }),
+      turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, files: createFilesRepo(db), runner: { executeTurn: async () => {}, cancel: () => {} } }),
       builds: createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces, events }),
       events,
       messages: createMessageService({ projects: projectsRepo, messages: createMessagesRepo(db) }),

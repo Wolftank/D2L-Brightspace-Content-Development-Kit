@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app.js';
+import { createFilesRepo } from '../db/files.js';
 import { createBuildsRepo } from '../db/builds.js';
 import { createEventsRepo } from '../db/events.js';
 import type { Db } from '../db/index.js';
@@ -40,7 +41,7 @@ describe('project routes', () => {
       }),
       builds: createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces: workspaceService, events }),
       events,
-      turns: createTurnService({ projects: projectsRepo, turns: createTurnsRepo(db), runner: { executeTurn: async () => {}, cancel: () => {} } }),
+      turns: createTurnService({ projects: projectsRepo, turns: createTurnsRepo(db), files: createFilesRepo(db), runner: { executeTurn: async () => {}, cancel: () => {} } }),
       messages: {
         list: () => {
           throw new Error('not used by these tests');

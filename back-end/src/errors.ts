@@ -75,6 +75,14 @@ export class BuildIncomplete extends Error {
   }
 }
 
+/** A message names files that are not in its project: unknown, or another project's. */
+export class FilesNotInProject extends Error {
+  constructor(public readonly fileIds: string[]) {
+    super(`Files not in the project: ${fileIds.join(', ')}`);
+    this.name = 'FilesNotInProject';
+  }
+}
+
 /** Why an uploaded file was refused: its content is not an accepted type, it is empty, or it is over the size limit. */
 export type FileNotAcceptedReason = 'type' | 'empty' | 'too_large';
 
@@ -126,6 +134,7 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
       ? send(res, 'file_not_accepted', { reason: 'too_large' })
       : send(res, 'invalid_request', { code: err.code });
   }
+  if (err instanceof FilesNotInProject) return send(res, 'invalid_request', { fileIds: err.fileIds });
   if (err instanceof FileNotAccepted) return send(res, 'file_not_accepted', { reason: err.reason });
   if (err instanceof Forbidden) return send(res, 'forbidden');
   if (err instanceof NotFound) return send(res, 'not_found');

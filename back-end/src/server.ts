@@ -39,6 +39,7 @@ function buildBackEnd(cfg: Config): BackEnd {
   const buildsRepo = createBuildsRepo(db);
   const turnsRepo = createTurnsRepo(db);
   const messagesRepo = createMessagesRepo(db);
+  const filesRepo = createFilesRepo(db);
   const events = createEventService(createEventsRepo(db));
   const workspaces = createWorkspaceService({ dataDir: cfg.dataDir });
   const builds = createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces, events });
@@ -63,9 +64,9 @@ function buildBackEnd(cfg: Config): BackEnd {
   const deps: Deps = {
     users: createUsersRepo(db),
     projects: createProjectService({ projects: projectsRepo, workspaces, builds: buildsRepo, turns: turnsRepo }),
-    turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, runner }),
+    turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, files: filesRepo, runner }),
     messages: createMessageService({ projects: projectsRepo, messages: messagesRepo }),
-    files: createFileService({ projects: projectsRepo, files: createFilesRepo(db), workspaces }),
+    files: createFileService({ projects: projectsRepo, files: filesRepo, workspaces }),
     builds,
     events,
     driver,
