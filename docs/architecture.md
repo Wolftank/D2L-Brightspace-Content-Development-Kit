@@ -265,7 +265,7 @@ A failed turn's `error`, stored on the turn and sent in `turn.failed`. The runne
 | --- | --- | --- |
 | `agent_error` | The agent stopped with an error before it finished. | `send_again` |
 | `agent_signed_out` | The agent isn't signed in, or its account can't be used. | `sign_in` |
-| `agent_billing` | The agent's account has a billing or account problem. | `sign_in` |
+| `agent_billing` | The agent's account has a billing or account problem. | `try_later` |
 | `agent_busy` | The agent's account is busy or has reached its usage limit. | `try_later` |
 | `agent_unrestricted` | The agent started with tools or skills CDK doesn't allow, so the request didn't run. | `try_later` |
 | `max_steps_exceeded` | The request needed more steps than allowed. | `smaller_request` |

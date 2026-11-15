@@ -17,7 +17,7 @@ export type RunnerErrorCode = TurnErrorCode | 'workspace_missing' | 'interrupted
 export const TURN_ERRORS: Record<RunnerErrorCode, Omit<TurnError, 'code'>> = {
   agent_error: { message: 'The agent stopped with an error before it finished.', nextStep: 'send_again' },
   agent_signed_out: { message: "The agent isn't signed in, or its account can't be used.", nextStep: 'sign_in' },
-  agent_billing: { message: "The agent's account has a billing or account problem.", nextStep: 'sign_in' },
+  agent_billing: { message: "The agent's account has a billing or account problem.", nextStep: 'try_later' },
   agent_busy: { message: "The agent's account is busy or has reached its usage limit.", nextStep: 'try_later' },
   agent_unrestricted: { message: "The agent started with tools or skills CDK doesn't allow, so the request didn't run.", nextStep: 'try_later' },
   max_steps_exceeded: { message: 'The request needed more steps than allowed.', nextStep: 'smaller_request' },
