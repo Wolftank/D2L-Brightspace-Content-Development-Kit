@@ -74,3 +74,11 @@ section:focus-visible, .chat-history:focus-visible { outline: 3px solid #a65169;
 .error-notice button, .error-action { display: inline-block; margin: 10px 10px 0 0; padding: 10px 14px; color: #fff; background: #7b2338; border-radius: 5px; font-size: 14px; font-weight: 700; }
 .error-notice .error { margin-top: 0; }
 .connection-notice { margin-top: 16px; padding: 14px; background: #f7f6f2; border: 1px solid #deded8; border-radius: 5px; }
+
+.attachment-picker, .attachment-labels button { color: #7b2338; background: transparent; }
+.attachment-picker:hover, .attachment-labels button:hover { background: #f5e8ec; }
+.attachment-picker { margin-right: auto; display: grid; place-items: center; min-width: 32px; min-height: 32px; padding: 6px; }
+.attachment-labels { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; padding: 0; }
+.attachment-labels li { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; padding: 3px 8px; border-radius: 12px; background: #eee8ed; color: #352637; font-size: .875rem; overflow-wrap: anywhere; }
+.attachment-labels button { margin: 0; padding: 0 4px; min-width: 24px; min-height: 24px; }
+.attachment-drop { position: fixed; inset: 12px; z-index: 10; display: grid; place-items: center; border: 3px dashed #7b2338; border-radius: 12px; background: #fff5f8eb; color: #7b2338; font-size: 1.4rem; font-weight: 700; pointer-events: none; }

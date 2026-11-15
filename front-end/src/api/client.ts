@@ -1,5 +1,7 @@
 import type {
   BuildResponse,
+  FileListResponse,
+  UploadFileResponse,
   CreateProjectRequest,
   CreateProjectResponse,
   MessageHistoryResponse,
@@ -80,4 +82,14 @@ export function getMessages(projectId: string, cursor?: string): Promise<Message
 
 export function listProjects(): Promise<ProjectListResponse> {
   return json('/api/projects');
+}
+
+export function uploadProjectFile(projectId: string, file: File): Promise<UploadFileResponse> {
+  const body = new FormData();
+  body.set('file', file);
+  return json('/api/projects/' + encodeURIComponent(projectId) + '/files', { method: 'POST', body });
+}
+
+export function listProjectFiles(projectId: string): Promise<FileListResponse> {
+  return json('/api/projects/' + encodeURIComponent(projectId) + '/files');
 }
