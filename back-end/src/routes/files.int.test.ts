@@ -79,8 +79,28 @@ describe('project files', () => {
       expect(res.status).toBe(201);
       const file = res.body.file as ProjectFile;
       expect(file).toEqual({ id: expect.any(String), projectId: 'project-1', name, mime, size: content.length, createdAt: expect.any(Number) });
-      expect(await filesOnDisk()).toEqual([`${file.id}.${ext}`]);
+      expect(await filesOnDisk()).toContain(`${file.id}.${ext}`);
       expect(await readFile(join(workspaces.pathFor('project-1'), 'files', `${file.id}.${ext}`))).toEqual(content);
+    });
+
+    it("stores a Word file's text beside it as <id>.txt", async () => {
+      const res = await upload('lab-rules.docx', await readFile(join(FIXTURES, 'lab-rules.docx')));
+
+      const id = res.body.file.id as string;
+      expect(await filesOnDisk()).toEqual([`${id}.docx`, `${id}.txt`]);
+      const text = await readFile(join(workspaces.pathFor('project-1'), 'files', `${id}.txt`), 'utf8');
+      expect(text).toContain('Students must bring a blue lab notebook to every session.');
+      expect(text).toContain('Goggles stay on until the instructor says the bench is clear.');
+    });
+
+    it('refuses a Word file mammoth cannot read with 422, and stores nothing', async () => {
+      const word = await readFile(join(FIXTURES, 'lab-rules.docx'));
+
+      const res = await upload('broken.docx', word.subarray(0, 2000));
+
+      expect(res.status).toBe(422);
+      expect(res.body.error).toMatchObject({ code: 'file_not_accepted', details: { reason: 'type' } });
+      expect(await filesOnDisk()).toEqual([]);
     });
 
     it('decides the type from the content, not the name or the declared type', async () => {

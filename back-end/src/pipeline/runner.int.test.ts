@@ -7,6 +7,7 @@ import type { AgentDriver, AgentEvent, AgentSession, TurnErrorCode, TurnLimits, 
 import { createScriptedAgentDriver } from '../agent/scripted.js';
 import { createBuildsRepo } from '../db/builds.js';
 import { createEventsRepo } from '../db/events.js';
+import { createFilesRepo } from '../db/files.js';
 import type { Db } from '../db/index.js';
 import { createMessagesRepo, type MessagesRepo } from '../db/messages.js';
 import { createProjectsRepo, type ProjectsRepo } from '../db/projects.js';
@@ -185,7 +186,7 @@ describe('runner, end to end', () => {
   function useAgent(driver: Pick<AgentDriver, 'open'>, turnLimits: TurnLimits): void {
     sessions = createSessionService({ projects, workspaces, driver, tools: () => ({ name: 'cdk', tools: [] }) });
     const builds = createBuildService({ builds: createBuildsRepo(db), projects, workspaces, events });
-    runner = createRunner({ turns: createTurnsRepo(db), messages, events, sessions, workspaces, builds, turnLimits });
+    runner = createRunner({ turns: createTurnsRepo(db), messages, files: createFilesRepo(db), events, sessions, workspaces, builds, turnLimits });
   }
 
   beforeEach(async () => {

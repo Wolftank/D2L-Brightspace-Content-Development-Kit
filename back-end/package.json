@@ -26,6 +26,7 @@
     "drizzle-orm": "^0.45.2",
     "express": "^5.2.1",
     "file-type": "^21.3.4",
+    "mammoth": "^1.13.0",
     "multer": "^2.5.0",
     "partial-json": "^0.1.7",
     "pino": "^10.4.0",

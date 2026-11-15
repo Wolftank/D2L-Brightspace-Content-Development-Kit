@@ -1,8 +1,8 @@
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app.js';
-import { createFilesRepo } from '../db/files.js';
 import { createEventsRepo } from '../db/events.js';
+import { createFilesRepo } from '../db/files.js';
 import type { Db } from '../db/index.js';
 import { createMessagesRepo, type MessagesRepo } from '../db/messages.js';
 import { createProjectsRepo, type ProjectsRepo } from '../db/projects.js';

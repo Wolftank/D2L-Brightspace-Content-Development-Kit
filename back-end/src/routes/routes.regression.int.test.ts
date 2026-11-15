@@ -6,11 +6,11 @@ import type { ChatMessage } from '@cdk/contract';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fromBufferPromise } from 'yauzl';
-import type { AgentDriver, AgentEvent, TurnResult } from '../agent/AgentDriver.js';
+import type { AgentDriver, AgentEvent, TurnInput, TurnResult } from '../agent/AgentDriver.js';
 import { createApp } from '../app.js';
-import { createFilesRepo } from '../db/files.js';
 import { createBuildsRepo } from '../db/builds.js';
 import { createEventsRepo } from '../db/events.js';
+import { createFilesRepo } from '../db/files.js';
 import type { Db } from '../db/index.js';
 import { createMessagesRepo } from '../db/messages.js';
 import { createProjectsRepo, type ProjectsRepo } from '../db/projects.js';
@@ -24,6 +24,7 @@ import { createEventService, type EventService } from '../pipeline/events.js';
 import { createRunner } from '../pipeline/runner.js';
 import { createSessionService, type SessionService } from '../pipeline/sessions.js';
 import { createBuildService, type BuildService } from '../services/builds.js';
+import { createFileService } from '../services/files.js';
 import { createMessageService } from '../services/messages.js';
 import { createProjectService } from '../services/projects.js';
 import { createTurnService } from '../services/turns.js';
@@ -71,7 +72,7 @@ function fakeAgent(): { driver: Pick<AgentDriver, 'open'>; release(): void } {
             yield { kind: 'tool_start', callId: 'call-1', name: 'Write', summary: 'Writing the activity', category: 'writing' as const };
             if (input.text.includes('[hold]')) await held;
             if (input.text.includes('[qa-fail]')) await fs.cp(BAD_SCORM, out, { recursive: true, force: true });
-            else await fs.writeFile(join(out, 'notes.txt'), input.text);
+            else await fs.writeFile(join(out, 'notes.txt'), [input.text, ...(await Promise.all(input.attachments.map(readAttachment)))].join('\n'));
             yield { kind: 'tool_end', callId: 'call-1', ok: true };
             yield { kind: 'text_delta', text: 'Done.' };
             resolveResult({ status: 'completed', sessionId: null, text: 'Done.', usage: { steps: 1 } });
@@ -83,6 +84,14 @@ function fakeAgent(): { driver: Pick<AgentDriver, 'open'>; release(): void } {
     },
   };
   return { driver, release: () => release() };
+}
+
+const FILES_FIXTURES = join(import.meta.dirname, '..', 'services', '__fixtures__', 'files');
+
+/** What the fake agent notes about an attachment: its text, or the start of a binary file's bytes. */
+async function readAttachment({ path, name, mime }: TurnInput['attachments'][number]): Promise<string> {
+  const content = await fs.readFile(path);
+  return `${name} (${mime}): ${mime === 'text/plain' ? content.toString('utf8').trim() : content.subarray(0, 5).toString('latin1')}`;
 }
 
 /** The relative paths of every file under `dir`, sorted, with `/` separators. */
@@ -176,6 +185,7 @@ describe('R8 regression: project, message and build routes', () => {
     const runner = createRunner({
       turns: turnsRepo,
       messages: messagesRepo,
+      files: createFilesRepo(db),
       events,
       sessions,
       workspaces,
@@ -189,14 +199,7 @@ describe('R8 regression: project, message and build routes', () => {
       messages: createMessageService({ projects: projectsRepo, messages: messagesRepo }),
       builds,
       events,
-      files: {
-        upload: () => {
-          throw new Error('not used by these tests');
-        },
-        list: () => {
-          throw new Error('not used by these tests');
-        },
-      },
+      files: createFileService({ projects: projectsRepo, files: createFilesRepo(db), workspaces }),
       driver: { name: 'claude', probe: async () => ({ ok: true, version: '0.0.0' }) },
       preview: { origin: 'http://preview.localhost:3000', appOrigin: 'http://127.0.0.1:5173' },
     };
@@ -349,6 +352,37 @@ describe('R8 regression: project, message and build routes', () => {
         expect.objectContaining({ msg: 'Build created', projectId, turnId }),
         expect.objectContaining({ msg: 'Build checked', projectId, turnId }),
       ]);
+    });
+
+    it("gives the agent a message's uploaded files: a PDF as itself and a Word document as its text", async () => {
+      const projectId = await createProject();
+      const upload = async (name: string) => {
+        const res = await request(app())
+          .post(`/api/projects/${projectId}/files`)
+          .attach('file', await fs.readFile(join(FILES_FIXTURES, name)), name);
+        expect(res.status).toBe(201);
+        return res.body.file.id as string;
+      };
+      const pdf = await upload('field-trip.pdf');
+      const word = await upload('lab-rules.docx');
+
+      const sent = await request(app())
+        .post(`/api/projects/${projectId}/messages`)
+        .send({ content: [{ type: 'text', text: 'Build a checklist from these' }, { type: 'file', fileId: pdf }, { type: 'file', fileId: word }] });
+      const turn = await waitForTurn(projectId, sent.body.turn.id, (status) => status === 'completed');
+
+      expect(turn.status).toBe('completed');
+      const notes = await fs.readFile(join(workspaces.pathFor(projectId), 'out', 'notes.txt'), 'utf8');
+      expect(notes.split('\n')).toEqual([
+        'Build a checklist from these',
+        'field-trip.pdf (application/pdf): %PDF-',
+        'lab-rules.docx (text/plain): Lab safety rules',
+        '',
+        'Students must bring a blue lab notebook to every session.',
+        '',
+        'Goggles stay on until the instructor says the bench is clear.',
+      ]);
+      expect((await listMessages(projectId))[0]!.content).toEqual(sent.body.message.content);
     });
 
     it("lists messages oldest first, each instructor message carrying its turn's status and error, paging with nextCursor", async () => {

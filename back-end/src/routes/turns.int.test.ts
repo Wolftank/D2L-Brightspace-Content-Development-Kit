@@ -6,9 +6,9 @@ import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentDriver, AgentEvent, TurnResult } from '../agent/AgentDriver.js';
 import { createApp } from '../app.js';
-import { createFilesRepo } from '../db/files.js';
 import { createBuildsRepo } from '../db/builds.js';
 import { createEventsRepo } from '../db/events.js';
+import { createFilesRepo } from '../db/files.js';
 import type { Db } from '../db/index.js';
 import { createMessagesRepo } from '../db/messages.js';
 import { createProjectsRepo, type ProjectsRepo } from '../db/projects.js';
@@ -104,6 +104,7 @@ describe('POST /api/turns/:turnId/cancel', () => {
     const runner = createRunner({
       turns: turnsRepo,
       messages: messagesRepo,
+      files: createFilesRepo(db),
       events,
       sessions,
       workspaces,

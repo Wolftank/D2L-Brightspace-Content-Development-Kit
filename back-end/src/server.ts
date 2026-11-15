@@ -54,6 +54,7 @@ function buildBackEnd(cfg: Config): BackEnd {
   const runner = createRunner({
     turns: turnsRepo,
     messages: messagesRepo,
+    files: filesRepo,
     events,
     sessions,
     workspaces,
