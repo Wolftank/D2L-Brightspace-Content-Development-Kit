@@ -59,11 +59,7 @@ The app isn't signed yet, so Windows may warn before it runs:
 - **"Windows protected your PC"** (SmartScreen): select **More info**, then **Run anyway**. Windows shows this for an installer downloaded from the internet, including one from a release or from CI, or received through chat or email. It does not show it for an installer you built on the same computer.
 - **Smart App Control** (Windows 11, Settings > Privacy & security > Windows Security > App & browser control): when it is on, it blocks unsigned apps and offers no way to run them. Use a laptop where it is off.
 
-The agent uses the Claude sign-in on the laptop, like the development setup. If Claude Code is already signed in there, nothing else is needed. Otherwise, sign in once from PowerShell with the copy of Claude that ships with CDK:
-
-```
-& "$env:LOCALAPPDATA\Programs\cdk-desktop\resources\app\node_modules\@anthropic-ai\claude-agent-sdk-win32-x64\claude.exe" auth login
-```
+The agent uses the Claude sign-in on the laptop, like the development setup. If Claude Code is already signed in there, nothing else is needed. Otherwise the Design panel shows **Sign in to Claude**, which opens the sign-in in the browser.
 
 Projects and builds are stored in `%LOCALAPPDATA%\CDK`, the same folder the development back end uses, so the app and a development back end on the same laptop share projects. The window's own browser data is in `%APPDATA%\CDK`.
 
