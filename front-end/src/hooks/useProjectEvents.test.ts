@@ -578,6 +578,75 @@ describe('useProjectEvents', () => {
 
       expect(eventStateOf(hook.result.current)).toEqual(initialProjectEventState);
     });
+
+    const withoutMessages: Partial<ProjectEventState> = { ...initialProjectEventState };
+    delete withoutMessages.messages;
+    const wrongShapes = [
+      ['null', null],
+      ['an empty object', {}],
+      ['an array', []],
+      ['state without messages', withoutMessages],
+    ] as const;
+
+    function emitTurnWithReply(stream: Stream) {
+      act(() => {
+        stream.open();
+        stream.emit('turn.started', { turnId: 't1', startedAt: 1000 }, 1);
+        stream.emit('message.completed', { message: chatMessage('a1', 1, 'agent', 't1', 'Here is your quiz') }, 2);
+      });
+    }
+
+    it.each(wrongShapes)('falls back to the empty state on mount when the saved state is %s', (_name, saved) => {
+      sessionStorage.setItem('progress-p1-event-state', JSON.stringify(saved));
+      const hook = renderHook(() => useProjectEvents('p1'));
+      expect(eventStateOf(hook.result.current)).toEqual(initialProjectEventState);
+
+      emitTurnWithReply(Stream.instances[0]!);
+      expect(lineTexts(hook.result.current)).toEqual(['Starting your build']);
+      expect(hook.result.current.messages.map(message => message.id)).toEqual(['a1']);
+    });
+
+    it.each(wrongShapes)('falls back to the empty state when the switched-to project saved state is %s', (_name, saved) => {
+      sessionStorage.setItem('progress-p1-event-state', JSON.stringify(saved));
+      const hook = renderHook(({ projectId }) => useProjectEvents(projectId), { initialProps: { projectId: 'p2' } });
+      act(() => {
+        Stream.instances[0]!.open();
+        Stream.instances[0]!.emit('turn.started', { turnId: 't9', startedAt: 9000 }, 1);
+      });
+
+      hook.rerender({ projectId: 'p1' });
+      expect(eventStateOf(hook.result.current)).toEqual(initialProjectEventState);
+
+      emitTurnWithReply(Stream.instances[1]!);
+      expect(lineTexts(hook.result.current)).toEqual(['Starting your build']);
+      expect(hook.result.current.messages.map(message => message.id)).toEqual(['a1']);
+    });
+
+    it('replays the stream from the start after discarding saved state, so earlier builds return', () => {
+      sessionStorage.setItem('progress-p1-event-state', '{}');
+      sessionStorage.setItem('progress-p1-last-seq', '7');
+      const hook = renderHook(() => useProjectEvents('p1'));
+      const stream = Stream.instances[0]!;
+      expect(stream.url).toBe('/api/projects/p1/events');
+
+      act(() => {
+        stream.open();
+        stream.emit('build.created', { build: build('ready') }, 3);
+      });
+      expect(hook.result.current.builds).toEqual([build('ready')]);
+      expect(sessionStorage.getItem('progress-p1-last-seq')).toBe('3');
+    });
+
+    it('replays the stream from the start when the switched-to project saved state is discarded', () => {
+      sessionStorage.setItem('progress-p2-event-state', 'null');
+      sessionStorage.setItem('progress-p2-last-seq', '7');
+      const hook = renderHook(({ projectId }) => useProjectEvents(projectId), { initialProps: { projectId: 'p1' } });
+
+      hook.rerender({ projectId: 'p2' });
+
+      expect(Stream.instances[1]!.url).toBe('/api/projects/p2/events');
+      expect(JSON.parse(sessionStorage.getItem('progress-p2-event-state')!)).toEqual(initialProjectEventState);
+    });
   });
 
   describe('chat events', () => {
