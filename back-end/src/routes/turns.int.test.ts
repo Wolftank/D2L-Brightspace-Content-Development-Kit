@@ -116,6 +116,14 @@ describe('POST /api/turns/:turnId/cancel', () => {
       messages: createMessageService({ projects: projectsRepo, messages: messagesRepo }),
       builds,
       events,
+      files: {
+        upload: () => {
+          throw new Error('not used by these tests');
+        },
+        list: () => {
+          throw new Error('not used by these tests');
+        },
+      },
       driver: { name: 'claude', probe: async () => ({ ok: true }) },
       preview: { origin: 'http://preview.localhost:3000', appOrigin: 'http://127.0.0.1:5173' },
     };

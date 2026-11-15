@@ -7,6 +7,7 @@ import type { Deps } from './deps.js';
 import { createBuildsRepo } from './db/builds.js';
 import { openDb } from './db/index.js';
 import { createEventsRepo } from './db/events.js';
+import { createFilesRepo } from './db/files.js';
 import { createMessagesRepo } from './db/messages.js';
 import { createProjectsRepo } from './db/projects.js';
 import { createTurnsRepo } from './db/turns.js';
@@ -17,6 +18,7 @@ import { createEventService } from './pipeline/events.js';
 import { createRunner, type Runner } from './pipeline/runner.js';
 import { createSessionService, type SessionService } from './pipeline/sessions.js';
 import { createBuildService, type BuildService } from './services/builds.js';
+import { createFileService } from './services/files.js';
 import { createMessageService } from './services/messages.js';
 import { createProjectService } from './services/projects.js';
 import { createTurnService } from './services/turns.js';
@@ -63,6 +65,7 @@ function buildBackEnd(cfg: Config): BackEnd {
     projects: createProjectService({ projects: projectsRepo, workspaces, builds: buildsRepo, turns: turnsRepo }),
     turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, runner }),
     messages: createMessageService({ projects: projectsRepo, messages: messagesRepo }),
+    files: createFileService({ projects: projectsRepo, files: createFilesRepo(db), workspaces }),
     builds,
     events,
     driver,

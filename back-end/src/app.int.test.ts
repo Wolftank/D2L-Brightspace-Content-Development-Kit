@@ -70,6 +70,14 @@ function fakeDeps(): Deps {
         throw new Error('not used by these tests');
       },
     },
+    files: {
+      upload: () => {
+        throw new Error('not used by these tests');
+      },
+      list: () => {
+        throw new Error('not used by these tests');
+      },
+    },
     driver: {
       name: 'claude',
       probe: async () => ({ ok: true, version: '0.0.0' }),
