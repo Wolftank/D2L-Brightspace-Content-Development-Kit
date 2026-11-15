@@ -225,6 +225,48 @@ default:
 }
 }
 
+const turnStatuses: readonly unknown[] = ['idle', 'running', 'completed', 'failed', 'cancelled'] satisfies ProjectEventState['turn']['status'][];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isProjectEventState(value: unknown): value is ProjectEventState {
+  if (!isRecord(value) || !isRecord(value.turn)) return false;
+  const { turn } = value;
+  return (turn.id === null || typeof turn.id === 'string')
+    && (turn.startedAt === null || typeof turn.startedAt === 'number')
+    && typeof turn.currentStep === 'string'
+    && turnStatuses.includes(turn.status)
+    && Array.isArray(value.statusLines)
+    && Array.isArray(value.streamingMessages)
+    && Array.isArray(value.builds)
+    && Array.isArray(value.messages)
+    && isRecord(value.outcomes);
+}
+
+/**
+ * Reads a project's saved event state from session storage.
+ *
+ * Saved state that is unreadable or not a ProjectEventState is discarded
+ * along with the saved stream position, so the event stream replays the
+ * project from the start.
+ */
+function readSavedState(projectId: string | null): ProjectEventState {
+  if (!projectId) return initialProjectEventState;
+  const stateKey = `progress-${projectId}-event-state`;
+  const saved = sessionStorage.getItem(stateKey);
+  if (saved === null) return initialProjectEventState;
+  try {
+    const parsed: unknown = JSON.parse(saved);
+    if (isProjectEventState(parsed)) return parsed;
+  } catch {
+    // Unreadable saved state is discarded below.
+  }
+  sessionStorage.removeItem(stateKey);
+  sessionStorage.removeItem(`progress-${projectId}-last-seq`);
+  return initialProjectEventState;
+}
 
 export function useProjectEvents(projectId: string | null) {
   const [retry, setRetry] = useState(0);
@@ -234,27 +276,7 @@ export function useProjectEvents(projectId: string | null) {
   ? `progress-${projectId}-event-state`
   : null;
 
-const [state, dispatch] = useReducer(
-  projectEventReducer,
-  initialProjectEventState,
-  (defaultState) => {
-    if (!storageStateKey) {
-      return defaultState;
-    }
-
-    const saved = sessionStorage.getItem(storageStateKey);
-
-    if (!saved) {
-      return defaultState;
-    }
-
-    try {
-      return JSON.parse(saved) as ProjectEventState;
-    } catch {
-      return defaultState;
-    }
-  },
-);
+const [state, dispatch] = useReducer(projectEventReducer, projectId, readSavedState);
 
 const previousStorageStateKey = useRef(storageStateKey);
 const skipNextPersist = useRef(false);
@@ -267,39 +289,11 @@ useEffect(() => {
   previousStorageStateKey.current = storageStateKey;
   skipNextPersist.current = true;
 
-  if (!storageStateKey) {
-    dispatch({
-      type: 'restore',
-      projectId,
-      state: initialProjectEventState,
-    });
-    return;
-  }
-
-  const saved = sessionStorage.getItem(storageStateKey);
-
-  if (!saved) {
-    dispatch({
-      type: 'restore',
-      projectId,
-      state: initialProjectEventState,
-    });
-    return;
-  }
-
-  try {
-    dispatch({
-      type: 'restore',
-      projectId,
-      state: JSON.parse(saved) as ProjectEventState,
-    });
-  } catch {
-    dispatch({
-      type: 'restore',
-      projectId,
-      state: initialProjectEventState,
-    });
-  }
+  dispatch({
+    type: 'restore',
+    projectId,
+    state: readSavedState(projectId),
+  });
 }, [storageStateKey, projectId]);
 
 useEffect(() => {
