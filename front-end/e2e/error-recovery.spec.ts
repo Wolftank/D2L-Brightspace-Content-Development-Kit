@@ -9,7 +9,7 @@ for (const step of ['send_again', 'smaller_request', 'sign_in', 'try_later', 'wa
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     const chat = page.getByLabel('Conversation history');
     await expect(chat.getByRole('alert')).toContainText('The agent stopped', { timeout: 15000 });
-    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled({ enabled: step !== 'sign_in' });
     if (step === 'send_again') {
       await chat.getByRole('button', { name: 'Send again' }).click();
       await expect(chat.getByText(request, { exact: true })).toHaveCount(2);
@@ -23,7 +23,7 @@ for (const step of ['send_again', 'smaller_request', 'sign_in', 'try_later', 'wa
       await expect(page.getByLabel('Describe a change')).toBeFocused();
     } else if (step === 'sign_in') {
       await chat.getByRole('button', { name: 'Sign in to Claude' }).click();
-      await expect(page.getByText('Finish signing in in your browser, then come back here.')).toBeVisible();
+      await expect(page.getByText('Finish signing in in the browser tab that just opened, then come back here.')).toBeVisible();
     } else if (step === 'new_project') {
       await chat.getByRole('button', { name: 'Start a new project' }).click();
       await expect(page.getByLabel('Project title')).toBeEditable();

@@ -71,6 +71,9 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
 
   useEffect(() => { sessionStorage.setItem(draftKey, requestText); }, [draftKey, requestText]);
   useEffect(() => { if (agent.confirmed) messageBox.current?.focus(); }, [agent.confirmed]);
+  const sentFailedForSignIn = pendingStatus === 'failed' && outcomes[pendingTurn ?? '']?.failure?.nextStep === 'sign_in';
+  const { signedOut } = agent;
+  useEffect(() => { if (sentFailedForSignIn) signedOut(); }, [sentFailedForSignIn, signedOut]);
   useEffect(() => { const element = chatHistory.current; if (element) element.scrollTop = element.scrollHeight; }, [messages, streamingMessages]);
 
   function startNewProject() {
@@ -152,7 +155,7 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
         <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{latestAgent ? `CDK: ${latestAgent.content.filter(block => block.type === 'text').map(block => block.text).join('')}` : ''}</div>
         {project && connection !== 'connected' && <div className="connection-notice"><p role="status">{connection === 'reconnecting' ? 'Reconnecting to your request…' : 'Connection lost. Try connecting again.'}</p>{connection === 'lost' && <button type="button" onClick={reconnect}>Try again</button>}</div>}
         {historyError && <div><p className="error" role="alert">Unable to load the conversation.</p><button type="button" onClick={reconnect}>Try loading the conversation again</button></div>}
-        <div className={agent.ready ? 'sr-only' : 'sign-in-notice'}>
+        <div className={agent.ready ? 'sr-only' : 'sign-in-notice'} role="group" aria-label="Claude sign-in">
           <p role="status">{agent.notice}</p>
           {!agent.ready && <>
             <button type="button" disabled={agent.busy} onClick={() => void agent.start()}>Sign in to Claude</button>

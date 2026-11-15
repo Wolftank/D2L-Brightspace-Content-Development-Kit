@@ -165,7 +165,7 @@ describe('F10 conversation', () => {
     expect(await screen.findByText('Sign in to Claude to send requests.')).toHaveAttribute('role', 'status');
     expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Sign in to Claude' }));
-    expect(await screen.findByText('Finish signing in in your browser, then come back here.')).toBeVisible();
+    expect(await screen.findByText('Finish signing in in the browser tab that just opened, then come back here.')).toBeVisible();
     await waitFor(() => { fireEvent.focus(window); expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled(); });
     expect(screen.queryByRole('button', { name: 'Sign in to Claude' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('What should students learn or do?')).toHaveFocus();

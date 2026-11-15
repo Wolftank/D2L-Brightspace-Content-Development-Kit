@@ -3,7 +3,7 @@ import { getMe, startAgentSignIn } from '../api/client';
 
 const NOTICES = {
   signed_out: 'Sign in to Claude to send requests.',
-  started: 'Finish signing in in your browser, then come back here.',
+  started: 'Finish signing in in the browser tab that just opened, then come back here.',
   still_signed_out: "Claude isn't signed in yet. Finish signing in in your browser, then press Check again.",
   start_failed: "Sign-in couldn't start. Try again.",
   check_failed: "Couldn't check your sign-in. Try again.",
@@ -23,11 +23,14 @@ export interface AgentSignIn {
   /** Starts the agent's sign-in in the instructor's browser. */
   start(): Promise<void>;
   checkAgain(): Promise<void>;
+  /** Records that a request failed because the agent is signed out. */
+  signedOut(): void;
 }
 
 /**
  * Tracks whether the agent is signed in. Checks on mount, and once a sign-in
- * has started, each time the window gets focus back.
+ * has started, each time the window gets focus back. A caller reports a
+ * request that failed for sign-in with `signedOut`.
  */
 export function useAgentSignIn(): AgentSignIn {
   const [status, setStatus] = useState<Status>('ready');
@@ -61,6 +64,8 @@ export function useAgentSignIn(): AgentSignIn {
     }
   }, []);
 
+  const signedOut = useCallback(() => setStatus('signed_out'), []);
+
   useEffect(() => {
     if (!waiting) return;
     const check = () => void checkAgain();
@@ -70,5 +75,5 @@ export function useAgentSignIn(): AgentSignIn {
 
   const confirmed = status === 'signed_in';
   const notice = status === 'ready' ? '' : confirmed ? 'Signed in to Claude.' : NOTICES[status];
-  return { ready: status === 'ready' || confirmed, confirmed, notice, busy, start, checkAgain };
+  return { ready: status === 'ready' || confirmed, confirmed, notice, busy, start, checkAgain, signedOut };
 }
