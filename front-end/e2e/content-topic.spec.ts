@@ -8,15 +8,10 @@ test('creates, previews, and downloads a Content Topic with accessible role cont
 
   await page.getByLabel('Project title').fill('Content Topic test');
 
-  await page.getByRole('combobox', { name: 'Format' }).selectOption('topic');
-
-  await expect(
-    page.getByRole('combobox', { name: 'Format' }),
-  ).toHaveValue('topic');
-
-  await expect(
-    page.getByText('Can show students and instructors different views.'),
-  ).toBeVisible();
+  const formats = page.getByRole('group', { name: 'Format' });
+  await formats.getByRole('radio', { name: 'Content topic' }).check();
+  await expect(formats.getByRole('radio', { name: 'Content topic' })).toHaveAccessibleDescription('Can show students and instructors different views.');
+  await expect(formats.getByRole('radio', { name: 'SCORM package' })).not.toBeChecked();
 
   await page
     .getByLabel('What should students learn or do?')
@@ -134,11 +129,8 @@ test('creates, previews, and downloads a Content Topic with accessible role cont
 test('SCORM remains the default output format', async ({ page }) => {
   await page.goto('/?new=1');
 
-  await expect(
-    page.getByRole('combobox', { name: 'Format' }),
-  ).toHaveValue('scorm');
-
-  await expect(
-    page.getByText('Can record a grade in D2L.'),
-  ).toBeVisible();
+  const formats = page.getByRole('group', { name: 'Format' });
+  await expect(formats.getByRole('radio', { name: 'SCORM package' })).toBeChecked();
+  await expect(formats.getByRole('radio', { name: 'Content topic' })).not.toBeChecked();
+  await expect(formats.getByText('Can record a grade in D2L.')).toBeVisible();
 });

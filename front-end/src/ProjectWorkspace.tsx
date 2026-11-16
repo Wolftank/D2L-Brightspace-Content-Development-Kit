@@ -42,6 +42,12 @@ function BuildPanel({ build, turn, statusLines, connection, outcome, disabled, o
   </section>;
 }
 
+/** The formats a project can be created in: the name shown, and what sets the format apart. */
+const FORMATS: Record<BuildableAvenue, { name: string; description: string }> = {
+  scorm: { name: 'SCORM package', description: 'Can record a grade in D2L.' },
+  topic: { name: 'Content topic', description: 'Can show students and instructors different views.' },
+};
+
 export function ProjectWorkspace({ initialProject = null, initialTurnId }: { initialProject?: Project | null; initialTurnId?: string }) {
   const [project, setProject] = useState<Project | null>(initialProject);
   const draftKey = 'request-draft-' + (project?.id ?? 'new');
@@ -66,6 +72,7 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
   const latestAgent = messages.filter(message => message.role === 'agent').at(-1);
   const hasMessages = messages.length > 0 || streamingMessages.length > 0;
   const chatHistory = useRef<HTMLDivElement>(null);
+  const format = project?.avenue === 'scorm' || project?.avenue === 'topic' ? FORMATS[project.avenue].name : null;
 
   useEffect(() => { sessionStorage.setItem(draftKey, requestText); }, [draftKey, requestText]);
   useEffect(() => { const element = chatHistory.current; if (element) element.scrollTop = element.scrollHeight; }, [messages, streamingMessages]);
@@ -126,12 +133,8 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
   return <main className="app-shell">
     <AppHeader />
     <section className="intro" aria-labelledby="page-title">
-      <p className="workspace-eyebrow">
-  {project
-    ? `Project · ${project.avenue === 'topic' ? 'Content topic' : 'SCORM package'}`
-    : 'Course material workspace'}
-</p>
-<h1 id="page-title">{project?.title ?? 'Create an activity'}</h1>
+      <p className="workspace-eyebrow">{!project ? 'Course material workspace' : format ? `Project · ${format}` : 'Project'}</p>
+      <h1 id="page-title">{project?.title ?? 'Create an activity'}</h1>
     </section>
     <div className="workspace">
       <section className="card chat-panel" aria-labelledby="chat-title" tabIndex={0}>
@@ -154,39 +157,20 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
         {project && connection !== 'connected' && <div className="connection-notice"><p role="status">{connection === 'reconnecting' ? 'Reconnecting to your request…' : 'Connection lost. Try connecting again.'}</p>{connection === 'lost' && <button type="button" onClick={reconnect}>Try again</button>}</div>}
         {historyError && <div><p className="error" role="alert">Unable to load the conversation.</p><button type="button" onClick={reconnect}>Try loading the conversation again</button></div>}
         <form onSubmit={handleSend} className={hasMessages ? 'composer' : 'composer composer-empty'}>
-          {!project && <div className="project-setup">
-  <div className="project-title-field">
-    <label htmlFor="project-title">Project title</label>
-    <input
-      id="project-title"
-      value={title}
-      onChange={event => setTitle(event.target.value)}
-      placeholder="e.g., Cell division practice"
-      maxLength={160}
-      disabled={sending}
-    />
-  </div>
-
-  <div className="project-format-field">
-    <label htmlFor="project-format">Format</label>
-    <select
-      id="project-format"
-      value={avenue}
-      onChange={event => setAvenue(event.target.value as BuildableAvenue)}
-      aria-describedby="project-format-description"
-      disabled={sending}
-    >
-      <option value="scorm">SCORM package</option>
-      <option value="topic">Content topic</option>
-    </select>
-
-    <p id="project-format-description" className="format-description">
-  {avenue === 'scorm'
-    ? 'Can record a grade in D2L.'
-    : 'Can show students and instructors different views.'}
-</p>
-  </div>
-</div>}
+          {!project && <>
+            <label htmlFor="project-title">Project title</label>
+            <input id="project-title" value={title} onChange={event => setTitle(event.target.value)} placeholder="e.g., Cell division practice" maxLength={160} disabled={sending} />
+            <fieldset className="format-choice" disabled={sending}>
+              <legend>Format</legend>
+              <div className="format-options">
+                {(Object.keys(FORMATS) as BuildableAvenue[]).map(value => <label key={value} className="format-option">
+                  <input type="radio" name="project-format" value={value} checked={avenue === value} onChange={() => setAvenue(value)} aria-labelledby={`format-${value}-name`} aria-describedby={`format-${value}-description`} />
+                  <span id={`format-${value}-name`} className="format-name">{FORMATS[value].name}</span>
+                  <span id={`format-${value}-description`} className="format-description">{FORMATS[value].description}</span>
+                </label>)}
+              </div>
+            </fieldset>
+          </>}
           <label htmlFor="request-text" className={project ? 'sr-only' : undefined}>{project ? 'Describe a change' : 'What should students learn or do?'}</label>
           <textarea ref={messageBox} id="request-text" value={requestText} onChange={event => setRequestText(event.target.value)} placeholder={project ? 'Describe a change or ask a question…' : 'Create a ten-question practice quiz on cell division…'} rows={3} maxLength={20000} />
           <div className="composer-footer">
