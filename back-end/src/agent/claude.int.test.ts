@@ -107,10 +107,10 @@ describe('Claude turns', () => {
     expect(options).toMatchObject({ model: 'claude-sonnet-5', effort: 'medium' });
   });
 
-  it("leaves model and effort to the account's defaults when unset", async () => {
+  it("runs the default model, and leaves effort to Claude's default, when neither is set", async () => {
     const { options } = await runTurn();
 
-    expect(options).not.toHaveProperty('model');
+    expect(options).toMatchObject({ model: 'claude-sonnet-5-5' });
     expect(options).not.toHaveProperty('effort');
   });
 
@@ -351,6 +351,61 @@ describe('Claude turns, cancelled', () => {
 
     expect(queryAborted()).toBe(true);
     expect(await turn.result).toEqual({ status: 'cancelled', sessionId: 'session-1', text: '' });
+  });
+});
+
+describe('Claude sign-in', () => {
+  let configDir: string;
+
+  beforeEach(async () => {
+    configDir = await fs.mkdtemp(join(tmpdir(), 'cdk-claude-config-'));
+    vi.stubEnv('CLAUDE_CONFIG_DIR', configDir);
+    vi.stubEnv('ANTHROPIC_API_KEY', undefined);
+    vi.stubEnv('CLAUDE_CODE_OAUTH_TOKEN', undefined);
+    vi.resetModules();
+  });
+
+  afterEach(async () => {
+    vi.doUnmock('node:child_process');
+    vi.resetModules();
+    vi.unstubAllEnvs();
+    await fs.rm(configDir, { recursive: true, force: true });
+  });
+
+  it('reports the packaged Claude Code signed out with no login, and signed in with one', async () => {
+    const { createClaudeAgentDriver } = await import('./claude.js');
+    const driver = createClaudeAgentDriver();
+
+    expect(await driver.probe()).toEqual({ ok: false, detail: 'Claude Code is not signed in' });
+
+    vi.stubEnv('ANTHROPIC_API_KEY', 'sk-ant-not-a-real-key');
+    expect(await driver.probe()).toEqual({ ok: true });
+  }, 30_000);
+
+  it("starts the packaged Claude Code's subscription sign-in, replacing one still waiting", async () => {
+    const started: Array<{ command: string; args: string[]; kill: ReturnType<typeof vi.fn> }> = [];
+    vi.doMock('node:child_process', async (importOriginal) => ({
+      ...(await importOriginal<typeof import('node:child_process')>()),
+      spawn: (command: string, args: string[]) => {
+        const child = { command, args, kill: vi.fn(), on: vi.fn() };
+        started.push(child);
+        return child;
+      },
+    }));
+    const { createClaudeAgentDriver } = await import('./claude.js');
+    const driver = createClaudeAgentDriver();
+
+    driver.signIn();
+    driver.signIn();
+
+    expect(started).toHaveLength(2);
+    expect(started[1]!.command).toMatch(/claude-agent-sdk-[\w-]+[\\/]claude(\.exe)?$/);
+    expect(started[1]!.args).toEqual(['auth', 'login', '--claudeai']);
+    expect(started[0]!.kill).toHaveBeenCalledOnce();
+    expect(started[1]!.kill).not.toHaveBeenCalled();
+
+    driver.endSignIn();
+    expect(started[1]!.kill).toHaveBeenCalledOnce();
   });
 });
 

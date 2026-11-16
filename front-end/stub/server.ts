@@ -3,7 +3,11 @@ import { NEXT_STEPS } from '../src/api/failure';
 import { randomUUID } from 'node:crypto';
 import { previewZip, startPreviewServer } from './preview';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { cleanFileName, detectFileType, MAX_FILE_BYTES } from '../../back-end/src/services/file-format.js';
 import type {
+  FileListResponse,
+  ProjectFile,
+  UploadFileResponse,
   ApiErrorBody,
   Build,
   BuildResponse,
@@ -35,7 +39,7 @@ const KEEPALIVE_MS = 15_000;
 
 const user: User = { id: 'stub-user', displayName: 'Stub Instructor', email: null, role: 'instructor' };
 
-type Scenario = 'error-action' | 'cancelled' | 'meaningful-progress' | 'ok' | 'qa-fail' | 'turn-fail' | 'long-step' | 'long-feed' | 'multi-message' | 'drop' | 'drop-lost';
+type Scenario = 'error-action' | 'signed-out' | 'cancelled' | 'meaningful-progress' | 'ok' | 'qa-fail' | 'turn-fail' | 'long-step' | 'long-feed' | 'multi-message' | 'drop' | 'drop-lost';
 
 interface StoredEvent {
   seq: number;
@@ -45,6 +49,7 @@ interface StoredEvent {
 
 interface ProjectState {
   project: Project;
+  files: ProjectFile[];
   messages: Message[];
   builds: Build[];
   events: StoredEvent[];
@@ -60,6 +65,7 @@ const builds = new Map<string, { state: ProjectState; build: Build }>();
 
 /** The stub's API errors, with the back end's statuses, messages, and next steps. `stream_unavailable` is the stub's own. */
 const API_ERRORS = {
+  file_not_accepted: { status: 422, message: "This file could not be attached.", nextStep: 'send_again' },
   invalid_request: { status: 400, message: "The request couldn't be read.", nextStep: 'send_again' },
   invalid_json: { status: 400, message: "The request couldn't be read.", nextStep: 'send_again' },
   not_found: { status: 404, message: "This project doesn't exist.", nextStep: 'new_project' },
@@ -80,6 +86,9 @@ class HttpError extends Error {
     super(API_ERRORS[code].message);
   }
 }
+
+/** The cookie that marks the stub agent signed out for one browser, so specs running side by side keep their own state. */
+const SIGNED_OUT_COOKIE = 'stub_signed_out';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -126,6 +135,7 @@ function textOf(content: ContentBlock[]): string {
 
 function scenarioFor(text: string): Scenario {
   if ((Object.keys(NEXT_STEPS) as NextStep[]).some(step => text.includes('[' + step + ']'))) return 'error-action';
+  if (text.includes('[signed-out]')) return 'signed-out';
   if (text.includes('[cancelled]')) return 'cancelled';
   if (text.includes('[drop-lost]')) return 'drop-lost';
   if (text.includes('[drop]')) return 'drop';
@@ -218,14 +228,16 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
 
   if (scenario === 'cancelled') {
     steps.push([4800, () => stopTurn(state, turn)]);
-  } else if (scenario === 'turn-fail' || scenario === 'error-action') {
+  } else if (scenario === 'turn-fail' || scenario === 'error-action' || scenario === 'signed-out') {
     steps.push([
       4800,
       () => {
         turn.status = 'failed';
         turn.finishedAt = Date.now();
         const requestedStep = (Object.keys(NEXT_STEPS) as NextStep[]).find(step => textOf(state.messages.find(message => message.id === turn.messageId)!.content).includes('[' + step + ']'));
-        const failure: { code: string; message: string; nextStep: NextStep } = { code: 'agent_error', message: 'The agent stopped before it finished.', nextStep: requestedStep ?? 'send_again' };
+        const failure: { code: string; message: string; nextStep: NextStep } = scenario === 'signed-out'
+          ? { code: 'agent_signed_out', message: "The agent isn't signed in, or its account can't be used.", nextStep: 'sign_in' }
+          : { code: 'agent_error', message: 'The agent stopped before it finished.', nextStep: requestedStep ?? 'send_again' };
         turn.error = failure;
         state.activeTurn = null;
         append(state, 'turn.failed', { turnId: turn.id, error: turn.error });
@@ -356,6 +368,7 @@ function createProject(body: unknown): CreateProjectResponse {
   projects.set(project.id, {
     project,
     messages: [],
+    files: [],
     builds: [],
     events: [],
     subscribers: new Set(),
@@ -389,9 +402,43 @@ function projectView(state: ProjectState): ProjectResponse {
   };
 }
 
+async function uploadFile(state: ProjectState, req: IncomingMessage): Promise<UploadFileResponse> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req.iterator({ destroyOnReturn: false })) {
+    const bytes = Buffer.from(chunk as Uint8Array);
+    size += bytes.length;
+    if (size > MAX_FILE_BYTES + 16 * 1024) {
+      req.resume();
+      throw new HttpError('file_not_accepted', { reason: 'too_large' });
+    }
+    chunks.push(bytes);
+  }
+  const form = await new Response(Buffer.concat(chunks), {
+    headers: { 'content-type': req.headers['content-type'] ?? '' },
+  }).formData().catch(() => null);
+  const entry = form?.get('file');
+  let fields = 0;
+  form?.forEach(() => { fields++; });
+  if (fields !== 1 || !entry || typeof entry === 'string') throw new HttpError('invalid_request');
+  if (!entry.size) throw new HttpError('file_not_accepted', { reason: 'empty' });
+  if (entry.size > MAX_FILE_BYTES) throw new HttpError('file_not_accepted', { reason: 'too_large' });
+  const mime = await detectFileType(new Uint8Array(await entry.arrayBuffer())).catch(() => undefined);
+  if (!mime) throw new HttpError('file_not_accepted', { reason: 'type' });
+  const file: ProjectFile = {
+    id: randomUUID(), projectId: state.project.id, name: cleanFileName(entry.name), mime, size: entry.size, createdAt: Date.now(),
+  };
+  state.files.push(file);
+  return { file };
+}
+
 function sendMessage(state: ProjectState, body: unknown): SendMessageResponse {
   const input = body as Partial<SendMessageRequest>;
   if (!Array.isArray(input.content) || !input.content.some((block) => block?.type === 'text')) {
+    throw new HttpError('invalid_request');
+  }
+  const fileBlocks = input.content.filter(block => block?.type === 'file');
+  if (fileBlocks.length > 10 || fileBlocks.some(block => !state.files.some(file => file.id === block.fileId))) {
     throw new HttpError('invalid_request');
   }
   if (state.activeTurn) {
@@ -505,15 +552,16 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (segments[0] !== 'api') throw new HttpError('not_found');
   const [, resource, id, sub] = segments;
 
-  if (resource === 'agent' && id === 'sign-in' && method === 'GET') {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end('<!doctype html><html lang="en"><title>Agent sign-in</title><h1>Agent sign-in</h1><p>This is the stub sign-in page. Return to the conversation to continue testing.</p></html>'); return;
+  if (resource === 'agent' && id === 'sign-in' && method === 'POST') {
+    res.writeHead(202, { 'Set-Cookie': SIGNED_OUT_COOKIE + '=; Path=/; Max-Age=0' }).end();
+    return;
   }
 
   if (resource === 'health' && method === 'GET' && !id) return sendJson(res, 200, { ok: true });
 
   if (resource === 'me' && method === 'GET' && !id) {
-    const body: MeResponse = { user, mode: 'local', agent: { name: 'stub', ok: true, version: 'stub' } };
+    const signedOut = (req.headers.cookie ?? '').includes(SIGNED_OUT_COOKIE + '=1');
+    const body: MeResponse = { user, mode: 'local', agent: { name: 'stub', ok: !signedOut } };
     return sendJson(res, 200, body);
   }
 
@@ -521,6 +569,12 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (method === 'GET' && !id) return sendJson(res, 200, listProjects());
     if (method === 'POST' && !id) return sendJson(res, 201, createProject(await readJson(req)));
     if (id && !sub && method === 'GET') return sendJson(res, 200, projectView(getProject(id)));
+    if (id && sub === 'files' && method === 'GET') {
+      return sendJson(res, 200, { items: getProject(id).files } satisfies FileListResponse);
+    }
+    if (id && sub === 'files' && method === 'POST') {
+      return sendJson(res, 201, await uploadFile(getProject(id), req));
+    }
     if (id && sub === 'messages' && method === 'GET') {
       const state = getProject(id);
       const items = state.messages.map((message): ChatMessage => {
@@ -530,7 +584,9 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
       return sendJson(res, 200, { items } satisfies MessageHistoryResponse);
     }
     if (id && sub === 'messages' && method === 'POST') {
-      return sendJson(res, 202, sendMessage(getProject(id), await readJson(req)));
+      const sent = sendMessage(getProject(id), await readJson(req));
+      if (textOf(sent.message.content).includes('[signed-out]')) res.setHeader('Set-Cookie', SIGNED_OUT_COOKIE + '=1; Path=/');
+      return sendJson(res, 202, sent);
     }
     if (id && sub === 'events' && method === 'GET') {
       const after = Number(req.headers['last-event-id'] ?? url.searchParams.get('after') ?? 0);
@@ -578,7 +634,7 @@ const server = createServer((req, res) => {
 
 server.listen(PORT, HOST, () => {
   console.log(`stub back end listening on http://${HOST}:${PORT}`);
-  console.log('Scenarios: include [qa-fail] or [turn-fail] in the message text to play a failure.');
+  console.log('Scenarios: include [qa-fail], [turn-fail] or [signed-out] in the message text to play a failure.');
 });
 
 const previewServer = startPreviewServer((id) => builds.get(id)?.build);

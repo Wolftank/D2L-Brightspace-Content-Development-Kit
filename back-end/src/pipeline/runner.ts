@@ -1,12 +1,15 @@
 import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
 import type { EventKind, EventPayloads, ProgressCategory, TurnError } from '@cdk/contract';
 import type { AgentEvent, AgentSession, TurnErrorCode, TurnInput, TurnLimits, TurnResult } from '../agent/AgentDriver.js';
+import type { FilesRepo } from '../db/files.js';
 import type { MessagesRepo } from '../db/messages.js';
 import type { Turn } from '../db/schema.js';
 import type { FinishedTurnDetails, FinishTurnInput, RunningTurn, TurnsRepo } from '../db/turns.js';
 import { WorkspaceMissing } from '../errors.js';
 import { log } from '../log.js';
 import type { BuildService } from '../services/builds.js';
+import { attachmentFor } from '../services/files.js';
 import type { WorkspaceService } from '../services/workspaces.js';
 import type { EventService } from './events.js';
 import type { SessionService } from './sessions.js';
@@ -17,7 +20,7 @@ export type RunnerErrorCode = TurnErrorCode | 'workspace_missing' | 'interrupted
 export const TURN_ERRORS: Record<RunnerErrorCode, Omit<TurnError, 'code'>> = {
   agent_error: { message: 'The agent stopped with an error before it finished.', nextStep: 'send_again' },
   agent_signed_out: { message: "The agent isn't signed in, or its account can't be used.", nextStep: 'sign_in' },
-  agent_billing: { message: "The agent's account has a billing or account problem.", nextStep: 'sign_in' },
+  agent_billing: { message: "The agent's account has a billing or account problem.", nextStep: 'try_later' },
   agent_busy: { message: "The agent's account is busy or has reached its usage limit.", nextStep: 'try_later' },
   agent_unrestricted: { message: "The agent started with tools or skills CDK doesn't allow, so the request didn't run.", nextStep: 'try_later' },
   max_steps_exceeded: { message: 'The request needed more steps than allowed.', nextStep: 'smaller_request' },
@@ -34,7 +37,8 @@ export interface RunnerDeps {
   messages: Pick<MessagesRepo, 'get' | 'create'>;
   events: Pick<EventService, 'append'>;
   sessions: Pick<SessionService, 'acquire' | 'release' | 'close'>;
-  workspaces: Pick<WorkspaceService, 'hashOutput'>;
+  files: Pick<FilesRepo, 'findInProject'>;
+  workspaces: Pick<WorkspaceService, 'hashOutput' | 'pathFor'>;
   builds: Pick<BuildService, 'create' | 'latest'>;
   /** The caps on every turn. */
   turnLimits: TurnLimits;
@@ -98,7 +102,14 @@ export function createRunner(deps: RunnerDeps): Runner {
     const message = deps.messages.get(turn.messageId);
     if (!message) throw new Error(`Turn ${turn.id} has no instructor message ${turn.messageId}`);
     const text = message.content.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('\n');
-    return { text, attachments: [] };
+    const fileIds = message.content.flatMap((block) => (block.type === 'file' ? [block.fileId] : []));
+    const files = new Map(deps.files.findInProject(turn.projectId, fileIds).map((file) => [file.id, file]));
+    const filesDir = join(deps.workspaces.pathFor(turn.projectId), 'files');
+    const attachments = fileIds.flatMap((id) => {
+      const file = files.get(id);
+      return file ? [attachmentFor(file, filesDir)] : [];
+    });
+    return { text, attachments };
   }
 
   /**

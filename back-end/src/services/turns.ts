@@ -1,15 +1,17 @@
 import { randomUUID } from 'node:crypto';
 import type { Logger } from 'pino';
 import type { SendMessageResponse } from '@cdk/contract';
+import type { FilesRepo } from '../db/files.js';
 import type { ProjectsRepo } from '../db/projects.js';
 import type { Message } from '../db/schema.js';
 import type { TurnsRepo } from '../db/turns.js';
-import { NotFound, TurnActive, TurnNotFound } from '../errors.js';
+import { FilesNotInProject, NotFound, TurnActive, TurnNotFound } from '../errors.js';
 import type { Runner } from '../pipeline/runner.js';
 
 export interface TurnServiceDeps {
   projects: Pick<ProjectsRepo, 'get'>;
   turns: Pick<TurnsRepo, 'get' | 'queue'>;
+  files: Pick<FilesRepo, 'findInProject'>;
   runner: Pick<Runner, 'executeTurn' | 'cancel'>;
 }
 
@@ -17,8 +19,9 @@ export interface TurnService {
   /**
    * Stores `content` as the instructor's message on `ownerId`'s project with a
    * new `queued` turn, then hands the turn to the runner without waiting for
-   * it. Throws `NotFound` for an unknown or another owner's project, and
-   * `TurnActive` while the project has a `queued` or `running` turn.
+   * it. Throws `NotFound` for an unknown or another owner's project,
+   * `FilesNotInProject` when a `file` block names a file outside the project,
+   * and `TurnActive` while the project has a `queued` or `running` turn.
    * `logger` records the queued turn, linking it to the request that sent
    * the message.
    */
@@ -32,6 +35,10 @@ export function createTurnService(deps: TurnServiceDeps): TurnService {
   return {
     start(ownerId, projectId, content, logger) {
       if (!deps.projects.get(ownerId, projectId)) throw new NotFound();
+      const fileIds = content.flatMap((block) => (block.type === 'file' ? [block.fileId] : []));
+      const found = new Set(deps.files.findInProject(projectId, fileIds).map((file) => file.id));
+      const missing = fileIds.filter((id) => !found.has(id));
+      if (missing.length > 0) throw new FilesNotInProject(missing);
       const result = deps.turns.queue({ turnId: randomUUID(), messageId: randomUUID(), projectId, content });
       if ('active' in result) throw new TurnActive(result.active.id);
       logger.info({ projectId, turnId: result.turn.id }, 'Turn queued');

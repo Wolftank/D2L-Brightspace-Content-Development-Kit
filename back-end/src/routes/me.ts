@@ -10,7 +10,7 @@ export function meRouter(deps: Deps): Router {
     res.status(200).json({
       user: req.user,
       mode: 'local',
-      agent: { name: deps.driver.name, ok: probe.ok, version: probe.version, detail: probe.detail },
+      agent: { name: deps.driver.name, ok: probe.ok, detail: probe.detail },
     } satisfies MeResponse);
   });
 

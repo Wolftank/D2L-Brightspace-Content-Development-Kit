@@ -1,7 +1,10 @@
 import type {
   BuildResponse,
+  FileListResponse,
+  UploadFileResponse,
   CreateProjectRequest,
   CreateProjectResponse,
+  MeResponse,
   MessageHistoryResponse,
   ProjectResponse,
   ProjectListResponse,
@@ -44,6 +47,14 @@ async function json<T>(url: string, init?: RequestInit): Promise<T> {
   return (await request(url, init)).json() as Promise<T>;
 }
 
+export function getMe(): Promise<MeResponse> {
+  return json('/api/me');
+}
+
+export async function startAgentSignIn(): Promise<void> {
+  await request('/api/agent/sign-in', { method: 'POST' });
+}
+
 export async function cancelTurn(turnId: string): Promise<void> {
   await request('/api/turns/' + encodeURIComponent(turnId) + '/cancel', { method: 'POST' });
 }
@@ -80,4 +91,14 @@ export function getMessages(projectId: string, cursor?: string): Promise<Message
 
 export function listProjects(): Promise<ProjectListResponse> {
   return json('/api/projects');
+}
+
+export function uploadProjectFile(projectId: string, file: File): Promise<UploadFileResponse> {
+  const body = new FormData();
+  body.set('file', file);
+  return json('/api/projects/' + encodeURIComponent(projectId) + '/files', { method: 'POST', body });
+}
+
+export function listProjectFiles(projectId: string): Promise<FileListResponse> {
+  return json('/api/projects/' + encodeURIComponent(projectId) + '/files');
 }

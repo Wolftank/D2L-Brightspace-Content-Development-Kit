@@ -1,5 +1,6 @@
 import type { Server } from 'node:http';
 import { join } from 'node:path';
+import type { AgentDriver } from './agent/AgentDriver.js';
 import { createAgentDriver } from './agent/drivers.js';
 import { createApp } from './app.js';
 import { checkDataDir, type Config, ConfigError, loadConfig, loadEnvFile, loggedSettings } from './config.js';
@@ -7,6 +8,7 @@ import type { Deps } from './deps.js';
 import { createBuildsRepo } from './db/builds.js';
 import { openDb } from './db/index.js';
 import { createEventsRepo } from './db/events.js';
+import { createFilesRepo } from './db/files.js';
 import { createMessagesRepo } from './db/messages.js';
 import { createProjectsRepo } from './db/projects.js';
 import { createTurnsRepo } from './db/turns.js';
@@ -17,6 +19,7 @@ import { createEventService } from './pipeline/events.js';
 import { createRunner, type Runner } from './pipeline/runner.js';
 import { createSessionService, type SessionService } from './pipeline/sessions.js';
 import { createBuildService, type BuildService } from './services/builds.js';
+import { createFileService } from './services/files.js';
 import { createMessageService } from './services/messages.js';
 import { createProjectService } from './services/projects.js';
 import { createTurnService } from './services/turns.js';
@@ -25,6 +28,7 @@ import { createCdkTools } from './tools/index.js';
 
 interface BackEnd {
   deps: Deps;
+  driver: AgentDriver;
   db: ReturnType<typeof openDb>;
   runner: Runner;
   sessions: SessionService;
@@ -37,6 +41,7 @@ function buildBackEnd(cfg: Config): BackEnd {
   const buildsRepo = createBuildsRepo(db);
   const turnsRepo = createTurnsRepo(db);
   const messagesRepo = createMessagesRepo(db);
+  const filesRepo = createFilesRepo(db);
   const events = createEventService(createEventsRepo(db));
   const workspaces = createWorkspaceService({ dataDir: cfg.dataDir });
   const builds = createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces, events });
@@ -51,6 +56,7 @@ function buildBackEnd(cfg: Config): BackEnd {
   const runner = createRunner({
     turns: turnsRepo,
     messages: messagesRepo,
+    files: filesRepo,
     events,
     sessions,
     workspaces,
@@ -61,8 +67,9 @@ function buildBackEnd(cfg: Config): BackEnd {
   const deps: Deps = {
     users: createUsersRepo(db),
     projects: createProjectService({ projects: projectsRepo, workspaces, builds: buildsRepo, turns: turnsRepo }),
-    turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, runner }),
+    turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, files: filesRepo, runner }),
     messages: createMessageService({ projects: projectsRepo, messages: messagesRepo }),
+    files: createFileService({ projects: projectsRepo, files: filesRepo, workspaces }),
     builds,
     events,
     driver,
@@ -70,15 +77,16 @@ function buildBackEnd(cfg: Config): BackEnd {
     launchToken: cfg.launchToken,
     appDir: cfg.appDir,
   };
-  return { deps, db, runner, sessions, builds };
+  return { deps, driver, db, runner, sessions, builds };
 }
 
-/** Closes the server, cancels running turns, closes the sessions and the database, and exits. */
-async function shutDown(server: Server, { db, runner, sessions }: BackEnd, trigger: string): Promise<void> {
+/** Closes the server, ends a waiting sign-in, cancels running turns, closes the sessions and the database, and exits. */
+async function shutDown(server: Server, { driver, db, runner, sessions }: BackEnd, trigger: string): Promise<void> {
   log.info({ trigger }, 'back-end stopping');
   try {
     server.close();
     server.closeAllConnections();
+    driver.endSignIn();
     await runner.cancelAll();
     await sessions.closeAll();
     db.$client.close();

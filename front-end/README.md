@@ -45,6 +45,7 @@ The build panel shows the newest build. The preview shows the newest ready build
 - `[multi-message]`: two distinct agent messages around a tool call, preserved after reload and reopening.
 - `[qa-fail]`: failed QA build; an ordinary follow-up produces the next ready version.
 - `[turn-fail]`: agent failure; an ordinary follow-up continues the same project.
+- `[signed-out]`: fails with `agent_signed_out` and signs the stub agent out for that browser, so a reload shows the Design panel's sign-in notice with Send disabled. **Sign in to Claude** signs it back in, and coming back to the window or pressing **Check again** clears the notice.
 - `[long-step]`: 20-second pause for checking the timer, reload and drafts.
 - `[long-feed]`: 60 progress lines for checking scrolling. The feed follows at the bottom, pauses when scrolled up, and resumes with Jump to latest or a new turn.
 
@@ -69,7 +70,7 @@ Manual keyboard and NVDA check: send `[long-step]`, confirm focus returns to the
 
 Errors use the shared `NextStep` from `@cdk/contract`: `send_again`, `sign_in`, `try_later`, `smaller_request`, `wait`, `new_project`, and `ask_for_fix`. B24 supplies these on API, turn, history, and build errors. The UI validates incoming errors and does not infer actions from codes. Ask for a fix prepares a follow-up in the composer and preserves an existing draft.
 
-The sign-in link still opens `/api/agent/sign-in`, implemented only by the stub. A real sign-in handler and Electron external-window integration remain outstanding, so F11 remains a draft. Manual NVDA verification also remains outstanding.
+The `sign_in` step shows a **Sign in to Claude** button that starts the agent's sign-in (F19). Manual NVDA verification remains outstanding.
 
 Stub markers use each shared next-step identifier in brackets. `[qa-fail]` covers build recovery, `[cancelled]` covers cancellation, and `[drop-lost]` covers explicit reconnect.
 

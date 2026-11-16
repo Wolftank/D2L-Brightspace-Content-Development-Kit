@@ -13,6 +13,7 @@ import { testDb } from '../db/test-db.js';
 import { createTurnsRepo } from '../db/turns.js';
 import { createUsersRepo } from '../db/users.js';
 import type { Deps } from '../deps.js';
+import { fakeDeps } from '../test/deps.js';
 import { createEventService, type EventService } from '../pipeline/events.js';
 import { createProjectService } from '../services/projects.js';
 import { openSse } from '../test/sse.js';
@@ -26,8 +27,8 @@ describe('GET /api/projects/:projectId/events', () => {
   let server: http.Server;
   let port: number;
 
-  function fakeDeps(overrides: Partial<Deps> = {}): Deps {
-    return {
+  function eventDeps(overrides: Partial<Deps> = {}): Deps {
+    return fakeDeps({
       users: { ensureLocalUser: () => owner, get: (id) => (id === owner.id ? owner : undefined) },
       projects: createProjectService({
         projects,
@@ -35,35 +36,9 @@ describe('GET /api/projects/:projectId/events', () => {
         builds: createBuildsRepo(db),
         turns: createTurnsRepo(db),
       }),
-      builds: {
-        get: () => {
-          throw new Error('not used by these tests');
-        },
-        download: async () => {
-          throw new Error('not used by these tests');
-        },
-        previewFile: async () => {
-          throw new Error('not used by these tests');
-        },
-      },
       events: service,
-      turns: {
-        start: () => {
-          throw new Error('not used by these tests');
-        },
-        cancel: () => {
-          throw new Error('not used by these tests');
-        },
-      },
-      messages: {
-        list: () => {
-          throw new Error('not used by these tests');
-        },
-      },
-      driver: { name: 'claude', probe: async () => ({ ok: true }) },
-      preview: { origin: 'http://preview.localhost:3000', appOrigin: 'http://127.0.0.1:5173' },
       ...overrides,
-    };
+    });
   }
 
   beforeEach(() => {
@@ -88,7 +63,7 @@ describe('GET /api/projects/:projectId/events', () => {
   }
 
   it('returns 404 for a project that does not exist', async () => {
-    const app = createApp(fakeDeps());
+    const app = createApp(eventDeps());
     const res = await request(app).get('/api/projects/does-not-exist/events');
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('not_found');
@@ -101,7 +76,7 @@ describe('GET /api/projects/:projectId/events', () => {
       .run();
     const othersProject = projects.create({ id: 'project-3', ownerId: otherUserId, title: 'Not yours' });
 
-    const app = createApp(fakeDeps());
+    const app = createApp(eventDeps());
     const res = await request(app).get(`/api/projects/${othersProject.id}/events`);
 
     expect(res.status).toBe(404);
@@ -109,7 +84,7 @@ describe('GET /api/projects/:projectId/events', () => {
   });
 
   it('rejects a malformed cursor with the standard validation error envelope', async () => {
-    const app = createApp(fakeDeps());
+    const app = createApp(eventDeps());
     const res = await request(app)
       .get(`/api/projects/${project.id}/events`)
       .set('Last-Event-ID', 'not-a-number');
@@ -119,7 +94,7 @@ describe('GET /api/projects/:projectId/events', () => {
   });
 
   it('rejects a negative cursor with the standard validation error envelope', async () => {
-    const app = createApp(fakeDeps());
+    const app = createApp(eventDeps());
     const res = await request(app).get(`/api/projects/${project.id}/events?after=-1`);
 
     expect(res.status).toBe(400);
@@ -127,7 +102,7 @@ describe('GET /api/projects/:projectId/events', () => {
   });
 
   it('rejects an empty Last-Event-ID rather than silently falling back to a valid ?after=', async () => {
-    const app = createApp(fakeDeps());
+    const app = createApp(eventDeps());
     const res = await request(app)
       .get(`/api/projects/${project.id}/events?after=0`)
       .set('Last-Event-ID', '');
@@ -146,7 +121,7 @@ describe('GET /api/projects/:projectId/events', () => {
     // Delivered via the query string, not the Last-Event-ID header: HTTP
     // header values get OWS-trimmed in transit, which would silently turn
     // ' 5 ' into a valid '5' before it ever reached our validation.
-    const app = createApp(fakeDeps());
+    const app = createApp(eventDeps());
     const res = await request(app).get(`/api/projects/${project.id}/events`).query({ after: value });
 
     expect(res.status).toBe(400);
@@ -157,7 +132,7 @@ describe('GET /api/projects/:projectId/events', () => {
     const first = service.append({ projectId: project.id, kind: 'turn.started', payload: { turnId: 't1', startedAt: 1 } });
     const second = service.append({ projectId: project.id, kind: 'turn.completed', payload: { turnId: 't1' } });
 
-    await startServer(fakeDeps());
+    await startServer(eventDeps());
     const { reader, req, res } = await openSse(port, `/api/projects/${project.id}/events`);
     const frames = await reader.waitFor(2);
 
@@ -174,7 +149,7 @@ describe('GET /api/projects/:projectId/events', () => {
     const first = service.append({ projectId: project.id, kind: 'turn.started', payload: { turnId: 't1', startedAt: 1 } });
     const second = service.append({ projectId: project.id, kind: 'turn.status', payload: { turnId: 't1', text: 'go', category: 'other' as const } });
 
-    await startServer(fakeDeps());
+    await startServer(eventDeps());
     const { reader, req } = await openSse(port, `/api/projects/${project.id}/events`, {
       'Last-Event-ID': String(first.seq),
     });
@@ -188,7 +163,7 @@ describe('GET /api/projects/:projectId/events', () => {
     const first = service.append({ projectId: project.id, kind: 'turn.started', payload: { turnId: 't1', startedAt: 1 } });
     const second = service.append({ projectId: project.id, kind: 'turn.status', payload: { turnId: 't1', text: 'go', category: 'other' as const } });
 
-    await startServer(fakeDeps());
+    await startServer(eventDeps());
     const { reader, req } = await openSse(port, `/api/projects/${project.id}/events?after=${first.seq}`);
     const frames = await reader.waitFor(1);
 
@@ -200,7 +175,7 @@ describe('GET /api/projects/:projectId/events', () => {
     const first = service.append({ projectId: project.id, kind: 'turn.started', payload: { turnId: 't1', startedAt: 1 } });
     const second = service.append({ projectId: project.id, kind: 'turn.status', payload: { turnId: 't1', text: 'go', category: 'other' as const } });
 
-    await startServer(fakeDeps());
+    await startServer(eventDeps());
     const { reader, req } = await openSse(port, `/api/projects/${project.id}/events?after=0`, {
       'Last-Event-ID': String(first.seq),
     });
@@ -213,7 +188,7 @@ describe('GET /api/projects/:projectId/events', () => {
   it('continues seamlessly from replay into live events', async () => {
     const first = service.append({ projectId: project.id, kind: 'turn.started', payload: { turnId: 't1', startedAt: 1 } });
 
-    await startServer(fakeDeps());
+    await startServer(eventDeps());
     const { reader, req } = await openSse(port, `/api/projects/${project.id}/events`);
     await reader.waitFor(1);
 
@@ -248,7 +223,7 @@ describe('GET /api/projects/:projectId/events', () => {
       },
     };
 
-    await startServer(fakeDeps({ events: racyService }));
+    await startServer(eventDeps({ events: racyService }));
     const { reader, req } = await openSse(port, `/api/projects/${project.id}/events`);
     const frames = await reader.waitFor(2);
 
@@ -285,7 +260,7 @@ describe('GET /api/projects/:projectId/events', () => {
       },
     };
 
-    await startServer(fakeDeps({ events: racyService }));
+    await startServer(eventDeps({ events: racyService }));
     const { reader, req } = await openSse(port, `/api/projects/${project.id}/events`);
     const frames = await reader.waitFor(2);
 
@@ -314,7 +289,7 @@ describe('GET /api/projects/:projectId/events', () => {
     const setIntervalSpy = vi.spyOn(global, 'setInterval');
     const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
 
-    await startServer(fakeDeps({ events: trackingService }));
+    await startServer(eventDeps({ events: trackingService }));
     // The response callback (headers received) only fires once the route's
     // fully synchronous handler — subscribe, replay, and keepalive setup all
     // included — has already run, so the keepalive timer is already set up.

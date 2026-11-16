@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app.js';
 import { createBuildsRepo } from '../db/builds.js';
 import { createEventsRepo } from '../db/events.js';
+import { createFilesRepo } from '../db/files.js';
 import { createMessagesRepo } from '../db/messages.js';
 import { createProjectsRepo } from '../db/projects.js';
 import { users as usersTable, type Event } from '../db/schema.js';
@@ -14,6 +15,7 @@ import { testDb } from '../db/test-db.js';
 import { createTurnsRepo } from '../db/turns.js';
 import { createUsersRepo } from '../db/users.js';
 import type { Deps } from '../deps.js';
+import { fakeDeps, idleRunner } from '../test/deps.js';
 import { createEventService, type EventService } from '../pipeline/events.js';
 import { createBuildService } from '../services/builds.js';
 import { createMessageService } from '../services/messages.js';
@@ -75,16 +77,14 @@ describe('R7 regression: event stream and reconnect', () => {
     const turnsRepo = createTurnsRepo(db);
     const workspaces = createWorkspaceService({ dataDir: join(tmpdir(), 'cdk-r7-unused') });
     events = createEventService(createEventsRepo(db));
-    deps = {
+    deps = fakeDeps({
       users: createUsersRepo(db),
       projects: createProjectService({ projects: projectsRepo, workspaces, builds: buildsRepo, turns: turnsRepo }),
-      turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, runner: { executeTurn: async () => {}, cancel: () => {} } }),
+      turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, files: createFilesRepo(db), runner: idleRunner }),
       builds: createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces, events }),
       events,
       messages: createMessageService({ projects: projectsRepo, messages: createMessagesRepo(db) }),
-      driver: { name: 'claude', probe: async () => ({ ok: true, version: '0.0.0' }) },
-      preview: { origin: 'http://preview.localhost:3000', appOrigin: 'http://127.0.0.1:5173' },
-    };
+    });
 
     const owner = deps.users.ensureLocalUser();
     projectsRepo.create({ id: 'mine', ownerId: owner.id, title: 'Cell division practice', avenue: 'scorm' });
