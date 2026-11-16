@@ -24,7 +24,7 @@ describe('errors an instructor can see', () => {
     expect(nextSteps(TURN_ERRORS)).toEqual({
       agent_error: 'send_again',
       agent_signed_out: 'sign_in',
-      agent_billing: 'sign_in',
+      agent_billing: 'try_later',
       agent_busy: 'try_later',
       agent_unrestricted: 'try_later',
       max_steps_exceeded: 'smaller_request',

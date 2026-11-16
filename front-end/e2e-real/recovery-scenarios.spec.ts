@@ -29,11 +29,13 @@ test('each QA finding on the build card shows its explanation', async ({ page })
     .toHaveText(/^Measured: once an activity reports lesson_status "completed", D2L serves later launches in review mode/);
 });
 
-test('a signed-out agent fails the turn with a sign-in link and makes no build', async ({ page }) => {
+test('a signed-out agent fails the turn, asks the instructor to sign in, and makes no build', async ({ page }) => {
   await submitRequest(page, '[signed-out] Create a practice set on workplace safety.');
 
   await expect(history(page).getByRole('alert')).toHaveText("The agent isn't signed in, or its account can't be used.", { timeout: TURN_TIMEOUT });
-  await expect(history(page).getByRole('link', { name: 'Sign in to the agent' })).toHaveAttribute('href', '/api/agent/sign-in');
+  await expect(history(page).getByRole('button', { name: 'Sign in to Claude' })).toBeVisible();
+  await expect(sendButton(page)).toBeDisabled();
+  await page.getByRole('button', { name: 'Check again' }).click();
   await expect(sendButton(page)).toBeEnabled();
   await expect(buildCards(page)).toHaveCount(0);
 });

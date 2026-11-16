@@ -4,6 +4,7 @@ import { errorHandler, NotFound } from './errors.js';
 import { identity } from './identity.js';
 import { originGuard } from './origin-guard.js';
 import { previewOrigin } from './preview/routes.js';
+import { agentRouter } from './routes/agent.js';
 import { buildsRouter } from './routes/builds.js';
 import { eventsRouter } from './routes/events.js';
 import { filesRouter } from './routes/files.js';
@@ -27,6 +28,7 @@ export function createApp(deps: Deps): Express {
   app.use('/api', originGuard({ appOrigin: deps.preview.appOrigin, launchToken: deps.launchToken }));
   app.use('/api', healthRouter());
   app.use('/api', meRouter(deps));
+  app.use('/api', agentRouter(deps));
   app.use('/api', projectsRouter(deps));
   app.use('/api', filesRouter(deps));
   app.use('/api', messagesRouter(deps));

@@ -4,6 +4,7 @@ import type {
   UploadFileResponse,
   CreateProjectRequest,
   CreateProjectResponse,
+  MeResponse,
   MessageHistoryResponse,
   ProjectResponse,
   ProjectListResponse,
@@ -44,6 +45,14 @@ async function request(url: string, init: RequestInit = {}): Promise<Response> {
 
 async function json<T>(url: string, init?: RequestInit): Promise<T> {
   return (await request(url, init)).json() as Promise<T>;
+}
+
+export function getMe(): Promise<MeResponse> {
+  return json('/api/me');
+}
+
+export async function startAgentSignIn(): Promise<void> {
+  await request('/api/agent/sign-in', { method: 'POST' });
 }
 
 export async function cancelTurn(turnId: string): Promise<void> {

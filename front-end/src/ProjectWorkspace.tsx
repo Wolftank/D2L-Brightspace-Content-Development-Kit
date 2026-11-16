@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError, cancelTurn, createProject, listProjectFiles, sendMessage, uploadProjectFile } from './api/client';
 import type { Build, ContentBlock, Message, Project, ProjectFile } from '@cdk/contract';
+import { useAgentSignIn } from './hooks/useAgentSignIn';
 import { useProjectEvents } from './hooks/useProjectEvents';
 import type { ConnectionStatus } from './WorkingIndicator';
 import type { ProjectEventState } from './hooks/useProjectEvents';
@@ -71,12 +72,14 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
   const [pendingTurn, setPendingTurn] = useState<string | null>(initialTurnId ?? null);
   const [stopAttempt, setStopAttempt] = useState<{ turnId: string; error?: string } | null>(null);
   const messageBox = useRef<HTMLTextAreaElement>(null);
+  const agent = useAgentSignIn();
   const { statusLines, streamingMessages, messages, outcomes, builds, turn, connection, historyError, reconnect, addMessage } = useProjectEvents(project?.id ?? null);
   const pendingStatus = pendingTurn ? outcomes[pendingTurn]?.status : undefined;
   const awaitingTurn = !pendingStatus || pendingStatus === 'queued' || pendingStatus === 'running';
   const activeTurnId = pendingTurn !== null && turn.id !== pendingTurn && awaitingTurn
     ? pendingTurn : turn.status === 'running' ? turn.id : null;
   const isBuilding = sending || activeTurnId !== null;
+  const cannotSend = isBuilding || !agent.ready;
   const activeStop = stopAttempt?.turnId === activeTurnId ? stopAttempt : null;
   const stopping = activeStop !== null && !activeStop.error;
   const latestBuild = [...builds].sort((a, b) => b.version - a.version)[0] ?? null;
@@ -86,6 +89,10 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
   const chatHistory = useRef<HTMLDivElement>(null);
 
   useEffect(() => { sessionStorage.setItem(draftKey, requestText); }, [draftKey, requestText]);
+  useEffect(() => { if (agent.confirmed) messageBox.current?.focus(); }, [agent.confirmed]);
+  const sentFailedForSignIn = pendingStatus === 'failed' && outcomes[pendingTurn ?? '']?.failure?.nextStep === 'sign_in';
+  const { signedOut } = agent;
+  useEffect(() => { if (sentFailedForSignIn) signedOut(); }, [sentFailedForSignIn, signedOut]);
   useEffect(() => { const element = chatHistory.current; if (element) element.scrollTop = element.scrollHeight; }, [messages, streamingMessages]);
 
   const projectId = project?.id;
@@ -155,7 +162,7 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
   }
 
   async function submitRequest(request: string, draftFiles: Attachment[] = [], existingFiles: Extract<ContentBlock, { type: 'file' }>[] = []) {
-    if (isBuilding || submitLock.current) return;
+    if (cannotSend || submitLock.current) return;
     const text = request.trim();
     if (!text || (!project && !title.trim())) {
       setError(new ApiError('invalid_request', 'Enter a project title and a request before building.')); return;
@@ -218,7 +225,7 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
             {message.role === 'instructor' && message.turnId && outcomes[message.turnId]?.status === 'cancelled' &&
               <p className="stopped-request">Request stopped.</p>}
             {message.role === 'instructor' && message.turnId && outcomes[message.turnId]?.status === 'failed' &&
-              <ErrorNotice failure={outcomes[message.turnId]?.failure ?? { message: 'This request could not be completed.', nextStep: 'try_later' }} disabled={isBuilding}
+              <ErrorNotice failure={outcomes[message.turnId]?.failure ?? { message: 'This request could not be completed.', nextStep: 'try_later' }} disabled={cannotSend} onSignIn={() => void agent.start()}
                 onSendAgain={() => void submitRequest(messageText(message), [], messageFiles(message))}
                 onEdit={() => { setRequestText(message.content.filter(block => block.type === 'text').map(block => block.text).join('\n')); messageBox.current?.focus(); }}
                 onNewProject={startNewProject} onAskForFix={askForFix} />}
@@ -228,6 +235,13 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
         <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{latestAgent ? `CDK: ${latestAgent.content.filter(block => block.type === 'text').map(block => block.text).join('')}` : ''}</div>
         {project && connection !== 'connected' && <div className="connection-notice"><p role="status">{connection === 'reconnecting' ? 'Reconnecting to your request…' : 'Connection lost. Try connecting again.'}</p>{connection === 'lost' && <button type="button" onClick={reconnect}>Try again</button>}</div>}
         {historyError && <div><p className="error" role="alert">Unable to load the conversation.</p><button type="button" onClick={reconnect}>Try loading the conversation again</button></div>}
+        <div className={agent.ready ? 'sr-only' : 'sign-in-notice'} role="group" aria-label="Claude sign-in">
+          <p role="status">{agent.notice}</p>
+          {!agent.ready && <>
+            <button type="button" disabled={agent.busy} onClick={() => void agent.start()}>Sign in to Claude</button>
+            <button type="button" disabled={agent.busy} onClick={() => void agent.checkAgain()}>Check again</button>
+          </>}
+        </div>
         {fileListError && needsFileNames && <div><p className="error" role="alert">Unable to load attachment names.</p><button type="button" onClick={() => setFileListAttempt(attempt => attempt + 1)}>Try loading attachment names again</button></div>}
         <form onSubmit={handleSend} className={hasMessages ? 'composer' : 'composer composer-empty'}>
           {!project && <><label htmlFor="project-title">Project title</label><input id="project-title" value={title} onChange={event => setTitle(event.target.value)} placeholder="e.g., Cell division practice" maxLength={160} disabled={sending} /></>}
@@ -237,13 +251,13 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
           <div className="composer-footer">
             <AttachmentPicker disabled={sending} onAdd={addAttachments} />
             {activeTurnId && <button className="stop-request" type="button" disabled={stopping} onClick={() => void stopRequest()}>{stopping ? 'Stopping…' : 'Stop request'}</button>}
-            <button disabled={isBuilding} type="submit">{sending ? 'Sending…' : isBuilding ? 'Working…' : 'Send'}</button>
+            <button disabled={cannotSend} type="submit">{sending ? 'Sending…' : isBuilding ? 'Working…' : 'Send'}</button>
           </div>
           <div className="sr-only" role="status">{stopping ? 'Stopping request.' : turn.status === 'cancelled' && !activeTurnId ? 'Request stopped. You can send a follow-up.' : ''}</div>
           {attachmentNotice && <p role="alert" className="error">{attachmentNotice}</p>}
           {uploadError && <p className="error" role="alert">{uploadError}</p>}
           {activeStop?.error && <p className="error" role="alert">Unable to stop the request. {activeStop.error}</p>}
-          {error && <ErrorNotice failure={error} disabled={isBuilding} onSendAgain={() => void submitRequest(requestText, attachments)} onEdit={() => messageBox.current?.focus()} onNewProject={startNewProject} onAskForFix={askForFix} />}
+          {error && <ErrorNotice failure={error} disabled={cannotSend} onSendAgain={() => void submitRequest(requestText, attachments)} onEdit={() => messageBox.current?.focus()} onNewProject={startNewProject} onAskForFix={askForFix} onSignIn={() => void agent.start()} />}
         </form>
       </section>
       <BuildPanel build={latestBuild} turn={turn} statusLines={statusLines} connection={connection} outcome={outcomes[turn.id ?? '']?.message} disabled={isBuilding} onAskForFix={askForFix}

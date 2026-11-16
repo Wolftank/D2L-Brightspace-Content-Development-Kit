@@ -73,9 +73,12 @@ Only the app may call the API. A request gets `403 forbidden` when its `Host` is
 Who is calling, and which agent this install runs.
 
 ```
-GET  /api/me              → { user, mode: 'local'|'hosted', agent: { name, ok, version?, detail? } }
+GET  /api/me              → { user, mode: 'local'|'hosted', agent: { name, ok, detail? } }
+POST /api/agent/sign-in   → 202
 GET  /api/health
 ```
+
+`agent.ok` is whether the agent is signed in, read from its stored login without a request to its provider. `POST /api/agent/sign-in` starts the agent's own sign-in, which opens in the instructor's browser. A second call replaces a sign-in still waiting, and a waiting sign-in ends when the back end shuts down.
 
 ### Projects and files
 
@@ -264,7 +267,7 @@ A failed turn's `error`, stored on the turn and sent in `turn.failed`. The runne
 | --- | --- | --- |
 | `agent_error` | The agent stopped with an error before it finished. | `send_again` |
 | `agent_signed_out` | The agent isn't signed in, or its account can't be used. | `sign_in` |
-| `agent_billing` | The agent's account has a billing or account problem. | `sign_in` |
+| `agent_billing` | The agent's account has a billing or account problem. | `try_later` |
 | `agent_busy` | The agent's account is busy or has reached its usage limit. | `try_later` |
 | `agent_unrestricted` | The agent started with tools or skills CDK doesn't allow, so the request didn't run. | `try_later` |
 | `max_steps_exceeded` | The request needed more steps than allowed. | `smaller_request` |
@@ -374,7 +377,9 @@ A project whose workspace is missing cannot run a turn; the turn fails with `err
 ```ts
 interface AgentDriver {
   name: 'claude' | 'copilot';
-  probe(): Promise<{ ok: boolean; version?: string; detail?: string }>;
+  probe(): Promise<{ ok: boolean; detail?: string }>;
+  signIn(): void;
+  endSignIn(): void;
   open(req: SessionRequest): Promise<AgentSession>;
 }
 interface AgentSession {
