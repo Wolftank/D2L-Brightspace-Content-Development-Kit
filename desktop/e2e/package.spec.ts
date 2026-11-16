@@ -117,6 +117,14 @@ test('closing and reopening the packaged app restores a project that can continu
     let window = await app.firstWindow();
     await expect(window.getByRole('heading', { name: 'Create an activity' })).toBeVisible();
     await window.getByLabel('Project title').fill('Saved desktop project');
+    const beforeDrop = window.url();
+    expect(await window.evaluate(`(() => {
+      const transfer = new DataTransfer();
+      transfer.items.add(new File(['Course reference'], 'reference.txt', { type: 'text/plain' }));
+      return !document.querySelector('main').dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+    })()`)).toBe(true);
+    await expect(window.getByRole('button', { name: 'Remove reference.txt' })).toBeVisible();
+    expect(window.url()).toBe(beforeDrop);
     await window.getByLabel('What should students learn or do?').fill('Create a workplace safety practice set.');
     await window.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(window.getByRole('heading', { name: 'Ready to download' })).toBeVisible({ timeout: 20_000 });
@@ -127,6 +135,7 @@ test('closing and reopening the packaged app restores a project that can continu
     await expect(window.getByRole('heading', { name: 'My projects' })).toBeVisible();
     await window.getByRole('link', { name: 'Saved desktop project', exact: true }).click();
     await expect(window.getByLabel('Conversation history')).toContainText('Create a workplace safety practice set.');
+    await expect(window.getByLabel('Conversation history').getByText('reference.txt', { exact: true })).toBeVisible();
     await expect(window.getByTitle('Interactive preview of build 1')).toBeVisible({ timeout: 20_000 });
     await window.getByLabel('Describe a change').fill('[follow-up] Add two more questions.');
     await window.getByRole('button', { name: 'Send', exact: true }).click();

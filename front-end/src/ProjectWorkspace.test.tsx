@@ -182,3 +182,63 @@ describe('F10 conversation', () => {
     expect(screen.getByLabelText('Describe a change')).toHaveValue('Try a shorter quiz.');
   });
 });
+
+it('refuses individual files, removes a file, and uploads the rest before sending', async () => {
+  const entry = { id: 'f1', projectId: project.id, name: 'syllabus.txt', mime: 'text/plain', size: 4, createdAt: 1 };
+  const upload = vi.fn(() => Response.json({ file: entry }, { status: 201 }));
+  const post = vi.fn((content: Message['content']) => Response.json({ message: { ...message('u1', 1, 'instructor', ''), content }, turn: { id: 't1' } }));
+  fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/files')) return upload();
+    if (init?.method === 'POST') return post(JSON.parse(init.body as string).content);
+    return Response.json({ items: [] });
+  });
+  const view = render(<ProjectWorkspace initialProject={project} />);
+  const attach = screen.getByRole('button', { name: 'Attach files' });
+  expect(attach).toHaveAttribute('title', expect.stringContaining('Do not attach student information'));
+  fireEvent.change(view.container.querySelector('input[type=file]')!, { target: { files: [
+    new File(['text'], 'syllabus.txt', { type: 'text/plain' }),
+    new File(['text'], 'notes.txt', { type: 'text/plain' }),
+    new File(['binary'], 'image.gif', { type: 'image/gif' }),
+  ] } });
+  expect(screen.getByRole('alert')).toHaveTextContent('image.gif');
+  fireEvent.click(screen.getByRole('button', { name: 'Remove notes.txt' }));
+  expect(upload).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText('Describe a change'), { target: { value: 'Use the syllabus.' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+  await waitFor(() => expect(post).toHaveBeenCalledWith([{ type: 'text', text: 'Use the syllabus.' }, { type: 'file', fileId: 'f1' }]));
+  expect(upload).toHaveBeenCalledTimes(1);
+  expect(fetchMock.mock.calls.find(([url]) => String(url).endsWith('/files'))?.[1].body.get('file').name).toBe('syllabus.txt');
+  expect(await within(screen.getByLabelText('Conversation history')).findByText('syllabus.txt')).toBeVisible();
+});
+
+it('keeps the draft when an upload fails and reuses successful uploads on retry', async () => {
+  const entry = { id: 'f1', projectId: project.id, name: 'notes.txt', mime: 'text/plain', size: 4, createdAt: 1 };
+  const uploads: string[] = [];
+  const post = vi.fn((content: Message['content']) => Response.json({ message: { ...message('u1', 1, 'instructor', ''), content }, turn: { id: 't1' } }));
+  fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/files')) {
+      const file = (init?.body as FormData).get('file') as File;
+      uploads.push(file.name);
+      if (uploads.length === 2) return Response.json({ error: { code: 'file_not_accepted', message: 'This file could not be attached.', nextStep: 'send_again' } }, { status: 422 });
+      return Response.json({ file: file.name === 'notes.txt' ? entry : { ...entry, id: 'f2', name: file.name } }, { status: 201 });
+    }
+    if (init?.method === 'POST') return post(JSON.parse(init.body as string).content);
+    return Response.json({ items: [] });
+  });
+  const view = render(<ProjectWorkspace initialProject={project} />);
+  fireEvent.change(view.container.querySelector('input[type=file]')!, { target: { files: [
+    new File(['text'], 'notes.txt', { type: 'text/plain' }),
+    new File(['more'], 'more.txt', { type: 'text/plain' }),
+  ] } });
+  const draft = screen.getByLabelText('Describe a change');
+  const send = screen.getByRole('button', { name: 'Send' });
+  fireEvent.change(draft, { target: { value: 'Use my notes.' } });
+  fireEvent.click(send);
+  expect(await screen.findByText(/Could not upload more.txt/)).toHaveTextContent('Your message was not sent.');
+  expect(post).not.toHaveBeenCalled();
+  expect(draft).toHaveValue('Use my notes.');
+  expect(screen.getByRole('button', { name: 'Remove more.txt' })).toBeEnabled();
+  fireEvent.click(send);
+  await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+  expect(uploads).toEqual(['notes.txt', 'more.txt', 'more.txt']);
+});

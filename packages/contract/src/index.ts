@@ -45,6 +45,35 @@ export interface Project {
   updatedAt: number;
 }
 
+/** The type of an accepted file, decided by its content: PDF, Word (.docx), text, PNG, or JPG. */
+export type FileMime =
+  | 'application/pdf'
+  | 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  | 'text/plain'
+  | 'image/png'
+  | 'image/jpeg';
+
+/** The File resource: a file the instructor uploaded to a project. Named apart from the DOM's `File`. */
+export interface ProjectFile {
+  id: string;
+  projectId: string;
+  /** The name the file was uploaded with, cleaned for display. */
+  name: string;
+  mime: FileMime;
+  /** In bytes. */
+  size: number;
+  createdAt: number;
+}
+
+export interface UploadFileResponse {
+  file: ProjectFile;
+}
+
+export interface FileListResponse {
+  /** Oldest first. */
+  items: ProjectFile[];
+}
+
 export type ContentBlock =
   | { type: 'text'; text: string }
   | { type: 'file'; fileId: string }

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app.js';
 import { createBuildsRepo } from '../db/builds.js';
 import { createEventsRepo } from '../db/events.js';
+import { createFilesRepo } from '../db/files.js';
 import { createMessagesRepo } from '../db/messages.js';
 import { createProjectsRepo } from '../db/projects.js';
 import { users as usersTable, type Event } from '../db/schema.js';
@@ -79,7 +80,7 @@ describe('R7 regression: event stream and reconnect', () => {
     deps = fakeDeps({
       users: createUsersRepo(db),
       projects: createProjectService({ projects: projectsRepo, workspaces, builds: buildsRepo, turns: turnsRepo }),
-      turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, runner: idleRunner }),
+      turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, files: createFilesRepo(db), runner: idleRunner }),
       builds: createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces, events }),
       events,
       messages: createMessageService({ projects: projectsRepo, messages: createMessagesRepo(db) }),

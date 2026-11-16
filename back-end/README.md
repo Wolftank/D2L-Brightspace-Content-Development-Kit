@@ -81,7 +81,8 @@ What is logged:
 | `Agent sign-in started`, and `Claude sign-in ended` with its exit code | `reqId` on the first |
 | `Build created` and `Build checked`, with the status, the QA result, and any error code, and `Build error` with the technical detail of a failed copy or QA gate run | `projectId`, `turnId`, and `buildId` |
 | `A CDK tool failed`, and `Agent process error output` for what the agent process writes to standard error | the tool, or the workspace |
-| `Instructor message` and `Agent reply`, with their text, at `debug` only | `turnId` and `messageId` |
+| `File uploaded`, with the file's type and size, and `File not accepted`, with the reason (`type` or `empty`) and the size. A file over 20 MB is refused before it is read, so only its `Request completed` record shows it | `reqId`, `projectId`, and `fileId` |
+| `Instructor message` and `Agent reply`, with their text, and `Uploaded file name`, at `debug` only | `turnId` and `messageId`, or `fileId` |
 
 Every response carries its request ID in `X-Request-Id`, and an `internal_error` body repeats it as `error.requestId`, so a failed request can be found by searching the log for its ID. From there, `turnId` and `buildId` lead to the turn the request queued and the build the turn made.
 
@@ -89,7 +90,7 @@ What never reaches the log:
 
 - **Request headers.** A request record holds only the fields above, so authorization, cookie, and launch-token headers are never written.
 - **Secrets in the settings.** The startup record lists the validated settings field by field, never the environment, and leaves out `LAUNCH_TOKEN`. `LOGGED_SETTINGS` in `config.ts` must say for every setting whether it is logged, so a new setting can't be logged by accident. `ANTHROPIC_API_KEY` and the agent's sign-in are never read into the settings.
-- **Message text**, below `debug`.
+- **Message text and file names**, below `debug`.
 
 The folder stays small. A new file starts each day and whenever the current one reaches 10 MB. Each rotation keeps the 13 newest older files, and files last written more than 14 days ago are deleted at startup and after each rotation. The folder holds at most about 14 files of 10 MB, plus one file for each day the back end starts without rotating.
 
@@ -121,7 +122,7 @@ The folder stays small. A new file starts each day and whenever the current one 
 - `db/` — the Drizzle schema, migrations, `openDb`, and the repositories
 - `routes/` — one file per resource's routes, each calling one service
 - `preview/` — the preview origin, `http://preview.localhost:<PORT>`: the emulator player and the files of ready builds, kept off the app's origin
-- `services/` — the project, turn, workspace, and build services the routes and the pipeline call
+- `services/` — the project, turn, message, file, workspace, and build services the routes and the pipeline call
 - `agent/` — the `AgentDriver` interface, the Claude driver, and `createAgentDriver`, which builds the driver `AGENT_DRIVER` names
 - `pipeline/` — the runner and the session service, emitting events to the event stream
 - `tilt-udl/` — the pedagogy check

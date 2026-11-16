@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app.js';
 import { createBuildsRepo } from '../db/builds.js';
 import { createEventsRepo } from '../db/events.js';
+import { createFilesRepo } from '../db/files.js';
 import type { Db } from '../db/index.js';
 import { createProjectsRepo, type ProjectsRepo } from '../db/projects.js';
 import { projects as projectsTable, turns as turnsTable, users as usersTable, type Turn, type User } from '../db/schema.js';
@@ -40,7 +41,7 @@ describe('project routes', () => {
       }),
       builds: createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces: workspaceService, events }),
       events,
-      turns: createTurnService({ projects: projectsRepo, turns: createTurnsRepo(db), runner: idleRunner }),
+      turns: createTurnService({ projects: projectsRepo, turns: createTurnsRepo(db), files: createFilesRepo(db), runner: idleRunner }),
     });
     return createApp(deps);
   }

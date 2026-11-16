@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Message, Project, Turn } from '../db/schema.js';
+import type { File, Message, Project, Turn } from '../db/schema.js';
 import type { QueueTurnInput, QueueTurnResult } from '../db/turns.js';
-import { NotFound, TurnActive } from '../errors.js';
+import { FilesNotInProject, NotFound, TurnActive } from '../errors.js';
 import { log } from '../log.js';
 import { createTurnService, type TurnServiceDeps } from './turns.js';
 
@@ -20,6 +20,11 @@ function setup(queueResult?: (input: QueueTurnInput) => QueueTurnResult) {
             message: { id: input.messageId, turnId: input.turnId, content: input.content } as Message,
             turn: { id: input.turnId, messageId: input.messageId, status: 'queued' } as Turn,
           })),
+      ),
+    },
+    files: {
+      findInProject: vi.fn((projectId: string, ids: string[]) =>
+        projectId === 'project-1' ? ids.filter((id) => id.startsWith('file-')).map((id) => ({ id, projectId }) as File) : [],
       ),
     },
     runner: { executeTurn: vi.fn(async () => {}), cancel: vi.fn() },
@@ -58,6 +63,25 @@ describe('turn service', () => {
     const { deps, service } = setup();
 
     expect(() => service.start(ownerId, projectId, CONTENT, log)).toThrow(NotFound);
+    expect(deps.turns.queue).not.toHaveBeenCalled();
+    expect(deps.runner.executeTurn).not.toHaveBeenCalled();
+  });
+
+  it("queues file blocks that name the project's files", () => {
+    const { deps, service } = setup();
+    const content = [...CONTENT, { type: 'file' as const, fileId: 'file-1' }, { type: 'file' as const, fileId: 'file-2' }];
+
+    service.start('owner-1', 'project-1', content, log);
+
+    expect(deps.files.findInProject).toHaveBeenCalledWith('project-1', ['file-1', 'file-2']);
+    expect(deps.turns.queue.mock.calls[0]![0].content).toEqual(content);
+  });
+
+  it('throws FilesNotInProject naming each file outside the project, without queueing anything', () => {
+    const { deps, service } = setup();
+    const content = [...CONTENT, { type: 'file' as const, fileId: 'file-1' }, { type: 'file' as const, fileId: 'elsewhere' }];
+
+    expect(() => service.start('owner-1', 'project-1', content, log)).toThrow(new FilesNotInProject(['elsewhere']));
     expect(deps.turns.queue).not.toHaveBeenCalled();
     expect(deps.runner.executeTurn).not.toHaveBeenCalled();
   });

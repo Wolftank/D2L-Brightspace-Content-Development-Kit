@@ -25,6 +25,7 @@ export function fakeDeps(used: Partial<Deps> = {}): Deps {
     messages: { list: unused },
     builds: { get: unused, download: unused, previewFile: unused },
     events: { append: unused, after: unused, subscribe: unused },
+    files: { upload: unused, list: unused },
     driver: { name: 'claude', probe: async () => ({ ok: true }), signIn: () => {} },
     preview: { origin: 'http://preview.localhost:3000', appOrigin: 'http://127.0.0.1:5173' },
     ...used,

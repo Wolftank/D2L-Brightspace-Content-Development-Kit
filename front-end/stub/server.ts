@@ -3,7 +3,11 @@ import { NEXT_STEPS } from '../src/api/failure';
 import { randomUUID } from 'node:crypto';
 import { previewZip, startPreviewServer } from './preview';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { cleanFileName, detectFileType, MAX_FILE_BYTES } from '../../back-end/src/services/file-format.js';
 import type {
+  FileListResponse,
+  ProjectFile,
+  UploadFileResponse,
   ApiErrorBody,
   Build,
   BuildResponse,
@@ -45,6 +49,7 @@ interface StoredEvent {
 
 interface ProjectState {
   project: Project;
+  files: ProjectFile[];
   messages: Message[];
   builds: Build[];
   events: StoredEvent[];
@@ -60,6 +65,7 @@ const builds = new Map<string, { state: ProjectState; build: Build }>();
 
 /** The stub's API errors, with the back end's statuses, messages, and next steps. `stream_unavailable` is the stub's own. */
 const API_ERRORS = {
+  file_not_accepted: { status: 422, message: "This file could not be attached.", nextStep: 'send_again' },
   invalid_request: { status: 400, message: "The request couldn't be read.", nextStep: 'send_again' },
   invalid_json: { status: 400, message: "The request couldn't be read.", nextStep: 'send_again' },
   not_found: { status: 404, message: "This project doesn't exist.", nextStep: 'new_project' },
@@ -362,6 +368,7 @@ function createProject(body: unknown): CreateProjectResponse {
   projects.set(project.id, {
     project,
     messages: [],
+    files: [],
     builds: [],
     events: [],
     subscribers: new Set(),
@@ -395,9 +402,43 @@ function projectView(state: ProjectState): ProjectResponse {
   };
 }
 
+async function uploadFile(state: ProjectState, req: IncomingMessage): Promise<UploadFileResponse> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req.iterator({ destroyOnReturn: false })) {
+    const bytes = Buffer.from(chunk as Uint8Array);
+    size += bytes.length;
+    if (size > MAX_FILE_BYTES + 16 * 1024) {
+      req.resume();
+      throw new HttpError('file_not_accepted', { reason: 'too_large' });
+    }
+    chunks.push(bytes);
+  }
+  const form = await new Response(Buffer.concat(chunks), {
+    headers: { 'content-type': req.headers['content-type'] ?? '' },
+  }).formData().catch(() => null);
+  const entry = form?.get('file');
+  let fields = 0;
+  form?.forEach(() => { fields++; });
+  if (fields !== 1 || !entry || typeof entry === 'string') throw new HttpError('invalid_request');
+  if (!entry.size) throw new HttpError('file_not_accepted', { reason: 'empty' });
+  if (entry.size > MAX_FILE_BYTES) throw new HttpError('file_not_accepted', { reason: 'too_large' });
+  const mime = await detectFileType(new Uint8Array(await entry.arrayBuffer())).catch(() => undefined);
+  if (!mime) throw new HttpError('file_not_accepted', { reason: 'type' });
+  const file: ProjectFile = {
+    id: randomUUID(), projectId: state.project.id, name: cleanFileName(entry.name), mime, size: entry.size, createdAt: Date.now(),
+  };
+  state.files.push(file);
+  return { file };
+}
+
 function sendMessage(state: ProjectState, body: unknown): SendMessageResponse {
   const input = body as Partial<SendMessageRequest>;
   if (!Array.isArray(input.content) || !input.content.some((block) => block?.type === 'text')) {
+    throw new HttpError('invalid_request');
+  }
+  const fileBlocks = input.content.filter(block => block?.type === 'file');
+  if (fileBlocks.length > 10 || fileBlocks.some(block => !state.files.some(file => file.id === block.fileId))) {
     throw new HttpError('invalid_request');
   }
   if (state.activeTurn) {
@@ -528,6 +569,12 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (method === 'GET' && !id) return sendJson(res, 200, listProjects());
     if (method === 'POST' && !id) return sendJson(res, 201, createProject(await readJson(req)));
     if (id && !sub && method === 'GET') return sendJson(res, 200, projectView(getProject(id)));
+    if (id && sub === 'files' && method === 'GET') {
+      return sendJson(res, 200, { items: getProject(id).files } satisfies FileListResponse);
+    }
+    if (id && sub === 'files' && method === 'POST') {
+      return sendJson(res, 201, await uploadFile(getProject(id), req));
+    }
     if (id && sub === 'messages' && method === 'GET') {
       const state = getProject(id);
       const items = state.messages.map((message): ChatMessage => {
