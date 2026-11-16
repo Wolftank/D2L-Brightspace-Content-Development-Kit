@@ -1,16 +1,19 @@
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BuildableAvenue } from '@cdk/contract';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createBuildsRepo } from '../db/builds.js';
 import { createEventsRepo } from '../db/events.js';
+import { createFilesRepo } from '../db/files.js';
 import { createProjectsRepo } from '../db/projects.js';
 import { testDb } from '../db/test-db.js';
 import { createUsersRepo } from '../db/users.js';
 import { KIT_DIR, skillsFor } from '../kit.js';
 import { createEventService } from '../pipeline/events.js';
+import { log } from '../log.js';
 import { createBuildService } from '../services/builds.js';
+import { attachmentFor, createFileService } from '../services/files.js';
 import { createWorkspaceService } from '../services/workspaces.js';
 import { createCdkTools } from '../tools/index.js';
 import { createClaudeAgentDriver } from './claude.js';
@@ -253,7 +256,8 @@ describe('ClaudeAgentDriver, live SDK, in a provisioned workspace', () => {
     const projects = createProjectsRepo(db);
     const workspaces = createWorkspaceService({ dataDir });
     const builds = createBuildService({ builds: createBuildsRepo(db), projects, workspaces, events: createEventService(createEventsRepo(db)) });
-    const project = projects.create({ id: 'live-project', ownerId: createUsersRepo(db).ensureLocalUser().id, title: 'Photosynthesis check', avenue });
+    const ownerId = createUsersRepo(db).ensureLocalUser().id;
+    const project = projects.create({ id: 'live-project', ownerId, title: 'Photosynthesis check', avenue });
     await workspaces.create(project.id, avenue);
     const workspaceDir = workspaces.pathFor(project.id);
     await prepare(join(workspaceDir, 'out'));
@@ -266,7 +270,8 @@ describe('ClaudeAgentDriver, live SDK, in a provisioned workspace', () => {
       skills: skillsFor(avenue),
       tools: recordingChecks(createCdkTools({ projects, workspaces, builds }, project.id), checks),
     });
-    return { project, workspaces, workspaceDir, builds, checks, session };
+    const files = createFileService({ projects, files: createFilesRepo(db), workspaces });
+    return { ownerId, project, workspaces, workspaceDir, builds, files, checks, session };
   }
 
   it('passes the session check with the allowed tools and the SCORM skills, or the turn would fail with agent_unrestricted', async () => {
@@ -373,4 +378,57 @@ describe('ClaudeAgentDriver, live SDK, in a provisioned workspace', () => {
     expect((await second.result).error).toBeUndefined();
     expect(await builds.create(project.id)).toMatchObject({ version: 2, status: 'ready', avenue: 'topic', qa: { passed: true } });
   }, 1_200_000);
+
+  it('uses an attached PDF and Word document, then a follow-up in a reopened session uses the PDF attached earlier', async () => {
+    const { ownerId, project, workspaceDir, files, session } = await openProject();
+    const fixtures = join(import.meta.dirname, '..', 'services', '__fixtures__', 'files');
+    const upload = async (name: string) =>
+      files.upload(ownerId, project.id, { name, bytes: await readFile(join(fixtures, name)) }, log);
+    const pdf = await upload('field-trip.pdf');
+    const word = await upload('lab-rules.docx');
+    const filesDir = join(workspaceDir, 'files');
+    const snapshot = async () =>
+      Promise.all((await readdir(filesDir)).sort().map(async (name) => [name, await readFile(join(filesDir, name))] as const));
+    const before = await snapshot();
+
+    const first = session.send(
+      {
+        text:
+          'Do not build or change the activity yet. From the attached files, tell me the date of the field trip ' +
+          'and what students must bring to every lab session. Answer in one sentence.',
+        attachments: [attachmentFor(pdf, filesDir), attachmentFor(word, filesDir)],
+      },
+      { maxSteps: 10, maxBudgetUsd: 1 },
+      new AbortController().signal,
+    );
+    const firstEvents = await drain(first.events);
+    const firstResult = await first.result;
+    console.log(`First reply: ${firstResult.text}`);
+    expect(firstResult.error).toBeUndefined();
+    expect(firstResult.text).toMatch(/April 9/i);
+    expect(firstResult.text).toMatch(/blue lab notebook/i);
+    expect(toolEnds(firstEvents, 'Read').some((end) => end.ok)).toBe(true);
+    await session.close();
+
+    const reopened = await driver.open({
+      workspaceDir,
+      sessionId: firstResult.sessionId,
+      instructions: renderProjectInstructions({ project, avenue: 'scorm', workspaceDir }),
+      skillsDir: join(KIT_DIR, 'skills'),
+      skills: skillsFor('scorm'),
+      tools: { name: 'cdk', tools: [] },
+    });
+    const second = reopened.send(
+      { text: 'Where does the field trip in the PDF I attached earlier take place? Reply with only the place.', attachments: [] },
+      { maxSteps: 6, maxBudgetUsd: 1 },
+      new AbortController().signal,
+    );
+    await drain(second.events);
+    const secondResult = await second.result;
+    console.log(`Follow-up reply: ${secondResult.text}`);
+    expect(secondResult.error).toBeUndefined();
+    expect(secondResult.text).toMatch(/Riverside Wetlands/i);
+    expect(await snapshot()).toEqual(before);
+    await reopened.close();
+  }, 300_000);
 });

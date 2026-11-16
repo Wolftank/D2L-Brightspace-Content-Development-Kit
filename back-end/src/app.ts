@@ -6,6 +6,7 @@ import { originGuard } from './origin-guard.js';
 import { previewOrigin } from './preview/routes.js';
 import { buildsRouter } from './routes/builds.js';
 import { eventsRouter } from './routes/events.js';
+import { filesRouter } from './routes/files.js';
 import { healthRouter } from './routes/health.js';
 import { meRouter } from './routes/me.js';
 import { messagesRouter } from './routes/messages.js';
@@ -27,6 +28,7 @@ export function createApp(deps: Deps): Express {
   app.use('/api', healthRouter());
   app.use('/api', meRouter(deps));
   app.use('/api', projectsRouter(deps));
+  app.use('/api', filesRouter(deps));
   app.use('/api', messagesRouter(deps));
   app.use('/api', turnsRouter(deps));
   app.use('/api', buildsRouter(deps));

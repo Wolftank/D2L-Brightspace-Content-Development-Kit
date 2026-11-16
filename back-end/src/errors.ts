@@ -1,5 +1,6 @@
 import type { ApiErrorBody, NextStep } from '@cdk/contract';
 import type { ErrorRequestHandler, Response } from 'express';
+import { MulterError } from 'multer';
 import { ZodError } from 'zod';
 
 /** A request that doesn't come from the CDK window. */
@@ -74,6 +75,25 @@ export class BuildIncomplete extends Error {
   }
 }
 
+/** A message names files that are not in its project: unknown, or another project's. */
+export class FilesNotInProject extends Error {
+  constructor(public readonly fileIds: string[]) {
+    super(`Files not in the project: ${fileIds.join(', ')}`);
+    this.name = 'FilesNotInProject';
+  }
+}
+
+/** Why an uploaded file was refused: its content is not an accepted type, it is empty, or it is over the size limit. */
+export type FileNotAcceptedReason = 'type' | 'empty' | 'too_large';
+
+/** An uploaded file is not one CDK accepts. */
+export class FileNotAccepted extends Error {
+  constructor(public readonly reason: FileNotAcceptedReason) {
+    super(`File not accepted: ${reason}`);
+    this.name = 'FileNotAccepted';
+  }
+}
+
 /** Each API error's status, what the instructor reads, and the one thing to do next. */
 export const API_ERRORS = {
   invalid_request: { status: 400, message: "The request couldn't be read.", nextStep: 'send_again' },
@@ -86,6 +106,11 @@ export const API_ERRORS = {
   build_not_ready: { status: 409, message: "This build isn't ready to download.", nextStep: 'try_later' },
   build_failed: { status: 409, message: "This build failed, so it can't be downloaded.", nextStep: 'ask_for_fix' },
   build_incomplete: { status: 409, message: 'This build is missing files it needs.', nextStep: 'send_again' },
+  file_not_accepted: {
+    status: 422,
+    message: "This file can't be attached. Attach a PDF, Word document, text file, PNG, or JPG of up to 20 MB.",
+    nextStep: 'send_again',
+  },
   forbidden: { status: 403, message: "This request isn't allowed.", nextStep: 'try_later' },
   internal_error: { status: 500, message: 'Something went wrong.', nextStep: 'try_later' },
 } satisfies Record<string, { status: number; message: string; nextStep: NextStep }>;
@@ -104,6 +129,13 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   if (err instanceof ZodError) return send(res, 'invalid_request', { issues: err.issues });
   if (err instanceof SyntaxError && (err as { type?: string }).type === 'entity.parse.failed') return send(res, 'invalid_json');
   if ((err as { type?: string }).type === 'entity.too.large') return send(res, 'payload_too_large');
+  if (err instanceof MulterError) {
+    return err.code === 'LIMIT_FILE_SIZE'
+      ? send(res, 'file_not_accepted', { reason: 'too_large' })
+      : send(res, 'invalid_request', { code: err.code });
+  }
+  if (err instanceof FilesNotInProject) return send(res, 'invalid_request', { fileIds: err.fileIds });
+  if (err instanceof FileNotAccepted) return send(res, 'file_not_accepted', { reason: err.reason });
   if (err instanceof Forbidden) return send(res, 'forbidden');
   if (err instanceof NotFound) return send(res, 'not_found');
   if (err instanceof BuildNotFound) return send(res, 'build_not_found');

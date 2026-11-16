@@ -8,6 +8,7 @@ import type { AgentDriver, AgentEvent, TurnResult } from '../agent/AgentDriver.j
 import { createApp } from '../app.js';
 import { createBuildsRepo } from '../db/builds.js';
 import { createEventsRepo } from '../db/events.js';
+import { createFilesRepo } from '../db/files.js';
 import type { Db } from '../db/index.js';
 import { createMessagesRepo } from '../db/messages.js';
 import { createProjectsRepo, type ProjectsRepo } from '../db/projects.js';
@@ -103,6 +104,7 @@ describe('POST /api/turns/:turnId/cancel', () => {
     const runner = createRunner({
       turns: turnsRepo,
       messages: messagesRepo,
+      files: createFilesRepo(db),
       events,
       sessions,
       workspaces,
@@ -112,10 +114,18 @@ describe('POST /api/turns/:turnId/cancel', () => {
     deps = {
       users: createUsersRepo(db),
       projects: createProjectService({ projects: projectsRepo, workspaces, builds: buildsRepo, turns: turnsRepo }),
-      turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, runner }),
+      turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, files: createFilesRepo(db), runner }),
       messages: createMessageService({ projects: projectsRepo, messages: messagesRepo }),
       builds,
       events,
+      files: {
+        upload: () => {
+          throw new Error('not used by these tests');
+        },
+        list: () => {
+          throw new Error('not used by these tests');
+        },
+      },
       driver: { name: 'claude', probe: async () => ({ ok: true }) },
       preview: { origin: 'http://preview.localhost:3000', appOrigin: 'http://127.0.0.1:5173' },
     };

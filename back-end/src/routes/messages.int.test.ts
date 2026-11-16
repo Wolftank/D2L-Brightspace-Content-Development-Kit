@@ -2,6 +2,7 @@ import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app.js';
 import { createEventsRepo } from '../db/events.js';
+import { createFilesRepo } from '../db/files.js';
 import type { Db } from '../db/index.js';
 import { createMessagesRepo, type MessagesRepo } from '../db/messages.js';
 import { createProjectsRepo, type ProjectsRepo } from '../db/projects.js';
@@ -33,10 +34,18 @@ describe('POST /api/projects/:projectId/messages', () => {
     const deps: Deps = {
       users: createUsersRepo(db),
       projects: { create: unused, get: unused, list: unused },
-      turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, runner: { executeTurn, cancel: unused } }),
+      turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, files: createFilesRepo(db), runner: { executeTurn, cancel: unused } }),
       messages: { list: unused },
       builds: { get: unused, download: unused, previewFile: unused },
       events,
+      files: {
+        upload: () => {
+          throw new Error('not used by these tests');
+        },
+        list: () => {
+          throw new Error('not used by these tests');
+        },
+      },
       driver: { name: 'claude', probe: async () => ({ ok: true }) },
       preview: { origin: 'http://preview.localhost:3000', appOrigin: 'http://127.0.0.1:5173' },
     };
@@ -148,7 +157,8 @@ describe('POST /api/projects/:projectId/messages', () => {
     ['blank text', { content: [{ type: 'text', text: '   ' }] }],
     ['text that is not a string', { content: [{ type: 'text', text: 42 }] }],
     ['a file block', { content: [{ type: 'file', fileId: 'file-1' }] }],
-    ['a text block with a file block', { content: [{ type: 'text', text: 'Hi' }, { type: 'file', fileId: 'file-1' }] }],
+    ['a file block with a blank id', { content: [{ type: 'text', text: 'Hi' }, { type: 'file', fileId: '' }] }],
+    ['an unknown block', { content: [{ type: 'text', text: 'Hi' }, { type: 'build_ref', buildId: 'build-1' }] }],
     ['content that is not an array', { content: 'Build a quiz' }],
   ])('rejects %s with 400 invalid_request and stores nothing', async (_case, body) => {
     const res = await post('project-1', body);
@@ -157,6 +167,74 @@ describe('POST /api/projects/:projectId/messages', () => {
     expect(res.body.error.code).toBe('invalid_request');
     expect(db.select().from(messagesTable).all()).toEqual([]);
     expect(executeTurn).not.toHaveBeenCalled();
+  });
+
+  describe('file blocks', () => {
+    const text = { type: 'text', text: 'Use the attached syllabus' };
+    const fileBlock = (fileId: string) => ({ type: 'file', fileId });
+
+    function addFile(id: string, projectId = 'project-1'): void {
+      createFilesRepo(db).create({ id, projectId, name: `${id}.pdf`, mime: 'application/pdf', size: 10 });
+    }
+
+    beforeEach(() => {
+      db.insert(usersTable).values({ id: 'someone-else', displayName: 'Someone Else', email: null, role: 'instructor' }).run();
+      projectsRepo.create({ id: 'project-2', ownerId: createUsersRepo(db).ensureLocalUser().id, title: 'Another project' });
+      projectsRepo.create({ id: 'not-yours', ownerId: 'someone-else', title: 'Not yours' });
+      for (let i = 1; i <= 11; i++) addFile(`file-${i}`);
+      addFile('file-of-project-2', 'project-2');
+      addFile('file-of-someone-else', 'not-yours');
+    });
+
+    it("stores the project's files with the text, in the order sent", async () => {
+      const content = [fileBlock('file-2'), text, fileBlock('file-1')];
+
+      const res = await post('project-1', { content });
+
+      expect(res.status).toBe(202);
+      expect(res.body.message.content).toEqual(content);
+      expect(db.select().from(messagesTable).all()[0]!.content).toEqual(content);
+      expect(executeTurn).toHaveBeenCalledOnce();
+    });
+
+    it('accepts 10 files and refuses 11 with 400 invalid_request', async () => {
+      const ids = Array.from({ length: 11 }, (_, i) => `file-${i + 1}`);
+
+      const eleven = await post('project-1', { content: [text, ...ids.map(fileBlock)] });
+      const ten = await post('project-1', { content: [text, ...ids.slice(0, 10).map(fileBlock)] });
+
+      expect(eleven.status).toBe(400);
+      expect(eleven.body.error.code).toBe('invalid_request');
+      expect(ten.status).toBe(202);
+    });
+
+    it.each([
+      ['no text block', [fileBlock('file-1')]],
+      ['the same file twice', [text, fileBlock('file-1'), fileBlock('file-1')]],
+    ])('refuses %s with 400 invalid_request', async (_case, content) => {
+      const res = await post('project-1', { content });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('invalid_request');
+    });
+
+    it.each(['file-of-project-2', 'file-of-someone-else', 'no-such-file'])(
+      'refuses %s with 400 invalid_request naming it, and stores nothing',
+      async (fileId) => {
+        const res = await post('project-1', { content: [text, fileBlock('file-1'), fileBlock(fileId)] });
+
+        expect(res.status).toBe(400);
+        expect(res.body.error).toMatchObject({ code: 'invalid_request', details: { fileIds: [fileId] } });
+        expect(db.select().from(messagesTable).all()).toEqual([]);
+        expect(executeTurn).not.toHaveBeenCalled();
+      },
+    );
+
+    it("answers a file block in another owner's project with 404", async () => {
+      const res = await post('not-yours', { content: [text, fileBlock('file-of-someone-else')] });
+
+      expect(res.status).toBe(404);
+    });
   });
 
   it("returns 404 for another owner's project and for an unknown id", async () => {
@@ -205,6 +283,14 @@ describe('GET /api/projects/:projectId/messages', () => {
       messages: createMessageService({ projects: projectsRepo, messages: messagesRepo }),
       builds: { get: unused, download: unused, previewFile: unused },
       events: createEventService(createEventsRepo(db)),
+      files: {
+        upload: () => {
+          throw new Error('not used by these tests');
+        },
+        list: () => {
+          throw new Error('not used by these tests');
+        },
+      },
       driver: { name: 'claude', probe: async () => ({ ok: true }) },
       preview: { origin: 'http://preview.localhost:3000', appOrigin: 'http://127.0.0.1:5173' },
     };
@@ -263,6 +349,18 @@ describe('GET /api/projects/:projectId/messages', () => {
     expect(res.body).toEqual({
       items: [{ ...message, turn: { id: turn.id, status: 'completed', error: null } }, agentReply],
     });
+  });
+
+  it("returns an instructor message's file blocks as they were sent", async () => {
+    const content = [
+      { type: 'text' as const, text: 'Use the attached syllabus' },
+      { type: 'file' as const, fileId: 'file-1' },
+    ];
+    turnsRepo.queue({ turnId: 'turn-1', messageId: 'message-1', projectId: 'project-1', content });
+
+    const res = await list();
+
+    expect(res.body.items[0].content).toEqual(content);
   });
 
   it("carries a failed turn's error on the instructor's message, with no reply", async () => {

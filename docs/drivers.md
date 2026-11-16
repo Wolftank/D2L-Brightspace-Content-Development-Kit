@@ -76,6 +76,15 @@ No driver yet. The equivalents to use: `availableTools` for the tool list, `skil
 
 **Instructions and skills.** Claude reads `CLAUDE.md`, `.claude/skills/`, and `.claude/settings.json` from the workspace when `settingSources: ['project']` is set, so the driver writes the instructions, a copy of the kit's skills for the project's output format, and the permission rules there at every `open`.
 
+**Reading attachments, read from the CLI bundled with SDK 0.3.274 and its `sdk-tools.d.ts`, 2026-11-15.** The driver lists a turn's attachments by path in the prompt, and the agent opens each with `Read`. `Read` returns PNG and JPG files as images, text as text, and a PDF whole, as a document the model reads page by page, figures included. A Word file is not readable this way, which is why the back end gives the agent its text instead. A PDF has two limits:
+
+- `Read` asks poppler's `pdfinfo` for the page count, and refuses a PDF of more than 10 pages unless the call names `pages`. Reading by `pages` renders the pages with poppler's `pdftoppm`.
+- When `pdfinfo` is not installed, as on most Windows computers, the page count is unknown and `Read` sends the whole PDF, whatever its length. The request then stands or falls on the model API's own limits for a PDF, about 100 pages and 32 MB per request, after base64 has grown the file by a third. Those are the API's documented limits and were not measured here.
+
+So on a computer without poppler a PDF up to about 100 pages is read whole, and one longer than that fails to load; with poppler, the agent reads a long PDF 20 pages at a time.
+
+Confirmed 2026-11-15 on Windows without poppler, with the account's default model (`claude-sonnet-5`), by the live test of attachments. Given a one-page PDF and a Word file's text as attachments, the agent called `Read` once on each path, the PDF coming back as "PDF file read", and answered from both. A follow-up in a session reopened by its id, with no attachments, answered from the PDF without reading it again. `files/` was unchanged byte for byte.
+
 **Hooks.** `options.hooks.PreToolUse` and `PostToolUse` are in-process callbacks. A pre-tool hook denies a call by returning `hookSpecificOutput.permissionDecision: 'deny'` with a `permissionDecisionReason`. This is layer 3 of the confinement.
 
 **Sandbox.** `sandbox.enabled` in settings confines shell writes to the workspace and blocks network access except `sandbox.network.allowedDomains`; `sandbox.failIfUnavailable` makes an unsupported host refuse to run. Supported on macOS, Linux, and WSL2, not on native Windows.

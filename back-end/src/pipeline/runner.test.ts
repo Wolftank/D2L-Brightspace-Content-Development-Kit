@@ -1,7 +1,8 @@
+import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AgentEvent, AgentSession, TurnResult } from '../agent/AgentDriver.js';
 import type { CreateMessageInput } from '../db/messages.js';
-import type { Event, Message, Turn } from '../db/schema.js';
+import type { Event, File, Message, Turn } from '../db/schema.js';
 import type { FinishTurnInput } from '../db/turns.js';
 import { WorkspaceMissing } from '../errors.js';
 import type { Build as ApiBuild } from '@cdk/contract';
@@ -108,8 +109,12 @@ function setup(options: { session?: AgentSession; hashes?: string[] } = {}) {
       release: vi.fn(),
       close: vi.fn(async () => {}),
     },
+    files: {
+      findInProject: vi.fn((_projectId: string, _ids: string[]): File[] => []),
+    },
     workspaces: {
       hashOutput: vi.fn(async () => hashes.shift() ?? 'after'),
+      pathFor: vi.fn((projectId: string) => `/data/projects/${projectId}/workspace`),
     },
     builds: {
       latest: vi.fn((): ApiBuild | undefined => undefined),
@@ -522,5 +527,46 @@ describe('runner', () => {
       { projectId: 'project-1', turnId: 'turn-1', kind: 'turn.failed', payload: { turnId: 'turn-1', error } },
       { projectId: 'project-1', turnId: 'turn-2', kind: 'turn.failed', payload: { turnId: 'turn-2', error } },
     ]);
+  });
+});
+
+describe('attachments', () => {
+  const file = (id: string, name: string, mime: File['mime']): File => ({ id, projectId: 'project-1', name, mime, size: 100, createdAt: 1 });
+
+  it("gives the agent the message's files in the order sent, a Word file as its text", async () => {
+    const { deps, runner } = setup();
+    deps.messages.get.mockReturnValue({
+      ...INSTRUCTOR_MESSAGE,
+      content: [
+        { type: 'text', text: 'Use these' },
+        { type: 'file', fileId: 'file-word' },
+        { type: 'text', text: 'please' },
+        { type: 'file', fileId: 'file-pdf' },
+        { type: 'file', fileId: 'file-image' },
+      ],
+    });
+    deps.files.findInProject.mockReturnValue([
+      file('file-pdf', 'field trip.pdf', 'application/pdf'),
+      file('file-image', 'diagram.png', 'image/png'),
+      file('file-word', 'lab rules.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
+    ]);
+
+    await runner.executeTurn('turn-1');
+
+    const filesDir = join('/data/projects/project-1/workspace', 'files');
+    expect(deps.files.findInProject).toHaveBeenCalledWith('project-1', ['file-word', 'file-pdf', 'file-image']);
+    const session = await deps.sessions.acquire.mock.results[0]!.value;
+    expect(session.send).toHaveBeenCalledWith(
+      {
+        text: 'Use these\nplease',
+        attachments: [
+          { path: join(filesDir, 'file-word.txt'), name: 'lab rules.docx', mime: 'text/plain' },
+          { path: join(filesDir, 'file-pdf.pdf'), name: 'field trip.pdf', mime: 'application/pdf' },
+          { path: join(filesDir, 'file-image.png'), name: 'diagram.png', mime: 'image/png' },
+        ],
+      },
+      TURN_LIMITS,
+      expect.any(AbortSignal),
+    );
   });
 });

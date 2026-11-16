@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app.js';
 import { createBuildsRepo } from '../db/builds.js';
 import { createEventsRepo } from '../db/events.js';
+import { createFilesRepo } from '../db/files.js';
 import { createMessagesRepo } from '../db/messages.js';
 import { createProjectsRepo } from '../db/projects.js';
 import { users as usersTable, type Event } from '../db/schema.js';
@@ -78,10 +79,18 @@ describe('R7 regression: event stream and reconnect', () => {
     deps = {
       users: createUsersRepo(db),
       projects: createProjectService({ projects: projectsRepo, workspaces, builds: buildsRepo, turns: turnsRepo }),
-      turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, runner: { executeTurn: async () => {}, cancel: () => {} } }),
+      turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, files: createFilesRepo(db), runner: { executeTurn: async () => {}, cancel: () => {} } }),
       builds: createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces, events }),
       events,
       messages: createMessageService({ projects: projectsRepo, messages: createMessagesRepo(db) }),
+      files: {
+        upload: () => {
+          throw new Error('not used by these tests');
+        },
+        list: () => {
+          throw new Error('not used by these tests');
+        },
+      },
       driver: { name: 'claude', probe: async () => ({ ok: true, version: '0.0.0' }) },
       preview: { origin: 'http://preview.localhost:3000', appOrigin: 'http://127.0.0.1:5173' },
     };

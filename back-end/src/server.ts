@@ -7,6 +7,7 @@ import type { Deps } from './deps.js';
 import { createBuildsRepo } from './db/builds.js';
 import { openDb } from './db/index.js';
 import { createEventsRepo } from './db/events.js';
+import { createFilesRepo } from './db/files.js';
 import { createMessagesRepo } from './db/messages.js';
 import { createProjectsRepo } from './db/projects.js';
 import { createTurnsRepo } from './db/turns.js';
@@ -17,6 +18,7 @@ import { createEventService } from './pipeline/events.js';
 import { createRunner, type Runner } from './pipeline/runner.js';
 import { createSessionService, type SessionService } from './pipeline/sessions.js';
 import { createBuildService, type BuildService } from './services/builds.js';
+import { createFileService } from './services/files.js';
 import { createMessageService } from './services/messages.js';
 import { createProjectService } from './services/projects.js';
 import { createTurnService } from './services/turns.js';
@@ -37,6 +39,7 @@ function buildBackEnd(cfg: Config): BackEnd {
   const buildsRepo = createBuildsRepo(db);
   const turnsRepo = createTurnsRepo(db);
   const messagesRepo = createMessagesRepo(db);
+  const filesRepo = createFilesRepo(db);
   const events = createEventService(createEventsRepo(db));
   const workspaces = createWorkspaceService({ dataDir: cfg.dataDir });
   const builds = createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces, events });
@@ -51,6 +54,7 @@ function buildBackEnd(cfg: Config): BackEnd {
   const runner = createRunner({
     turns: turnsRepo,
     messages: messagesRepo,
+    files: filesRepo,
     events,
     sessions,
     workspaces,
@@ -61,8 +65,9 @@ function buildBackEnd(cfg: Config): BackEnd {
   const deps: Deps = {
     users: createUsersRepo(db),
     projects: createProjectService({ projects: projectsRepo, workspaces, builds: buildsRepo, turns: turnsRepo }),
-    turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, runner }),
+    turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, files: filesRepo, runner }),
     messages: createMessageService({ projects: projectsRepo, messages: messagesRepo }),
+    files: createFileService({ projects: projectsRepo, files: filesRepo, workspaces }),
     builds,
     events,
     driver,

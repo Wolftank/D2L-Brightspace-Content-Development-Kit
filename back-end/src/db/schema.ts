@@ -1,5 +1,5 @@
 import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
-import type { BuildError, ContentBlock, QaReport, TurnError, TurnUsage } from '@cdk/contract';
+import type { BuildError, ContentBlock, FileMime, QaReport, TurnError, TurnUsage } from '@cdk/contract';
 
 export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
@@ -96,3 +96,18 @@ export const events = sqliteTable('events', {
 
 export type Event = typeof events.$inferSelect;
 export type NewEvent = typeof events.$inferInsert;
+
+export const files = sqliteTable('files', {
+  id: text('id').primaryKey(),
+  projectId: text('project_id')
+    .notNull()
+    .references(() => projects.id),
+  /** The instructor's name for the file, cleaned for display; never a path on disk. */
+  name: text('name').notNull(),
+  mime: text('mime').notNull().$type<FileMime>(),
+  size: integer('size').notNull(),
+  createdAt: integer('created_at').notNull(),
+});
+
+export type File = typeof files.$inferSelect;
+export type NewFile = typeof files.$inferInsert;
