@@ -46,8 +46,8 @@ describe('F10 conversation', () => {
     it('defaults new projects to SCORM', () => {
     render(<ProjectWorkspace />);
 
-    expect(screen.getByRole('radio', { name: 'SCORM package' })).toBeChecked();
-    expect(screen.getByRole('radio', { name: 'Content topic' })).not.toBeChecked();
+    expect(screen.getByRole('combobox', { name: 'Format' })).toHaveValue('scorm');
+expect(screen.getByText('Can record a grade in D2L.')).toBeInTheDocument();
   });
 
   it('creates a content topic project when selected', async () => {
@@ -57,7 +57,13 @@ describe('F10 conversation', () => {
       target: { value: 'Cell division' },
     });
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Content topic' }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Format' }), {
+  target: { value: 'topic' },
+});
+
+expect(
+  screen.getByText('Can show students and instructors different views.')
+).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('What should students learn or do?'), {
       target: { value: 'Create a lesson.' },

@@ -126,20 +126,12 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
   return <main className="app-shell">
     <AppHeader />
     <section className="intro" aria-labelledby="page-title">
-      <p className="workspace-eyebrow">{project ? 'Project:' : 'Course material workspace'}</p>
-      <h1 id="page-title">{project?.title ?? 'Create an activity'}</h1>
-      {project?.avenue && (
-  <p className="project-format">
-    Output format:{' '}
-    <strong>
-      {project.avenue === 'topic'
-        ? 'Content topic'
-        : project.avenue === 'scorm'
-          ? 'SCORM package'
-          : project.avenue}
-    </strong>
-  </p>
-)}
+      <p className="workspace-eyebrow">
+  {project
+    ? `Project · ${project.avenue === 'topic' ? 'Content topic' : 'SCORM package'}`
+    : 'Course material workspace'}
+</p>
+<h1 id="page-title">{project?.title ?? 'Create an activity'}</h1>
     </section>
     <div className="workspace">
       <section className="card chat-panel" aria-labelledby="chat-title" tabIndex={0}>
@@ -162,43 +154,39 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
         {project && connection !== 'connected' && <div className="connection-notice"><p role="status">{connection === 'reconnecting' ? 'Reconnecting to your request…' : 'Connection lost. Try connecting again.'}</p>{connection === 'lost' && <button type="button" onClick={reconnect}>Try again</button>}</div>}
         {historyError && <div><p className="error" role="alert">Unable to load the conversation.</p><button type="button" onClick={reconnect}>Try loading the conversation again</button></div>}
         <form onSubmit={handleSend} className={hasMessages ? 'composer' : 'composer composer-empty'}>
-          {!project && <>
-  <label htmlFor="project-title">Project title</label>
-  <input
-    id="project-title"
-    value={title}
-    onChange={event => setTitle(event.target.value)}
-    placeholder="e.g., Cell division practice"
-    maxLength={160}
-    disabled={sending}
-  />
+          {!project && <div className="project-setup">
+  <div className="project-title-field">
+    <label htmlFor="project-title">Project title</label>
+    <input
+      id="project-title"
+      value={title}
+      onChange={event => setTitle(event.target.value)}
+      placeholder="e.g., Cell division practice"
+      maxLength={160}
+      disabled={sending}
+    />
+  </div>
 
-  <fieldset disabled={sending}>
-    <legend>Output format</legend>
+  <div className="project-format-field">
+    <label htmlFor="project-format">Format</label>
+    <select
+      id="project-format"
+      value={avenue}
+      onChange={event => setAvenue(event.target.value as BuildableAvenue)}
+      aria-describedby="project-format-description"
+      disabled={sending}
+    >
+      <option value="scorm">SCORM package</option>
+      <option value="topic">Content topic</option>
+    </select>
 
-    <label>
-      <input
-        type="radio"
-        name="avenue"
-        value="scorm"
-        checked={avenue === 'scorm'}
-        onChange={() => setAvenue('scorm')}
-      />
-      SCORM package
-    </label>
-
-    <label>
-      <input
-        type="radio"
-        name="avenue"
-        value="topic"
-        checked={avenue === 'topic'}
-        onChange={() => setAvenue('topic')}
-      />
-      Content topic
-    </label>
-  </fieldset>
-</>}
+    <p id="project-format-description" className="format-description">
+  {avenue === 'scorm'
+    ? 'Can record a grade in D2L.'
+    : 'Can show students and instructors different views.'}
+</p>
+  </div>
+</div>}
           <label htmlFor="request-text" className={project ? 'sr-only' : undefined}>{project ? 'Describe a change' : 'What should students learn or do?'}</label>
           <textarea ref={messageBox} id="request-text" value={requestText} onChange={event => setRequestText(event.target.value)} placeholder={project ? 'Describe a change or ask a question…' : 'Create a ten-question practice quiz on cell division…'} rows={3} maxLength={20000} />
           <div className="composer-footer">
