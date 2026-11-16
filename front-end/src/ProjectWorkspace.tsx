@@ -1,17 +1,27 @@
-import { useEffect, useRef, useState } from 'react';
-import { ApiError, cancelTurn, createProject, sendMessage } from './api/client';
-import type { Build, Project } from '@cdk/contract';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ApiError, cancelTurn, createProject, listProjectFiles, sendMessage, uploadProjectFile } from './api/client';
+import type { Build, ContentBlock, Message, Project, ProjectFile } from '@cdk/contract';
 import { useProjectEvents } from './hooks/useProjectEvents';
 import type { ConnectionStatus } from './WorkingIndicator';
 import type { ProjectEventState } from './hooks/useProjectEvents';
 import { WorkingIndicator } from './WorkingIndicator';
 import { StatusFeed } from './StatusFeed';
 import './App.css';
+import { AttachmentLabels, AttachmentPicker } from './attachments/Attachments';
+import { attachmentProblem, MAX_ATTACHMENTS, type Attachment } from './attachments/validation';
 import { AppHeader } from './projects/AppHeader';
 import { readFailure } from './api/failure';
 import { BuildDownload } from './d2l/BuildDownload';
 import { ErrorNotice } from './ErrorNotice';
 import { PreviewPanel } from './preview/PreviewPanel';
+
+function messageText(message: Message) {
+  return message.content.filter(block => block.type === 'text').map(block => block.text).join('\n');
+}
+
+function messageFiles(message: Message) {
+  return message.content.filter(block => block.type === 'file');
+}
 
 function BuildPanel({ build, turn, statusLines, connection, outcome, disabled, onAskForFix, onSendAgain, onEdit, onNewProject }: {
   build: Build | null;
@@ -49,6 +59,15 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
   const [requestText, setRequestText] = useState(() => sessionStorage.getItem(draftKey) ?? '');
   const [error, setError] = useState<ApiError | null>(null);
   const [sending, setSending] = useState(false);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [attachmentNotice, setAttachmentNotice] = useState('');
+  const [uploadError, setUploadError] = useState('');
+  const [fileNames, setFileNames] = useState<Record<string, string>>({});
+  const [fileListError, setFileListError] = useState(false);
+  const [fileListAttempt, setFileListAttempt] = useState(0);
+  const nextAttachment = useRef(0);
+  const uploaded = useRef(new Map<number, ProjectFile>());
+  const submitLock = useRef(false);
   const [pendingTurn, setPendingTurn] = useState<string | null>(initialTurnId ?? null);
   const [stopAttempt, setStopAttempt] = useState<{ turnId: string; error?: string } | null>(null);
   const messageBox = useRef<HTMLTextAreaElement>(null);
@@ -69,7 +88,44 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
   useEffect(() => { sessionStorage.setItem(draftKey, requestText); }, [draftKey, requestText]);
   useEffect(() => { const element = chatHistory.current; if (element) element.scrollTop = element.scrollHeight; }, [messages, streamingMessages]);
 
+  const projectId = project?.id;
+  const needsFileNames = messages.some(message => messageFiles(message).some(block => !Object.hasOwn(fileNames, block.fileId)));
+  useEffect(() => {
+    if (!projectId || !needsFileNames) return;
+    let current = true;
+    listProjectFiles(projectId).then(({ items }) => {
+      if (!current) return;
+      setFileNames(names => ({ ...names, ...Object.fromEntries(items.map(file => [file.id, file.name])) }));
+      setFileListError(false);
+    }).catch(() => { if (current) setFileListError(true); });
+    return () => { current = false; };
+  }, [projectId, needsFileNames, fileListAttempt]);
+
+  const addAttachments = useCallback((files: File[]) => {
+    if (submitLock.current || !files.length) return;
+    const next = [...attachments];
+    const refused: string[] = [];
+    for (const file of files) {
+      const problem = attachmentProblem(file) ?? (next.length >= MAX_ATTACHMENTS ? 'you can attach up to 10 files.' : undefined);
+      if (problem) refused.push(file.name + ': ' + problem);
+      else next.push({ id: ++nextAttachment.current, file });
+    }
+    setAttachments(next);
+    setAttachmentNotice(refused.length ? 'Could not attach ' + refused.join(' ') : '');
+  }, [attachments]);
+
+  function removeAttachment(id: number) {
+    if (submitLock.current) return;
+    setAttachments(items => items.filter(item => item.id !== id));
+    uploaded.current.delete(id);
+    setAttachmentNotice('');
+    setUploadError('');
+    messageBox.current?.focus();
+  }
+
   function startNewProject() {
+    setAttachments([]); uploaded.current.clear(); setAttachmentNotice(''); setUploadError('');
+    setFileNames({}); setFileListError(false);
     setProject(null); setTitle(''); setPendingTurn(null); setError(null);
     window.history.replaceState(null, '', '/?new=1');
     messageBox.current?.focus();
@@ -95,28 +151,51 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
 
   async function handleSend(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    await submitRequest(requestText);
+    await submitRequest(requestText, attachments);
   }
 
-  async function submitRequest(request: string) {
-    if (isBuilding) return;
+  async function submitRequest(request: string, draftFiles: Attachment[] = [], existingFiles: Extract<ContentBlock, { type: 'file' }>[] = []) {
+    if (isBuilding || submitLock.current) return;
     const text = request.trim();
     if (!text || (!project && !title.trim())) {
       setError(new ApiError('invalid_request', 'Enter a project title and a request before building.')); return;
     }
-    setError(null); setSending(true);
+    submitLock.current = true;
+    setError(null); setUploadError(''); setSending(true);
     try {
       const currentProject = project ?? (await createProject({ title: title.trim(), avenue: 'scorm' })).project;
       if (!project) sessionStorage.removeItem('request-draft-new');
       setProject(currentProject);
       window.history.replaceState(null, '', '/?project=' + encodeURIComponent(currentProject.id));
-      const result = await sendMessage(currentProject.id, { content: [{ type: 'text', text }] });
+      const fileBlocks = [...existingFiles];
+      for (const item of draftFiles) {
+        let file = uploaded.current.get(item.id);
+        if (file?.projectId !== currentProject.id) {
+          try {
+            file = (await uploadProjectFile(currentProject.id, item.file)).file;
+            uploaded.current.set(item.id, file);
+          } catch (caught) {
+            const reason = caught instanceof ApiError ? caught.message : 'Try again.';
+            setUploadError('Could not upload ' + item.file.name + '. ' + reason + ' Your message was not sent.');
+            return;
+          }
+        }
+        setFileNames(names => ({ ...names, [file.id]: file.name }));
+        fileBlocks.push({ type: 'file', fileId: file.id });
+      }
+      const result = await sendMessage(currentProject.id, { content: [{ type: 'text', text }, ...fileBlocks] });
+      if (draftFiles.length) {
+        setAttachments([]);
+        uploaded.current.clear();
+        setAttachmentNotice('');
+      }
       addMessage(result.message);
       setPendingTurn(result.turn.id);
       setRequestText(current => current.trim() === text ? '' : current);
     } catch (caught) {
       setError(caught instanceof ApiError ? caught : new ApiError('request_failed', 'Unable to send your request.'));
     } finally {
+      submitLock.current = false;
       setSending(false);
       messageBox.current?.focus();
     }
@@ -134,12 +213,13 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
         <div ref={chatHistory} className="chat-history" hidden={!hasMessages} role="group" tabIndex={0} aria-label="Conversation history">
           {messages.map(message => <article className={`chat-message message-${message.role}`} key={message.id}>
             <p className="speaker">{message.role === 'instructor' ? 'You' : 'CDK'}</p>
-            <p>{message.content.filter(block => block.type === 'text').map(block => block.text).join('\n')}</p>
+            <p>{messageText(message)}</p>
+            <AttachmentLabels items={Array.from(new Set(messageFiles(message).map(block => block.fileId)), id => ({ id, name: fileNames[id] ?? 'Attachment' }))} />
             {message.role === 'instructor' && message.turnId && outcomes[message.turnId]?.status === 'cancelled' &&
               <p className="stopped-request">Request stopped.</p>}
             {message.role === 'instructor' && message.turnId && outcomes[message.turnId]?.status === 'failed' &&
               <ErrorNotice failure={outcomes[message.turnId]?.failure ?? { message: 'This request could not be completed.', nextStep: 'try_later' }} disabled={isBuilding}
-                onSendAgain={() => void submitRequest(message.content.filter(block => block.type === 'text').map(block => block.text).join('\n'))}
+                onSendAgain={() => void submitRequest(messageText(message), [], messageFiles(message))}
                 onEdit={() => { setRequestText(message.content.filter(block => block.type === 'text').map(block => block.text).join('\n')); messageBox.current?.focus(); }}
                 onNewProject={startNewProject} onAskForFix={askForFix} />}
           </article>)}
@@ -148,21 +228,26 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
         <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{latestAgent ? `CDK: ${latestAgent.content.filter(block => block.type === 'text').map(block => block.text).join('')}` : ''}</div>
         {project && connection !== 'connected' && <div className="connection-notice"><p role="status">{connection === 'reconnecting' ? 'Reconnecting to your request…' : 'Connection lost. Try connecting again.'}</p>{connection === 'lost' && <button type="button" onClick={reconnect}>Try again</button>}</div>}
         {historyError && <div><p className="error" role="alert">Unable to load the conversation.</p><button type="button" onClick={reconnect}>Try loading the conversation again</button></div>}
+        {fileListError && needsFileNames && <div><p className="error" role="alert">Unable to load attachment names.</p><button type="button" onClick={() => setFileListAttempt(attempt => attempt + 1)}>Try loading attachment names again</button></div>}
         <form onSubmit={handleSend} className={hasMessages ? 'composer' : 'composer composer-empty'}>
           {!project && <><label htmlFor="project-title">Project title</label><input id="project-title" value={title} onChange={event => setTitle(event.target.value)} placeholder="e.g., Cell division practice" maxLength={160} disabled={sending} /></>}
           <label htmlFor="request-text" className={project ? 'sr-only' : undefined}>{project ? 'Describe a change' : 'What should students learn or do?'}</label>
+          <AttachmentLabels items={attachments.map(({ id, file }) => ({ id, name: file.name }))} onRemove={removeAttachment} disabled={sending} />
           <textarea ref={messageBox} id="request-text" value={requestText} onChange={event => setRequestText(event.target.value)} placeholder={project ? 'Describe a change or ask a question…' : 'Create a ten-question practice quiz on cell division…'} rows={3} maxLength={20000} />
           <div className="composer-footer">
+            <AttachmentPicker disabled={sending} onAdd={addAttachments} />
             {activeTurnId && <button className="stop-request" type="button" disabled={stopping} onClick={() => void stopRequest()}>{stopping ? 'Stopping…' : 'Stop request'}</button>}
             <button disabled={isBuilding} type="submit">{sending ? 'Sending…' : isBuilding ? 'Working…' : 'Send'}</button>
           </div>
           <div className="sr-only" role="status">{stopping ? 'Stopping request.' : turn.status === 'cancelled' && !activeTurnId ? 'Request stopped. You can send a follow-up.' : ''}</div>
+          {attachmentNotice && <p role="alert" className="error">{attachmentNotice}</p>}
+          {uploadError && <p className="error" role="alert">{uploadError}</p>}
           {activeStop?.error && <p className="error" role="alert">Unable to stop the request. {activeStop.error}</p>}
-          {error && <ErrorNotice failure={error} disabled={isBuilding} onSendAgain={() => void submitRequest(requestText)} onEdit={() => messageBox.current?.focus()} onNewProject={startNewProject} onAskForFix={askForFix} />}
+          {error && <ErrorNotice failure={error} disabled={isBuilding} onSendAgain={() => void submitRequest(requestText, attachments)} onEdit={() => messageBox.current?.focus()} onNewProject={startNewProject} onAskForFix={askForFix} />}
         </form>
       </section>
       <BuildPanel build={latestBuild} turn={turn} statusLines={statusLines} connection={connection} outcome={outcomes[turn.id ?? '']?.message} disabled={isBuilding} onAskForFix={askForFix}
-        onSendAgain={() => { const original = messages.find(message => message.role === 'instructor' && message.turnId === latestBuild?.turnId); if (original) void submitRequest(original.content.filter(block => block.type === 'text').map(block => block.text).join('\n')); }}
+        onSendAgain={() => { const original = messages.find(message => message.role === 'instructor' && message.turnId === latestBuild?.turnId); if (original) void submitRequest(messageText(original), [], messageFiles(original)); }}
         onEdit={() => messageBox.current?.focus()} onNewProject={startNewProject} />
       <PreviewPanel build={readyBuild} />
     </div>
