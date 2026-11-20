@@ -18,6 +18,8 @@ export interface ProjectsRepo {
   /** `ownerId`'s projects, most recently used first. */
   listByOwner(ownerId: string): Project[];
   setSessionId(id: string, sessionId: string): void;
+  /** Stores the project's avenue and returns the updated project, if it exists. */
+  setAvenue(id: string, avenue: NonNullable<Project['avenue']>): Project | undefined;
   /** Records that the project was used now, by setting its `updatedAt`, which orders the project list. */
   recordActivity(id: string): void;
 }
@@ -61,6 +63,9 @@ export function createProjectsRepo(db: Db): ProjectsRepo {
         .set({ sessionId, updatedAt: Date.now() })
         .where(eq(projects.id, id))
         .run();
+    },
+    setAvenue(id, avenue) {
+      return db.update(projects).set({ avenue, updatedAt: Date.now() }).where(eq(projects.id, id)).returning().get();
     },
     recordActivity(id) {
       db.update(projects).set({ updatedAt: Date.now() }).where(eq(projects.id, id)).run();

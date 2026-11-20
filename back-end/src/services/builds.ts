@@ -11,7 +11,7 @@ import type { BuildsRepo, FinishBuildInput } from '../db/builds.js';
 import type { ProjectsRepo } from '../db/projects.js';
 import type { Build, Project } from '../db/schema.js';
 import { BuildFailed, BuildIncomplete, BuildNotFound, BuildNotReady, NotFound } from '../errors.js';
-import { buildableAvenue, KIT_DIR } from '../kit.js';
+import { buildableAvenue, KIT_DIR, pickedAvenue } from '../kit.js';
 import { log } from '../log.js';
 import type { EventService } from '../pipeline/events.js';
 import type { WorkspaceService } from './workspaces.js';
@@ -97,6 +97,9 @@ export interface BuildService {
 
   /** Unscoped lookup of the project's highest build version, for pipeline code acting on a project a route has already authorized. */
   latest(projectId: string): Build | undefined;
+
+  /** Whether the project's output can be built: the project has an avenue, and `out/` holds more than that avenue's untouched starter. */
+  canBuild(projectId: string): Promise<boolean>;
 
   /**
    * A zip of a `ready` build's files, with a SCORM build's `imsmanifest.xml`
@@ -219,6 +222,11 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
     } catch (err) {
       return { error: loggedError(log.child({ projectId }), 'gate_crashed', `The QA gate could not run: ${(err as Error).message}`) };
     }
+  }
+
+  async function canBuild(projectId: string): Promise<boolean> {
+    const avenue = pickedAvenue(projectById(projectId));
+    return avenue !== null && (await deps.workspaces.hashOutput(projectId)) !== (await deps.workspaces.starterHash(avenue));
   }
 
   /** Unscoped lookup for pipeline code; throws `NotFound` when the project doesn't exist. */
@@ -347,6 +355,7 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
     create,
     get: (ownerId, buildId) => toApi(owned(ownerId, buildId).build),
     latest: (projectId) => deps.builds.latest(projectId),
+    canBuild,
     download,
     previewFile,
     failInterrupted,

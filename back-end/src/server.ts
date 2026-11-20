@@ -18,6 +18,7 @@ import { startLogging } from './log-file.js';
 import { createEventService } from './pipeline/events.js';
 import { createRunner, type Runner } from './pipeline/runner.js';
 import { createSessionService, type SessionService } from './pipeline/sessions.js';
+import { createAvenueService } from './services/avenues.js';
 import { createBuildService, type BuildService } from './services/builds.js';
 import { createFileService } from './services/files.js';
 import { createMessageService } from './services/messages.js';
@@ -46,12 +47,13 @@ function buildBackEnd(cfg: Config): BackEnd {
   const workspaces = createWorkspaceService({ dataDir: cfg.dataDir });
   const builds = createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces, events });
   const driver = createAgentDriver(cfg.agent);
+  const avenues = createAvenueService({ projects: projectsRepo, workspaces, turns: turnsRepo, events });
 
   const sessions = createSessionService({
     projects: projectsRepo,
     workspaces,
     driver,
-    tools: (projectId) => createCdkTools({ projects: projectsRepo, workspaces, builds }, projectId),
+    tools: (projectId) => createCdkTools({ projects: projectsRepo, avenues, workspaces, builds }, projectId),
   });
   const runner = createRunner({
     turns: turnsRepo,
@@ -67,6 +69,7 @@ function buildBackEnd(cfg: Config): BackEnd {
   const deps: Deps = {
     users: createUsersRepo(db),
     projects: createProjectService({ projects: projectsRepo, workspaces, builds: buildsRepo, turns: turnsRepo }),
+    avenues,
     turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, files: filesRepo, runner }),
     messages: createMessageService({ projects: projectsRepo, messages: messagesRepo }),
     files: createFileService({ projects: projectsRepo, files: filesRepo, workspaces }),

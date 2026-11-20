@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiError, cancelTurn, createProject, listProjectFiles, sendMessage, uploadProjectFile } from './api/client';
+import { ApiError, cancelTurn, createProject, listProjectFiles, sendMessage, updateProject, uploadProjectFile } from './api/client';
 import type { Build, BuildableAvenue, ContentBlock, Message, Project, ProjectFile } from '@cdk/contract';
 import { useAgentSignIn } from './hooks/useAgentSignIn';
 import { useProjectEvents } from './hooks/useProjectEvents';
@@ -62,6 +62,56 @@ const FORMATS: Record<FormatChoice, { name: string; description: string }> = {
   topic: { name: 'Content topic', description: 'Can show students and instructors different views.' },
 };
 
+const BUILDABLE_AVENUES: BuildableAvenue[] = ['scorm', 'topic'];
+
+/** How a request to rebuild in each format names it. */
+const REBUILD_AS: Record<BuildableAvenue, string> = { scorm: 'a SCORM package', topic: 'a content topic' };
+
+/** The open project's format, as a menu that changes it. With `confirms`, a change asks first. */
+function FormatSetting({ avenue, disabled, confirms, onChange }: {
+  avenue: BuildableAvenue | null;
+  disabled: boolean;
+  confirms: boolean;
+  onChange: (avenue: BuildableAvenue) => Promise<void>;
+}) {
+  const [asking, setAsking] = useState<BuildableAvenue | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const menu = useRef<HTMLSelectElement>(null);
+
+  async function change(next: BuildableAvenue) {
+    setAsking(null); setError(''); setSaving(true);
+    try {
+      await onChange(next);
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : 'Try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function choose(next: string) {
+    if (next !== 'scorm' && next !== 'topic') return;
+    if (next === avenue) setAsking(null);
+    else if (confirms) setAsking(next);
+    else void change(next);
+  }
+
+  return <div className="format-setting">
+    <label htmlFor="project-format">Format</label>
+    <select ref={menu} id="project-format" value={asking ?? avenue ?? 'auto'} disabled={disabled || saving} onChange={event => choose(event.target.value)}>
+      {!avenue && <option value="auto">{FORMATS.auto.name}</option>}
+      {BUILDABLE_AVENUES.map(value => <option key={value} value={value}>{FORMATS[value].name}</option>)}
+    </select>
+    {asking && <div className="format-confirm" role="group" aria-label="Change format">
+      <p role="status">Change to {FORMATS[asking].name}? The activity starts over in that format. Your earlier versions stay.</p>
+      <button type="button" disabled={disabled} onClick={() => void change(asking)}>Change format</button>
+      <button type="button" className="format-keep" onClick={() => { setAsking(null); menu.current?.focus(); }}>Cancel</button>
+    </div>}
+    {error && <p className="error" role="alert">Unable to change the format. {error}</p>}
+  </div>;
+}
+
 export function ProjectWorkspace({ initialProject = null, initialTurnId }: { initialProject?: Project | null; initialTurnId?: string }) {
   const [project, setProject] = useState<Project | null>(initialProject);
   const draftKey = 'request-draft-' + (project?.id ?? 'new');
@@ -97,8 +147,9 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
   const latestAgent = messages.filter(message => message.role === 'agent').at(-1);
   const hasMessages = messages.length > 0 || streamingMessages.length > 0;
   const chatHistory = useRef<HTMLDivElement>(null);
-  const projectAvenue = updatedProject && updatedProject.id === project?.id ? updatedProject.avenue : project?.avenue;
-  const format = projectAvenue === 'scorm' || projectAvenue === 'topic' ? FORMATS[projectAvenue].name : null;
+  const latestProject = updatedProject && project && updatedProject.id === project.id && updatedProject.updatedAt >= project.updatedAt ? updatedProject : project;
+  const projectAvenue = latestProject?.avenue === 'scorm' || latestProject?.avenue === 'topic' ? latestProject.avenue : null;
+  const format = projectAvenue ? FORMATS[projectAvenue].name : null;
 
   useEffect(() => { sessionStorage.setItem(draftKey, requestText); }, [draftKey, requestText]);
   useEffect(() => { if (agent.confirmed) messageBox.current?.focus(); }, [agent.confirmed]);
@@ -163,6 +214,14 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
     }
   }
 
+  async function changeFormat(next: BuildableAvenue) {
+    if (!project) return;
+    setProject((await updateProject(project.id, { avenue: next })).project);
+    if (!builds.length) return;
+    setRequestText(current => current.trim() ? current : 'Rebuild this activity as ' + REBUILD_AS[next] + '.');
+    messageBox.current?.focus();
+  }
+
   function askForFix() {
     setRequestText(current => current.trim() ? current : 'Please fix the problems reported by the QA check' + (latestBuild ? ' in build ' + latestBuild.version : '') + '.');
     messageBox.current?.focus();
@@ -224,7 +283,10 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
     <AppHeader />
     <section className="intro" aria-labelledby="page-title">
       <p className="workspace-eyebrow">{!project ? 'Course material workspace' : format ? `Project · ${format}` : 'Project'}</p>
-      <h1 id="page-title">{project?.title ?? 'Create an activity'}</h1>
+      <div className="title-row">
+        <h1 id="page-title">{project?.title ?? 'Create an activity'}</h1>
+        {project && <FormatSetting key={project.id} avenue={projectAvenue} disabled={isBuilding} confirms={builds.length > 0} onChange={changeFormat} />}
+      </div>
     </section>
     <div className="workspace">
       <section className="card chat-panel" aria-labelledby="chat-title" tabIndex={0}>

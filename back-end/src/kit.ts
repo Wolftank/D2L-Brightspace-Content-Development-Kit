@@ -15,13 +15,20 @@ export const AVENUE_SKILL: Record<BuildableAvenue, string> = {
   topic: 'd2l-content-topic',
 };
 
-/** The kit's skills an agent uses to build `avenue`: the avenue's skill and the QA skill. */
-export function skillsFor(avenue: BuildableAvenue): string[] {
-  return [AVENUE_SKILL[avenue], 'd2l-tenant-qa'];
+/** The kit skill that picks an avenue from the instructor's request. */
+export const ROUTER_SKILL = 'd2l-experience-router';
+
+/**
+ * The kit's skills an agent uses on a project: every avenue's skill, so it can
+ * rebuild in another avenue within a request, and the QA skill. A project with
+ * no avenue also gets the router skill.
+ */
+export function skillsFor(avenue: BuildableAvenue | null): string[] {
+  return [...(avenue ? [] : [ROUTER_SKILL]), ...BUILDABLE_AVENUES.map((each) => AVENUE_SKILL[each]), 'd2l-tenant-qa'];
 }
 
 /**
- * The project's avenue, which every project created through the API has.
+ * The project's avenue, which a project has once it is created with one or the agent picks one.
  *
  * Raises:
  *   Error: when the stored avenue is null or one CDK cannot build.
@@ -30,4 +37,9 @@ export function buildableAvenue(project: Pick<Project, 'id' | 'avenue'>): Builda
   const { avenue } = project;
   if (avenue === 'scorm' || avenue === 'topic') return avenue;
   throw new Error(`Project ${project.id} has avenue ${String(avenue)}, which CDK cannot build`);
+}
+
+/** The project's avenue, or null before one is picked. Raises as `buildableAvenue` does for a stored avenue CDK cannot build. */
+export function pickedAvenue(project: Pick<Project, 'id' | 'avenue'>): BuildableAvenue | null {
+  return project.avenue === null ? null : buildableAvenue(project);
 }

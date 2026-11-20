@@ -10,6 +10,8 @@ import type {
   ProjectListResponse,
   SendMessageRequest,
   SendMessageResponse,
+  UpdateProjectRequest,
+  UpdateProjectResponse,
 } from '@cdk/contract';
 
 import { readFailure } from './failure';
@@ -61,6 +63,10 @@ export async function cancelTurn(turnId: string): Promise<void> {
 
 export function createProject(input: CreateProjectRequest): Promise<CreateProjectResponse> {
   return json('/api/projects', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
+}
+
+export function updateProject(projectId: string, input: UpdateProjectRequest): Promise<UpdateProjectResponse> {
+  return json('/api/projects/' + encodeURIComponent(projectId), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
 }
 
 export function getProject(projectId: string): Promise<ProjectResponse> {

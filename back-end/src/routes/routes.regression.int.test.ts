@@ -121,7 +121,7 @@ describe('R8 regression: project, message and build routes', () => {
   }
 
   async function createProject(): Promise<string> {
-    const res = await request(app()).post('/api/projects').send({ title: 'Cell division practice' });
+    const res = await request(app()).post('/api/projects').send({ title: 'Cell division practice', avenue: 'scorm' });
     expect(res.status).toBe(201);
     return res.body.project.id;
   }

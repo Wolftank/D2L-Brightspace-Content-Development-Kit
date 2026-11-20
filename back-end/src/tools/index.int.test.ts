@@ -8,9 +8,11 @@ import { createBuildsRepo } from '../db/builds.js';
 import { createEventsRepo } from '../db/events.js';
 import { createProjectsRepo, type ProjectsRepo } from '../db/projects.js';
 import { testDb } from '../db/test-db.js';
+import { createTurnsRepo } from '../db/turns.js';
 import { createUsersRepo } from '../db/users.js';
 import { KIT_DIR } from '../kit.js';
-import { createEventService } from '../pipeline/events.js';
+import { createEventService, type EventService } from '../pipeline/events.js';
+import { createAvenueService, type AvenueService } from '../services/avenues.js';
 import { createBuildService, type BuildService } from '../services/builds.js';
 import { createWorkspaceService, type WorkspaceService } from '../services/workspaces.js';
 import { createCdkTools } from './index.js';
@@ -20,8 +22,10 @@ describe('CDK tools', () => {
   let projects: ProjectsRepo;
   let workspaces: WorkspaceService;
   let builds: BuildService;
+  let events: EventService;
+  let avenues: AvenueService;
 
-  async function addProject(id: string, title: string, avenue: BuildableAvenue = 'scorm'): Promise<string> {
+  async function addProject(id: string, title: string, avenue: BuildableAvenue | null = 'scorm'): Promise<string> {
     const ownerId = createUsersRepo(db).ensureLocalUser().id;
     projects.create({ id, ownerId, title, avenue });
     await workspaces.create(id, avenue);
@@ -41,7 +45,9 @@ describe('CDK tools', () => {
     db = testDb();
     projects = createProjectsRepo(db);
     workspaces = createWorkspaceService({ dataDir });
-    builds = createBuildService({ builds: createBuildsRepo(db), projects, workspaces, events: createEventService(createEventsRepo(db)) });
+    events = createEventService(createEventsRepo(db));
+    builds = createBuildService({ builds: createBuildsRepo(db), projects, workspaces, events });
+    avenues = createAvenueService({ projects, workspaces, turns: createTurnsRepo(db), events });
   });
 
   afterEach(async () => {
@@ -50,16 +56,17 @@ describe('CDK tools', () => {
   });
 
   function toolsFor(projectId: string): ToolServerSpec {
-    return createCdkTools({ projects, workspaces, builds }, projectId);
+    return createCdkTools({ projects, avenues, workspaces, builds }, projectId);
   }
 
-  it('serves get_project, check_output, and delete_files as the cdk server, each with a status line', async () => {
+  it('serves get_project, set_format, check_output, and delete_files as the cdk server, each with a status line', async () => {
     await addProject('p1', 'Cell division practice');
     const tools = toolsFor('p1');
 
     expect(tools.name).toBe('cdk');
     expect(tools.tools.map((tool) => [tool.name, tool.summary])).toEqual([
       ['get_project', 'Reading the project'],
+      ['set_format', 'Setting the format'],
       ['check_output', 'Checking the activity'],
       ['delete_files', 'Deleting files'],
     ]);
@@ -97,6 +104,40 @@ describe('CDK tools', () => {
       expect(Object.keys(project.tenant)).toEqual(['fileLoading', 'storage', 'brightspaceApi', 'rendering']);
       expect(project.tenant.brightspaceApi.roleDetection.value).toContain('myenrollments');
       expect(project.tenant.storage.sharedAcrossEntireLms.note).toContain('HTML topics');
+    });
+  });
+
+  describe('set_format', () => {
+    it("gives a project with no format the picked one, with its starter, skill, and tenant limits", async () => {
+      const outDir = await addProject('p1', 'Campus map', null);
+      const tools = toolsFor('p1');
+      expect(JSON.parse((await call(tools, 'get_project')).content)).toMatchObject({ avenue: null, tenant: null });
+      expect((await call(tools, 'check_output')).isError).toBe(true);
+
+      const result = JSON.parse((await call(tools, 'set_format', { format: 'topic' })).content);
+
+      expect(result).toMatchObject({ format: 'topic', skill: 'd2l-content-topic' });
+      expect(Object.keys(result.tenant)).toContain('brightspaceApi');
+      expect(await fs.readdir(outDir)).toEqual(['data.js', 'index.html']);
+      expect(projects.getById('p1')?.avenue).toBe('topic');
+      expect(events.after('p1', 0).map((event) => [event.kind, event.payload])).toEqual([
+        ['project.updated', { project: expect.objectContaining({ id: 'p1', avenue: 'topic' }) }],
+      ]);
+      expect(JSON.parse((await call(tools, 'check_output')).content)).toMatchObject({ passed: true });
+    });
+
+    it('keeps out/ for the format the project has, and replaces it for the other one', async () => {
+      const outDir = await addProject('p1', 'Cell division practice');
+      await fs.writeFile(join(outDir, 'notes.html'), '<p>draft</p>');
+      const tools = toolsFor('p1');
+
+      await call(tools, 'set_format', { format: 'scorm' });
+      expect(await fs.readdir(outDir)).toContain('notes.html');
+      expect(events.after('p1', 0)).toEqual([]);
+
+      await call(tools, 'set_format', { format: 'topic' });
+      expect(await fs.readdir(outDir)).toEqual(['data.js', 'index.html']);
+      expect(JSON.parse((await call(tools, 'get_project')).content)).toMatchObject({ avenue: 'topic' });
     });
   });
 
