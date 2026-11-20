@@ -45,6 +45,11 @@ h3 { margin-bottom: 10px; font: 400 25px Georgia, serif; }
 .build-result > p:not(.result-label) { color: #4e5e58; font-size: 14px; line-height: 1.5; }
 .findings { margin: 16px 0; padding-left: 19px; color: #5b3733; font-size: 13px; line-height: 1.55; }
 .findings strong { font-size: 11px; }
+.build-suggestions { margin: 16px 0; }
+.build-suggestions h4 { margin: 0 0 4px; }
+.build-suggestions > p { margin: 0; font-size: 13px; }
+.build-suggestions .findings { color: inherit; margin: 8px 0 0; }
+.build-suggestions li p { margin: 2px 0 8px; }
 .download { display: inline-block; padding: 10px 13px; border-radius: 5px; color: #fff; background: #315947; font-size: 13px; font-weight: 700; text-decoration: none; }
 @media (max-width: 760px) { .intro { padding-top: 24px; } .workspace { grid-template-columns: 1fr; } .card { min-height: auto; } }
 .workspace { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: start; }
