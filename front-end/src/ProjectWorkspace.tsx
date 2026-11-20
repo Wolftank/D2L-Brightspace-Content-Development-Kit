@@ -54,7 +54,10 @@ function BuildPanel({ build, turn, statusLines, connection, outcome, disabled, o
 }
 
 /** The formats a project can be created in: the name shown, and what sets the format apart. */
-const FORMATS: Record<BuildableAvenue, { name: string; description: string }> = {
+type FormatChoice = 'auto' | BuildableAvenue;
+
+const FORMATS: Record<FormatChoice, { name: string; description: string }> = {
+  auto: { name: 'Let CDK choose', description: 'CDK picks the format from your request.' },
   scorm: { name: 'SCORM package', description: 'Can record a grade in D2L.' },
   topic: { name: 'Content topic', description: 'Can show students and instructors different views.' },
 };
@@ -63,7 +66,7 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
   const [project, setProject] = useState<Project | null>(initialProject);
   const draftKey = 'request-draft-' + (project?.id ?? 'new');
   const [title, setTitle] = useState('');
-  const [avenue, setAvenue] = useState<BuildableAvenue>('scorm');
+  const [avenue, setAvenue] = useState<FormatChoice>('auto');
   const [requestText, setRequestText] = useState(() => sessionStorage.getItem(draftKey) ?? '');
   const [error, setError] = useState<ApiError | null>(null);
   const [sending, setSending] = useState(false);
@@ -80,7 +83,7 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
   const [stopAttempt, setStopAttempt] = useState<{ turnId: string; error?: string } | null>(null);
   const messageBox = useRef<HTMLTextAreaElement>(null);
   const agent = useAgentSignIn();
-  const { statusLines, streamingMessages, messages, outcomes, builds, turn, connection, historyError, reconnect, addMessage } = useProjectEvents(project?.id ?? null);
+  const { statusLines, streamingMessages, messages, outcomes, builds, turn, connection, historyError, reconnect, addMessage, updatedProject } = useProjectEvents(project?.id ?? null);
   const pendingStatus = pendingTurn ? outcomes[pendingTurn]?.status : undefined;
   const awaitingTurn = !pendingStatus || pendingStatus === 'queued' || pendingStatus === 'running';
   const activeTurnId = pendingTurn !== null && turn.id !== pendingTurn && awaitingTurn
@@ -94,7 +97,8 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
   const latestAgent = messages.filter(message => message.role === 'agent').at(-1);
   const hasMessages = messages.length > 0 || streamingMessages.length > 0;
   const chatHistory = useRef<HTMLDivElement>(null);
-  const format = project?.avenue === 'scorm' || project?.avenue === 'topic' ? FORMATS[project.avenue].name : null;
+  const projectAvenue = updatedProject && updatedProject.id === project?.id ? updatedProject.avenue : project?.avenue;
+  const format = projectAvenue === 'scorm' || projectAvenue === 'topic' ? FORMATS[projectAvenue].name : null;
 
   useEffect(() => { sessionStorage.setItem(draftKey, requestText); }, [draftKey, requestText]);
   useEffect(() => { if (agent.confirmed) messageBox.current?.focus(); }, [agent.confirmed]);
@@ -178,7 +182,7 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
     submitLock.current = true;
     setError(null); setUploadError(''); setSending(true);
     try {
-      const currentProject = project ?? (await createProject({ title: title.trim(), avenue })).project;
+      const currentProject = project ?? (await createProject({ title: title.trim(), avenue: avenue === 'auto' ? undefined : avenue })).project;
       if (!project) sessionStorage.removeItem('request-draft-new');
       setProject(currentProject);
       window.history.replaceState(null, '', '/?project=' + encodeURIComponent(currentProject.id));
@@ -258,7 +262,7 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
             <fieldset className="format-choice" disabled={sending}>
               <legend>Format</legend>
               <div className="format-options">
-                {(Object.keys(FORMATS) as BuildableAvenue[]).map(value => <label key={value} className="format-option">
+                {(Object.keys(FORMATS) as FormatChoice[]).map(value => <label key={value} className="format-option">
                   <input type="radio" name="project-format" value={value} checked={avenue === value} onChange={() => setAvenue(value)} aria-labelledby={`format-${value}-name`} aria-describedby={`format-${value}-description`} />
                   <span id={`format-${value}-name`} className="format-name">{FORMATS[value].name}</span>
                   <span id={`format-${value}-description`} className="format-description">{FORMATS[value].description}</span>

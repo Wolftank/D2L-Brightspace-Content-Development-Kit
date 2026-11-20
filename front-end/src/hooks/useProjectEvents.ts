@@ -7,6 +7,7 @@ import type {
   ProgressCategory,
   ChatMessage,
   Message,
+  Project,
   ProjectEvent,
 } from '@cdk/contract';
 
@@ -28,6 +29,7 @@ export interface ProjectEventState {
   statusLines: StatusLine[];
   streamingMessages: { id: string; turnId: string; text: string }[];
   builds: Build[];
+  updatedProject?: Project;
   messages: Message[];
   outcomes: Record<string, { status: string; message?: string; failure?: Failure }>;
 }
@@ -163,6 +165,8 @@ export function projectEventReducer(
         ),
       };
 
+    case 'project.updated':
+      return { ...state, updatedProject: event.payload.project };
     case 'build.created':
     case 'build.updated':
       return {
@@ -355,6 +359,7 @@ useEffect(() => {
       'tool.finished',
       'build.created',
       'build.updated',
+      'project.updated',
       'deployment.updated',
       'turn.completed',
       'turn.failed',

@@ -175,11 +175,17 @@ const REPLY_CHUNKS = [
 /** Plays one turn's events over about seven seconds. */
 function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
   const { project } = state;
+  const request = state.messages.find(message => message.turnId === turn.id && message.role === 'instructor');
+  const pickedAvenue = project.avenue ?? (request && /student and instructor views|content topic/i.test(textOf(request.content)) ? 'topic' : 'scorm');
   const replyChunks = scenario === 'multi-message'
     ? ['I will update the activity. ', 'Then I will check it with the QA gate.']
     : scenario === 'qa-fail'
     ? ['I built the activity, but the QA gate found an issue. Tell me what you would like to change and I can revise it.']
-    : state.builds.length > 0 ? ['I updated your activity with your requested changes. The new version is ready to preview and download.'] : REPLY_CHUNKS;
+    : state.builds.length > 0
+      ? ['I updated your activity with your requested changes. The new version is ready to preview and download.']
+      : pickedAvenue === 'topic'
+        ? ['I made this a content topic so students and instructors can have separate views.']
+        : REPLY_CHUNKS;
   const replyId = randomUUID();
   const initialReplyId = scenario === 'multi-message' ? randomUUID() : replyId;
   const callId = randomUUID();
@@ -195,7 +201,7 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
       },
     ],
     [400, () => append(state, 'turn.status', { turnId: turn.id, text: 'Reading your request', category: 'reading' as const })],
-    [1200, () => append(state, 'turn.status', { turnId: turn.id, text: 'Building from the SCORM starter', category: 'building' as const })],
+    [1200, () => append(state, 'turn.status', { turnId: turn.id, text: pickedAvenue === 'topic' ? 'Building from the content topic starter' : 'Building from the SCORM starter', category: 'building' as const })],
     ...replyChunks.map(
       (text, index): [number, () => void] => [
         2000 + index * 400,
@@ -260,12 +266,17 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
       [
         5200,
         () => {
+          if (project.avenue === null) {
+            project.avenue = pickedAvenue;
+            recordActivity(state);
+            append(state, 'project.updated', { project: { ...project } });
+          }
           build = {
             id: randomUUID(),
             projectId: project.id,
             version: state.builds.length + 1,
             status: 'checking',
-            avenue: project.avenue ?? 'scorm',
+            avenue: pickedAvenue,
             qa: null,
             error: null,
             outputHash: null,
@@ -359,7 +370,7 @@ function createProject(body: unknown): CreateProjectResponse {
     id: randomUUID(),
     ownerId: user.id,
     title: input.title.trim(),
-    avenue: input.avenue ?? 'scorm',
+    avenue: input.avenue ?? null,
     targetCourse: null,
     sessionId: null,
     createdAt: now,
