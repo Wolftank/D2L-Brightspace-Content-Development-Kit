@@ -23,13 +23,14 @@ test('interface copy audit across empty, running, ready, guide, and failed state
   await page.getByLabel('Project title').fill('Cell division practice');
   await page.getByLabel('What should students learn or do?').fill('Create a practice quiz.');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
-  await expect(page.getByText('Project · SCORM package', { exact: true })).toBeVisible();
+  await expect(page.locator('.workspace-eyebrow')).toHaveText('Project');
   await expect(page.getByLabel('Request progress')).toContainText('Building from the SCORM starter');
   await expect(page.getByRole('button', { name: 'Working…' })).toBeDisabled();
   await expect(page.getByLabel('Describe a change')).toHaveAccessibleName('Describe a change');
   await expect(page.locator('label[for="request-text"]')).toHaveClass('sr-only');
   await page.screenshot({ path: testInfo.outputPath('running.png'), fullPage: true });
   await expect(page.getByRole('heading', { name: 'Ready to download' })).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('.workspace-eyebrow')).toHaveText('Project · SCORM package');
   await expect(page.getByText('Request complete', { exact: true })).toBeVisible();
   await expect(page.getByTitle('Interactive preview of build 1')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath('ready.png'), fullPage: true });
