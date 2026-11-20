@@ -48,6 +48,12 @@ function BuildPanel({ build, turn, statusLines, connection, outcome, disabled, o
         {build.error && <ErrorNotice failure={readFailure(build.error)} disabled={disabled} onAskForFix={onAskForFix} onSendAgain={onSendAgain} onEdit={onEdit} onNewProject={onNewProject} />}
         {!!build.qa?.findings.length && <ul className="findings">{build.qa.findings.map((finding, index) =>
           <li key={index}><strong>{finding.severity === 'warn' ? 'WARNING' : 'ERROR'}</strong> {finding.message}{finding.because && <p>{finding.because}</p>}</li>)}</ul>}
+        {!!build.suggestions?.length && <section aria-labelledby="build-suggestions-title" className="build-suggestions">
+          <h4 id="build-suggestions-title">Suggestions</h4>
+          <p>These suggestions are optional and do not affect the download.</p>
+          <ul className="findings">{build.suggestions.map(({ framework, principle, suggestion, reason }, index) =>
+            <li key={index}><strong>{framework.toUpperCase()} · {principle}</strong> {suggestion}<p>{reason}</p></li>)}</ul>
+        </section>}
         {build.status === 'ready' && <BuildDownload key={build.id} build={build} />}
       </article>}
   </section>;

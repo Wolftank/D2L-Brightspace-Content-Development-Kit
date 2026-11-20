@@ -42,6 +42,20 @@ async function firstRequest() {
   emit({ seq: 1, kind: 'turn.started', payload: { turnId: 't1', startedAt: Date.now() } });
 }
 
+it('shows suggestions for the latest build and clears them on the next build', async () => {
+  render(<ProjectWorkspace initialProject={project} />);
+  await waitFor(() => expect(Stream.latest).toBeDefined());
+  emit({ seq: 1, kind: 'build.updated', payload: { build: {
+    ...build(1),
+    suggestions: [{ framework: 'tilt', principle: 'Criteria', suggestion: 'Include an example.', reason: 'It clarifies the criteria.' }],
+  } } });
+  const section = screen.getByRole('region', { name: 'Suggestions' });
+  expect(within(section).getByRole('listitem')).toHaveTextContent('TILT · Criteria Include an example.');
+  expect(section).toHaveTextContent('It clarifies the criteria.');
+  emit({ seq: 2, kind: 'build.updated', payload: { build: { ...build(2), suggestions: [] } } });
+  expect(screen.queryByRole('region', { name: 'Suggestions' })).not.toBeInTheDocument();
+});
+
 describe('F10 conversation', () => {
   it('starts from the chat and requires a title and request', () => {
     render(<ProjectWorkspace />);
