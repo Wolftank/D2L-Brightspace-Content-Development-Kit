@@ -298,3 +298,39 @@ it('keeps the draft when an upload fails and reuses successful uploads on retry'
   await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
   expect(uploads).toEqual(['notes.txt', 'more.txt', 'more.txt']);
 });
+
+describe('format of an open project', () => {
+  beforeEach(() => {
+    fetchMock.mockImplementation(async (_url: string, init?: RequestInit) => Response.json(init?.method === 'PATCH'
+      ? { project: { ...project, avenue: JSON.parse(init.body as string).avenue, updatedAt: 2 } }
+      : { items: [] }));
+  });
+
+  it('offers Let CDK choose until the project has a format, and changes it without asking before the first version', async () => {
+    render(<ProjectWorkspace initialProject={{ ...project, avenue: null }} />);
+    const format = screen.getByLabelText('Format');
+    expect(format).toHaveValue('auto');
+
+    fireEvent.change(format, { target: { value: 'scorm' } });
+
+    await waitFor(() => expect(format).toHaveValue('scorm'));
+    expect(within(format).getAllByRole('option').map(option => option.textContent)).toEqual(['SCORM package', 'Content topic']);
+    expect(screen.getByLabelText('Describe a change')).toHaveValue('');
+  });
+
+  it('asks before changing the format of a project with a version, then drafts a request to rebuild it', async () => {
+    render(<ProjectWorkspace initialProject={project} />);
+    await waitFor(() => expect(Stream.latest).toBeDefined());
+    emit({ seq: 1, kind: 'build.created', payload: { build: build(1) } });
+
+    fireEvent.change(screen.getByLabelText('Format'), { target: { value: 'topic' } });
+    const confirmation = screen.getByRole('group', { name: 'Change format' });
+    expect(confirmation).toHaveTextContent('Change to Content topic?');
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/projects/p1', expect.anything());
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Change format' }));
+
+    await waitFor(() => expect(screen.getByLabelText('Describe a change')).toHaveValue('Rebuild this activity as a content topic.'));
+    expect(fetchMock).toHaveBeenCalledWith('/api/projects/p1', expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ avenue: 'topic' }) }));
+    expect(screen.getByText('Project · Content topic', { exact: true })).toBeVisible();
+  });
+});

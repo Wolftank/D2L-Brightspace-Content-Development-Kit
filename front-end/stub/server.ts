@@ -29,6 +29,8 @@ import type {
   SendMessageRequest,
   SendMessageResponse,
   Turn,
+  UpdateProjectRequest,
+  UpdateProjectResponse,
   User,
 } from '@cdk/contract';
 
@@ -391,6 +393,17 @@ function createProject(body: unknown): CreateProjectResponse {
   return { project };
 }
 
+function updateProject(state: ProjectState, body: unknown): UpdateProjectResponse {
+  const { avenue } = body as Partial<UpdateProjectRequest>;
+  if (avenue !== 'scorm' && avenue !== 'topic') throw new HttpError('invalid_request');
+  if (state.activeTurn) throw new HttpError('turn_active', { turnId: state.activeTurn.id });
+  if (state.project.avenue !== avenue) {
+    state.project = { ...state.project, avenue, updatedAt: Date.now() };
+    append(state, 'project.updated', { project: state.project });
+  }
+  return { project: state.project };
+}
+
 function summary({ id, version, status, createdAt }: Build): BuildSummary {
   return { id, version, status, createdAt };
 }
@@ -580,6 +593,7 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (method === 'GET' && !id) return sendJson(res, 200, listProjects());
     if (method === 'POST' && !id) return sendJson(res, 201, createProject(await readJson(req)));
     if (id && !sub && method === 'GET') return sendJson(res, 200, projectView(getProject(id)));
+    if (id && !sub && method === 'PATCH') return sendJson(res, 200, updateProject(getProject(id), await readJson(req)));
     if (id && sub === 'files' && method === 'GET') {
       return sendJson(res, 200, { items: getProject(id).files } satisfies FileListResponse);
     }
