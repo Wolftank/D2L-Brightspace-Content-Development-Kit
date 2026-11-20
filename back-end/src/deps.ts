@@ -2,6 +2,7 @@ import type { AgentDriver } from './agent/AgentDriver.js';
 import type { UsersRepo } from './db/users.js';
 import type { EventService } from './pipeline/events.js';
 import type { PreviewSettings } from './preview/routes.js';
+import type { AvenueService } from './services/avenues.js';
 import type { BuildService } from './services/builds.js';
 import type { FileService } from './services/files.js';
 import type { MessageService } from './services/messages.js';
@@ -12,6 +13,7 @@ import type { TurnService } from './services/turns.js';
 export interface Deps {
   users: UsersRepo;
   projects: ProjectService;
+  avenues: Pick<AvenueService, 'setForOwner'>;
   turns: TurnService;
   messages: MessageService;
   files: FileService;

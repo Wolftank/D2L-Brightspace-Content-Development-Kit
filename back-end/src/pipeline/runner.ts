@@ -39,7 +39,7 @@ export interface RunnerDeps {
   sessions: Pick<SessionService, 'acquire' | 'release' | 'close'>;
   files: Pick<FilesRepo, 'findInProject'>;
   workspaces: Pick<WorkspaceService, 'hashOutput' | 'pathFor'>;
-  builds: Pick<BuildService, 'create' | 'latest'>;
+  builds: Pick<BuildService, 'create' | 'latest' | 'canBuild'>;
   /** The caps on every turn. */
   turnLimits: TurnLimits;
 }
@@ -224,11 +224,12 @@ export function createRunner(deps: RunnerDeps): Runner {
     }
   }
 
-  /** Builds the output when it differs from the latest build's, or from `startHash` before the project's first build. */
+  /** Builds the output when it can be built and differs from the latest build's, or from `startHash` before the project's first build. */
   async function buildIfChanged(turn: Turn, startHash: string, feed: StatusFeed): Promise<void> {
     const outputHash = await deps.workspaces.hashOutput(turn.projectId);
     const latest = deps.builds.latest(turn.projectId);
     if (outputHash === (latest ? latest.outputHash : startHash)) return;
+    if (!(await deps.builds.canBuild(turn.projectId))) return;
     feed.status('Checking your build', 'checking');
     await deps.builds.create(turn.projectId, turn.id);
   }

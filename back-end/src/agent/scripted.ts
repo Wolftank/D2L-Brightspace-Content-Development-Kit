@@ -10,6 +10,8 @@ import type {
   AgentTurn,
   ProbeResult,
   SessionRequest,
+  ToolResult,
+  ToolServerSpec,
   TurnErrorCode,
   TurnInput,
   TurnLimits,
@@ -199,6 +201,28 @@ function splitIntoChunks(text: string, maxLen: number): string[] {
   return chunks;
 }
 
+/** A message that makes the scripted agent pick a content topic for a project with no avenue. */
+const ASKS_FOR_TOPIC = /student and instructor views|content topic/i;
+
+/** The sentence that opens the reply of a turn that picked the avenue. */
+const PICK_REASONS: Record<BuildableAvenue, string> = {
+  scorm: 'I made this a SCORM package so scores reach the gradebook.',
+  topic: 'I made this a content topic so students and instructors can have separate views.',
+};
+
+/** Calls the session's `cdk` tool `name`, as an agent would. */
+function callTool(tools: ToolServerSpec, name: string, input: Record<string, unknown> = {}): Promise<ToolResult> {
+  const tool = tools.tools.find((def) => def.name === name);
+  if (!tool) throw new Error(`The session has no ${name} tool`);
+  return tool.handler(input);
+}
+
+/** The project's avenue as `get_project` reports it: null before one is set. */
+async function projectAvenue(tools: ToolServerSpec): Promise<BuildableAvenue | null> {
+  const { avenue } = JSON.parse((await callTool(tools, 'get_project')).content) as { avenue: BuildableAvenue | null };
+  return avenue;
+}
+
 /** How the scripted agent describes building from each avenue's starter. */
 const BUILDING_STATUS: Record<BuildableAvenue, string> = {
   scorm: 'Building from the SCORM starter',
@@ -206,14 +230,15 @@ const BUILDING_STATUS: Record<BuildableAvenue, string> = {
 };
 
 async function* runScenario(
-  scenario: Scenario,
-  avenue: BuildableAvenue,
+  text: string,
+  tools: ToolServerSpec,
   outDir: string,
   signal: AbortSignal,
   resolveResult: (result: TurnResult) => void,
   sessionId: string,
 ): AsyncGenerator<AgentEvent> {
   try {
+    const scenario = scenarioFor(text);
     const failure = FAILURES[scenario];
     if (failure) {
       yield { kind: 'status', text: 'Connecting to the agent', category: 'other' };
@@ -225,6 +250,15 @@ async function* runScenario(
     yield { kind: 'message_start' };
     yield { kind: 'status', text: 'Reading the request', category: 'reading' };
     await delay(400, signal);
+
+    const stored = await projectAvenue(tools);
+    const avenue = stored ?? (ASKS_FOR_TOPIC.test(text) ? 'topic' : 'scorm');
+    if (!stored) {
+      const name = `mcp__${tools.name}__set_format`;
+      yield { kind: 'tool_start', callId: 'set-format', name, summary: 'Setting the format', category: toolCategory(name, {}) };
+      await callTool(tools, 'set_format', { format: avenue });
+      yield { kind: 'tool_end', callId: 'set-format', ok: true };
+    }
 
     if (scenario === 'cancelled') {
       yield { kind: 'status', text: BUILDING_STATUS[avenue], category: 'building' };
@@ -247,7 +281,8 @@ async function* runScenario(
       yield { kind: 'tool_end', callId: file.callId, ok: true };
     }
 
-    const reply = (avenue === 'topic' ? TOPIC_REPLIES : REPLIES)[building];
+    const built = (avenue === 'topic' ? TOPIC_REPLIES : REPLIES)[building];
+    const reply = stored ? built : `${PICK_REASONS[avenue]} ${built}`;
     for (const chunk of splitIntoChunks(reply, 60)) {
       yield { kind: 'text_delta', text: chunk };
       await delay(100, signal);
@@ -263,7 +298,7 @@ async function* runScenario(
   }
 }
 
-function createScriptedSession(sessionId: string, workspaceDir: string, avenue: BuildableAvenue): AgentSession {
+function createScriptedSession(sessionId: string, workspaceDir: string, tools: ToolServerSpec): AgentSession {
   return {
     get sessionId() {
       return sessionId;
@@ -274,7 +309,7 @@ function createScriptedSession(sessionId: string, workspaceDir: string, avenue: 
       const result = new Promise<TurnResult>((resolve) => {
         resolveResult = resolve;
       });
-      const events = runScenario(scenarioFor(input.text), avenue, join(workspaceDir, 'out'), signal, resolveResult, sessionId);
+      const events = runScenario(input.text, tools, join(workspaceDir, 'out'), signal, resolveResult, sessionId);
       return { events, result };
     },
 
@@ -284,8 +319,10 @@ function createScriptedSession(sessionId: string, workspaceDir: string, avenue: 
 
 /**
  * An agent for development and tests that replays fixed turns with no AI
- * calls. It builds a content topic when the session offers the content-topic
- * skill, and a SCORM package otherwise. The marker in the instructor's
+ * calls. It builds the project's avenue, which it reads with `get_project`.
+ * For a project with none it first sets one with `set_format`: a content
+ * topic when the message mentions a content topic or student and instructor
+ * views, and a SCORM package otherwise. The marker in the instructor's
  * message picks the scenario; the same scenario always gives the same events
  * and files.
  */
@@ -302,8 +339,7 @@ export function createScriptedAgentDriver(): AgentDriver {
     endSignIn() {},
 
     async open(req: SessionRequest): Promise<AgentSession> {
-      const avenue = req.skills.includes(AVENUE_SKILL.topic) ? 'topic' : 'scorm';
-      return createScriptedSession(req.sessionId ?? SESSION_ID, req.workspaceDir, avenue);
+      return createScriptedSession(req.sessionId ?? SESSION_ID, req.workspaceDir, req.tools);
     },
   };
 }

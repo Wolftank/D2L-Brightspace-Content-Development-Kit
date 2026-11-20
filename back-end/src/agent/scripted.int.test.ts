@@ -5,14 +5,34 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import type { BuildableAvenue } from '@cdk/contract';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { AVENUE_SKILL, KIT_DIR, skillsFor } from '../kit.js';
+import { AVENUE_SKILL, KIT_DIR } from '../kit.js';
 import { createScriptedAgentDriver } from './scripted.js';
-import type { AgentEvent, AgentSession, SessionRequest } from './AgentDriver.js';
+import type { AgentEvent, AgentSession, SessionRequest, ToolServerSpec } from './AgentDriver.js';
 
 const execFileAsync = promisify(execFile);
 
-function request(workspaceDir: string, sessionId: string | null = null): SessionRequest {
-  return { workspaceDir, sessionId, instructions: '', skillsDir: '', skills: [], tools: { name: 'cdk', tools: [] } };
+/** The `cdk` tools the scripted agent calls, for a project whose avenue starts as `avenue`. */
+function projectTools(avenue: BuildableAvenue | null): ToolServerSpec {
+  const report = async () => ({ content: JSON.stringify({ avenue }) });
+  const tool = { description: '', summary: '', input: {} };
+  return {
+    name: 'cdk',
+    tools: [
+      { ...tool, name: 'get_project', handler: report },
+      {
+        ...tool,
+        name: 'set_format',
+        handler: (input: Record<string, unknown>) => {
+          avenue = input.format as BuildableAvenue;
+          return report();
+        },
+      },
+    ],
+  };
+}
+
+function request(workspaceDir: string, sessionId: string | null = null, avenue: BuildableAvenue | null = 'scorm'): SessionRequest {
+  return { workspaceDir, sessionId, instructions: '', skillsDir: '', skills: [], tools: projectTools(avenue) };
 }
 
 async function play(session: AgentSession, text: string, signal = new AbortController().signal) {
@@ -152,11 +172,25 @@ describe('scripted agent driver', () => {
     }
   });
 
+  it.each([
+    ['Create a workplace safety quiz', 'scorm', 'I made this a SCORM package'],
+    ['Create a lesson with separate student and instructor views', 'topic', 'I made this a content topic'],
+  ] as const)('sets the format of a project with none from the message: %s', async (text, avenue, reason) => {
+    const tools = projectTools(null);
+    const session = await createScriptedAgentDriver().open({ ...request(dir), tools });
+
+    const { events, result } = await play(session, text);
+
+    expect(events).toContainEqual(expect.objectContaining({ kind: 'tool_start', name: 'mcp__cdk__set_format' }));
+    expect(JSON.parse((await tools.tools[0]!.handler({})).content)).toEqual({ avenue });
+    expect(result.text).toContain(reason);
+  });
+
   describe('for a content topic', () => {
-    /** A session offered the content-topic skills, in a workspace provisioned with the content-topic starter. */
+    /** A session for a content-topic project, in a workspace provisioned with the content-topic starter. */
     async function openTopic(): Promise<AgentSession> {
       await cp(join(KIT_DIR, 'skills', AVENUE_SKILL.topic, 'assets', 'starter'), join(dir, 'out'), { recursive: true });
-      return createScriptedAgentDriver().open({ ...request(dir), skills: skillsFor('topic') });
+      return createScriptedAgentDriver().open(request(dir, null, 'topic'));
     }
 
     it('builds a topic from the content-topic starter that passes the QA gate in topic mode', async () => {

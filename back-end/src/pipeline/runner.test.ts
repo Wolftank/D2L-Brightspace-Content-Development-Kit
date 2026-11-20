@@ -118,6 +118,7 @@ function setup(options: { session?: AgentSession; hashes?: string[] } = {}) {
     },
     builds: {
       latest: vi.fn((): ApiBuild | undefined => undefined),
+      canBuild: vi.fn(async () => true),
       create: vi.fn(async (projectId: string, turnId?: string) => ({ projectId, turnId, status: 'ready' }) as ApiBuild),
     },
     turnLimits: TURN_LIMITS,
@@ -265,6 +266,15 @@ describe('runner', () => {
 
     expect(deps.builds.create).not.toHaveBeenCalled();
     expect(kinds()).toEqual(['turn.started', 'message.completed', 'turn.completed']);
+  });
+
+  it('creates no build when the changed output cannot be built', async () => {
+    const { deps, runner } = setup({ hashes: ['before', 'after'] });
+    deps.builds.canBuild.mockResolvedValue(false);
+
+    await runner.executeTurn('turn-1');
+
+    expect(deps.builds.create).not.toHaveBeenCalled();
   });
 
   it.each([

@@ -4,7 +4,8 @@ import { z, type ZodRawShape } from 'zod';
 import type { BuildableAvenue } from '@cdk/contract';
 import type { ToolDef, ToolResult, ToolServerSpec } from '../agent/AgentDriver.js';
 import type { ProjectsRepo } from '../db/projects.js';
-import { buildableAvenue, KIT_DIR } from '../kit.js';
+import { AVENUE_SKILL, BUILDABLE_AVENUES, KIT_DIR, pickedAvenue } from '../kit.js';
+import type { AvenueService } from '../services/avenues.js';
 import type { BuildService } from '../services/builds.js';
 import type { WorkspaceService } from '../services/workspaces.js';
 
@@ -21,6 +22,7 @@ const TENANT_SECTIONS: Record<BuildableAvenue, string[]> = {
 
 export interface CdkToolsDeps {
   projects: Pick<ProjectsRepo, 'getById'>;
+  avenues: Pick<AvenueService, 'set'>;
   workspaces: Pick<WorkspaceService, 'locate'>;
   builds: Pick<BuildService, 'latest' | 'checkOutput'>;
 }
@@ -33,18 +35,38 @@ export function createCdkTools(deps: CdkToolsDeps, projectId: string): ToolServe
   const getProject = defineTool({
     name: 'get_project',
     description:
-      "The project's title and avenue, the latest build's version, status, QA findings, and error, and what the D2L tenant allows for this avenue.",
+      "The project's title and avenue, the latest build's version, status, QA findings, and error, and what the D2L tenant allows for this avenue. The avenue and the tenant limits are null until a format is set.",
     summary: 'Reading the project',
     input: {},
     async handler() {
       const project = deps.projects.getById(projectId);
       if (!project) return failed('This project no longer exists.');
       const latest = deps.builds.latest(projectId);
+      const avenue = pickedAvenue(project);
       return json({
         title: project.title,
-        avenue: project.avenue,
+        avenue,
         latestBuild: latest ? { version: latest.version, status: latest.status, qa: latest.qa, error: latest.error } : null,
-        tenant: await tenantLimits(buildableAvenue(project)),
+        tenant: avenue ? await tenantLimits(avenue) : null,
+      });
+    },
+  });
+
+  const setFormat = defineTool({
+    name: 'set_format',
+    description:
+      "Sets the project's output format: `scorm` for a SCORM package, `topic` for a content topic. Replaces out/ with that format's starter, so read anything you need from out/ first, and returns the skill to build with and what the D2L tenant allows for the format. Change a format that is already set only when the instructor asks for the other one.",
+    summary: 'Setting the format',
+    input: { format: z.enum(BUILDABLE_AVENUES) },
+    async handler({ format }) {
+      const project = deps.projects.getById(projectId);
+      if (!project) return failed('This project no longer exists.');
+      await deps.avenues.set(projectId, format);
+      return json({
+        format,
+        out: project.avenue === format ? 'Unchanged: the project already had this format.' : "Replaced with this format's starter.",
+        skill: AVENUE_SKILL[format],
+        tenant: await tenantLimits(format),
       });
     },
   });
@@ -56,6 +78,9 @@ export function createCdkTools(deps: CdkToolsDeps, projectId: string): ToolServe
     summary: 'Checking the activity',
     input: {},
     async handler() {
+      const project = deps.projects.getById(projectId);
+      if (!project) return failed('This project no longer exists.');
+      if (!pickedAvenue(project)) return failed('This project has no output format yet. Set one with set_format first.');
       const result = await deps.builds.checkOutput(projectId);
       return 'error' in result ? failed(result.error.message) : json(result.qa);
     },
@@ -94,7 +119,7 @@ export function createCdkTools(deps: CdkToolsDeps, projectId: string): ToolServe
     },
   });
 
-  return { name: 'cdk', tools: [getProject, checkOutput, deleteFiles] };
+  return { name: 'cdk', tools: [getProject, setFormat, checkOutput, deleteFiles] };
 }
 
 /** Keeps a tool's input fields and its handler's argument type in step. */

@@ -57,7 +57,22 @@ describe('renderProjectInstructions', () => {
     expect(markdown).toContain('Build the requested content topic in out/');
     expect(markdown).toContain('d2l-content-topic');
     expect(markdown).toContain('d2l-tenant-qa');
-    expect(markdown).not.toMatch(/scorm|manifest/i);
+    expect(markdown).not.toMatch(/manifest/i);
+  });
+
+  it('tells the agent to pick the format of a project that has none, and how to change one that is set', () => {
+    const picking = renderProjectInstructions({ project, avenue: null, workspaceDir });
+    expect(picking).toContain('Output format: not picked yet');
+    expect(picking).toContain('## Pick the output format');
+    for (const name of ['d2l-experience-router', 'd2l-scorm-package', 'd2l-content-topic', 'mcp__cdk__set_format']) {
+      expect(picking).toContain(name);
+    }
+    expect(picking).toContain('ask one short question');
+    expect(picking).not.toContain('## Changing the output format');
+
+    const set = renderProjectInstructions({ project, avenue: 'scorm', workspaceDir });
+    expect(set).toContain('## Changing the output format');
+    expect(set).not.toContain('## Pick the output format');
   });
 
   it('keeps multiline titles and Markdown delimiters inside literal project data', () => {

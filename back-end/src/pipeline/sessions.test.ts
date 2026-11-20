@@ -82,7 +82,7 @@ describe('session service', () => {
     vi.restoreAllMocks();
   });
 
-  it('opens a new session in the project workspace with the SCORM skills, its instructions, and its own CDK tools', async () => {
+  it("opens a new session in the project workspace with the avenues' skills, its instructions, and its own CDK tools", async () => {
     await service.acquire('p1');
 
     expect(opened).toHaveLength(1);
@@ -90,7 +90,7 @@ describe('session service', () => {
       workspaceDir: workspaceDirOf('p1'),
       sessionId: null,
       skillsDir: join(KIT_DIR, 'skills'),
-      skills: ['d2l-scorm-package', 'd2l-tenant-qa'],
+      skills: ['d2l-scorm-package', 'd2l-content-topic', 'd2l-tenant-qa'],
     });
     expect(opened[0]?.tools).toBe(TOOLS);
     expect(toolsFor).toEqual(['p1']);
@@ -183,7 +183,7 @@ describe('session service', () => {
     expect(driver.open).toHaveBeenCalledTimes(2);
   });
 
-  it('opens a topic project with content-topic skills', async () => {
+  it('opens a topic project with content-topic instructions', async () => {
     projectRows.set('pt', {
       id: 'pt',
       ownerId: 'owner-1',
@@ -198,13 +198,28 @@ describe('session service', () => {
     await service.acquire('pt');
 
     expect(opened).toHaveLength(1);
-    expect(opened[0]?.skills).toEqual(['d2l-content-topic', 'd2l-tenant-qa']);
     expect(opened[0]?.instructions).toContain('Output format: content topic');
+  });
+
+  it('opens a project with no avenue with the router skill, then opens it again once the avenue is set', async () => {
+    addProject('pn', 'stored-session');
+    projectRows.set('pn', { ...projectRows.get('pn')!, avenue: null });
+
+    await service.acquire('pn');
+    projectRows.set('pn', { ...projectRows.get('pn')!, avenue: 'topic' });
+    service.release('pn');
+    await service.acquire('pn');
+
+    expect(opened.map((req) => req.skills.includes('d2l-experience-router'))).toEqual([true, false]);
+    expect(opened[0]?.instructions).toContain('Output format: not picked yet');
+    expect(opened[1]?.instructions).toContain('Output format: content topic');
+    expect(opened[1]?.sessionId).toBe('stored-session');
+    expect(sessions[0]?.close).toHaveBeenCalledOnce();
   });
 
   it('opens no session for a project whose avenue CDK cannot build', async () => {
     addProject('pw');
-    projectRows.set('pw', { ...projectRows.get('pw')!, avenue: null });
+    projectRows.set('pw', { ...projectRows.get('pw')!, avenue: 'widget' });
 
     await expect(service.acquire('pw')).rejects.toThrow('which CDK cannot build');
     expect(opened).toEqual([]);

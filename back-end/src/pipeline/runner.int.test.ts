@@ -16,8 +16,10 @@ import { testDb } from '../db/test-db.js';
 import { createTurnsRepo } from '../db/turns.js';
 import { createUsersRepo } from '../db/users.js';
 import { createMessageService } from '../services/messages.js';
+import { createAvenueService } from '../services/avenues.js';
 import { createBuildService } from '../services/builds.js';
 import { createWorkspaceService, type WorkspaceService } from '../services/workspaces.js';
+import { createCdkTools } from '../tools/index.js';
 import { createEventService, type EventService } from './events.js';
 import { createRunner, type Runner } from './runner.js';
 import { createSessionService, type SessionService } from './sessions.js';
@@ -184,8 +186,9 @@ describe('runner, end to end', () => {
 
   /** Runs turns with `driver`'s agent, capped by `turnLimits`. */
   function useAgent(driver: Pick<AgentDriver, 'open'>, turnLimits: TurnLimits): void {
-    sessions = createSessionService({ projects, workspaces, driver, tools: () => ({ name: 'cdk', tools: [] }) });
     const builds = createBuildService({ builds: createBuildsRepo(db), projects, workspaces, events });
+    const avenues = createAvenueService({ projects, workspaces, turns: createTurnsRepo(db), events });
+    sessions = createSessionService({ projects, workspaces, driver, tools: (id) => createCdkTools({ projects, avenues, workspaces, builds }, id) });
     runner = createRunner({ turns: createTurnsRepo(db), messages, files: createFilesRepo(db), events, sessions, workspaces, builds, turnLimits });
   }
 
@@ -260,6 +263,7 @@ describe('runner, end to end', () => {
       expect(stored.flatMap((build) => build.qa!.findings).filter((f) => f.rule.startsWith('scorm/'))).toEqual([]);
       const secondPage = await fs.readFile(join(workspaces.buildPathFor(projectId, '2'), 'index.html'), 'utf8');
       expect(secondPage).toContain('safety contract');
+      expect(events.after(projectId, 0).map((event) => event.kind)).not.toContain('project.updated');
     });
 
     it('fails the build of a topic the QA gate rejects with qa_failed and its topic findings', async () => {
@@ -270,6 +274,35 @@ describe('runner, end to end', () => {
       expect(build).toMatchObject({ version: 1, status: 'failed', avenue: 'topic', error: { code: 'qa_failed' } });
       expect(build!.qa!.findings).toContainEqual(expect.objectContaining({ rule: 'topic/no-static-script-src', severity: 'error' }));
       expect(turnRow('turn-1').status).toBe('completed');
+    });
+  });
+
+  describe('for a project with no avenue, with the scripted agent', () => {
+    beforeEach(async () => {
+      useAgent(createScriptedAgentDriver(), { maxSteps: 60, maxBudgetUsd: 10 });
+      const ownerId = createUsersRepo(db).ensureLocalUser().id;
+      projectId = projects.create({ id: 'unpicked-1', ownerId, title: 'Cell division practice' }).id;
+      await workspaces.create(projectId, null);
+    });
+
+    it.each([
+      ['Create a workplace safety quiz', 'scorm'],
+      ['Create a lesson with separate student and instructor views', 'topic'],
+    ] as const)('sets the avenue from the request, builds it, and keeps it for the next request: %s', async (text, avenue) => {
+      queueTurn('turn-1', 'queued', text);
+      await runner.executeTurn('turn-1');
+      queueTurn('turn-2', 'queued', 'Add to it [follow-up]');
+      await runner.executeTurn('turn-2');
+
+      expect(projects.getById(projectId)?.avenue).toBe(avenue);
+      const kinds = events.after(projectId, 0).map((event) => event.kind);
+      expect(kinds.filter((kind) => kind === 'project.updated')).toHaveLength(1);
+      expect(kinds.indexOf('project.updated')).toBeLessThan(kinds.indexOf('build.created'));
+      const stored = createBuildsRepo(db).listByProject(projectId);
+      expect(stored.map((build) => [build.version, build.status, build.avenue])).toEqual([
+        [1, 'ready', avenue],
+        [2, 'ready', avenue],
+      ]);
     });
   });
 
