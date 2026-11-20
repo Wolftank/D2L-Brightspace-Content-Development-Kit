@@ -194,6 +194,7 @@ export interface Deployment {
 export type ProgressCategory = 'thinking' | 'reading' | 'searching' | 'writing' | 'checking' | 'building' | 'other';
 
 export interface EventPayloads {
+  'project.updated': { project: Project };
   'turn.started': { turnId: string; startedAt: number };
   'turn.status': { turnId: string; text: string; category: ProgressCategory };
   'message.delta': { turnId: string; messageId: string; text: string };
@@ -233,7 +234,7 @@ export interface MeResponse {
   agent: { name: string; ok: boolean; detail?: string };
 }
 
-/** Creates a project. `avenue` defaults to `scorm`. Any other field is ignored. */
+/** Creates a project. An omitted avenue lets CDK pick the format. */
 export interface CreateProjectRequest {
   title: string;
   avenue?: BuildableAvenue;

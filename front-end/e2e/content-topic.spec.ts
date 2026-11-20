@@ -126,11 +126,16 @@ test('creates, previews, and downloads a Content Topic with accessible role cont
     .click();
 });
 
-test('SCORM remains the default output format', async ({ page }) => {
+test('SCORM can be chosen explicitly with a keyboard', async ({ page }) => {
   await page.goto('/?new=1');
 
   const formats = page.getByRole('group', { name: 'Format' });
+  await formats.getByRole('radio', { name: 'Let CDK choose' }).focus();
+  await page.keyboard.press('ArrowRight');
   await expect(formats.getByRole('radio', { name: 'SCORM package' })).toBeChecked();
-  await expect(formats.getByRole('radio', { name: 'Content topic' })).not.toBeChecked();
-  await expect(formats.getByText('Can record a grade in D2L.')).toBeVisible();
+  await expect(formats.getByRole('radio', { name: 'SCORM package' })).toHaveAccessibleDescription('Can record a grade in D2L.');
+  await page.getByLabel('Project title').fill('Scored quiz');
+  await page.getByLabel('What should students learn or do?').fill('Create a graded quiz.');
+  await page.getByRole('button', { name: 'Send' }).click();
+  await expect(page.getByText('Project · SCORM package', { exact: true })).toBeVisible();
 });

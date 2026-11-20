@@ -43,27 +43,40 @@ async function firstRequest() {
 }
 
 describe('F10 conversation', () => {
-    it('defaults new projects to SCORM', () => {
+  it('defaults new projects to Let CDK choose and omits the format', async () => {
     render(<ProjectWorkspace />);
 
+    const auto = screen.getByRole('radio', { name: 'Let CDK choose' });
+    expect(auto).toBeChecked();
+    expect(auto).toHaveAccessibleDescription('CDK picks the format from your request.');
     const scorm = screen.getByRole('radio', { name: 'SCORM package' });
-    expect(scorm).toBeChecked();
+    expect(scorm).not.toBeChecked();
     expect(scorm).toHaveAccessibleDescription('Can record a grade in D2L.');
     expect(screen.getByRole('radio', { name: 'Content topic' })).not.toBeChecked();
+    fetchMock.mockImplementationOnce(async () => Response.json({ project: { ...project, avenue: null } }));
+    await firstRequest();
+    expect(fetchMock).toHaveBeenCalledWith('/api/projects', expect.objectContaining({
+      body: JSON.stringify({ title: 'Cell division' }),
+    }));
+    expect(screen.getByText('Project', { exact: true })).toBeVisible();
+    emit({ seq: 2, kind: 'project.updated', payload: { project: { ...project, avenue: 'topic' } } });
+    expect(screen.getByText('Project · Content topic', { exact: true })).toBeVisible();
   });
 
-  it('creates a content topic project when selected', async () => {
+  it.each([
+    ['Content topic', 'topic'],
+    ['SCORM package', 'scorm'],
+  ])('creates a project with the explicit %s format', async (name, avenue) => {
     render(<ProjectWorkspace />);
 
     fireEvent.change(screen.getByLabelText('Project title'), {
       target: { value: 'Cell division' },
     });
 
-    const topic = screen.getByRole('radio', { name: 'Content topic' });
-    fireEvent.click(topic);
-    expect(topic).toBeChecked();
-    expect(topic).toHaveAccessibleDescription('Can show students and instructors different views.');
-    expect(screen.getByRole('radio', { name: 'SCORM package' })).not.toBeChecked();
+    const option = screen.getByRole('radio', { name });
+    fireEvent.click(option);
+    expect(option).toBeChecked();
+    expect(screen.getByRole('radio', { name: 'Let CDK choose' })).not.toBeChecked();
 
     fireEvent.change(screen.getByLabelText('What should students learn or do?'), {
       target: { value: 'Create a lesson.' },
@@ -78,7 +91,7 @@ describe('F10 conversation', () => {
           method: 'POST',
           body: JSON.stringify({
             title: 'Cell division',
-            avenue: 'topic',
+            avenue,
           }),
         }),
       );
