@@ -23,7 +23,7 @@ test('interface copy audit across empty, running, ready, guide, and failed state
   await page.getByLabel('Project title').fill('Cell division practice');
   await page.getByLabel('What should students learn or do?').fill('Create a practice quiz.');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
-  await expect(page.getByText('Project:', { exact: true })).toBeVisible();
+  await expect(page.getByText('Project · SCORM package', { exact: true })).toBeVisible();
   await expect(page.getByLabel('Request progress')).toContainText('Building from the SCORM starter');
   await expect(page.getByRole('button', { name: 'Working…' })).toBeDisabled();
   await expect(page.getByLabel('Describe a change')).toHaveAccessibleName('Describe a change');

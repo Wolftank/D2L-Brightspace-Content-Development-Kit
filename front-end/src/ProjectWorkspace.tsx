@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError, cancelTurn, createProject, listProjectFiles, sendMessage, uploadProjectFile } from './api/client';
-import type { Build, ContentBlock, Message, Project, ProjectFile } from '@cdk/contract';
+import type { Build, BuildableAvenue, ContentBlock, Message, Project, ProjectFile } from '@cdk/contract';
 import { useAgentSignIn } from './hooks/useAgentSignIn';
 import { useProjectEvents } from './hooks/useProjectEvents';
 import type { ConnectionStatus } from './WorkingIndicator';
@@ -53,10 +53,17 @@ function BuildPanel({ build, turn, statusLines, connection, outcome, disabled, o
   </section>;
 }
 
+/** The formats a project can be created in: the name shown, and what sets the format apart. */
+const FORMATS: Record<BuildableAvenue, { name: string; description: string }> = {
+  scorm: { name: 'SCORM package', description: 'Can record a grade in D2L.' },
+  topic: { name: 'Content topic', description: 'Can show students and instructors different views.' },
+};
+
 export function ProjectWorkspace({ initialProject = null, initialTurnId }: { initialProject?: Project | null; initialTurnId?: string }) {
   const [project, setProject] = useState<Project | null>(initialProject);
   const draftKey = 'request-draft-' + (project?.id ?? 'new');
   const [title, setTitle] = useState('');
+  const [avenue, setAvenue] = useState<BuildableAvenue>('scorm');
   const [requestText, setRequestText] = useState(() => sessionStorage.getItem(draftKey) ?? '');
   const [error, setError] = useState<ApiError | null>(null);
   const [sending, setSending] = useState(false);
@@ -87,6 +94,7 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
   const latestAgent = messages.filter(message => message.role === 'agent').at(-1);
   const hasMessages = messages.length > 0 || streamingMessages.length > 0;
   const chatHistory = useRef<HTMLDivElement>(null);
+  const format = project?.avenue === 'scorm' || project?.avenue === 'topic' ? FORMATS[project.avenue].name : null;
 
   useEffect(() => { sessionStorage.setItem(draftKey, requestText); }, [draftKey, requestText]);
   useEffect(() => { if (agent.confirmed) messageBox.current?.focus(); }, [agent.confirmed]);
@@ -170,7 +178,7 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
     submitLock.current = true;
     setError(null); setUploadError(''); setSending(true);
     try {
-      const currentProject = project ?? (await createProject({ title: title.trim(), avenue: 'scorm' })).project;
+      const currentProject = project ?? (await createProject({ title: title.trim(), avenue })).project;
       if (!project) sessionStorage.removeItem('request-draft-new');
       setProject(currentProject);
       window.history.replaceState(null, '', '/?project=' + encodeURIComponent(currentProject.id));
@@ -211,7 +219,7 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
   return <main className="app-shell">
     <AppHeader />
     <section className="intro" aria-labelledby="page-title">
-      <p className="workspace-eyebrow">{project ? 'Project:' : 'Course material workspace'}</p>
+      <p className="workspace-eyebrow">{!project ? 'Course material workspace' : format ? `Project · ${format}` : 'Project'}</p>
       <h1 id="page-title">{project?.title ?? 'Create an activity'}</h1>
     </section>
     <div className="workspace">
@@ -244,7 +252,20 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
         </div>
         {fileListError && needsFileNames && <div><p className="error" role="alert">Unable to load attachment names.</p><button type="button" onClick={() => setFileListAttempt(attempt => attempt + 1)}>Try loading attachment names again</button></div>}
         <form onSubmit={handleSend} className={hasMessages ? 'composer' : 'composer composer-empty'}>
-          {!project && <><label htmlFor="project-title">Project title</label><input id="project-title" value={title} onChange={event => setTitle(event.target.value)} placeholder="e.g., Cell division practice" maxLength={160} disabled={sending} /></>}
+          {!project && <>
+            <label htmlFor="project-title">Project title</label>
+            <input id="project-title" value={title} onChange={event => setTitle(event.target.value)} placeholder="e.g., Cell division practice" maxLength={160} disabled={sending} />
+            <fieldset className="format-choice" disabled={sending}>
+              <legend>Format</legend>
+              <div className="format-options">
+                {(Object.keys(FORMATS) as BuildableAvenue[]).map(value => <label key={value} className="format-option">
+                  <input type="radio" name="project-format" value={value} checked={avenue === value} onChange={() => setAvenue(value)} aria-labelledby={`format-${value}-name`} aria-describedby={`format-${value}-description`} />
+                  <span id={`format-${value}-name`} className="format-name">{FORMATS[value].name}</span>
+                  <span id={`format-${value}-description`} className="format-description">{FORMATS[value].description}</span>
+                </label>)}
+              </div>
+            </fieldset>
+          </>}
           <label htmlFor="request-text" className={project ? 'sr-only' : undefined}>{project ? 'Describe a change' : 'What should students learn or do?'}</label>
           <AttachmentLabels items={attachments.map(({ id, file }) => ({ id, name: file.name }))} onRemove={removeAttachment} disabled={sending} />
           <textarea ref={messageBox} id="request-text" value={requestText} onChange={event => setRequestText(event.target.value)} placeholder={project ? 'Describe a change or ask a question…' : 'Create a ten-question practice quiz on cell division…'} rows={3} maxLength={20000} />

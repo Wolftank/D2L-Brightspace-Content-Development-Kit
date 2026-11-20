@@ -43,6 +43,49 @@ async function firstRequest() {
 }
 
 describe('F10 conversation', () => {
+    it('defaults new projects to SCORM', () => {
+    render(<ProjectWorkspace />);
+
+    const scorm = screen.getByRole('radio', { name: 'SCORM package' });
+    expect(scorm).toBeChecked();
+    expect(scorm).toHaveAccessibleDescription('Can record a grade in D2L.');
+    expect(screen.getByRole('radio', { name: 'Content topic' })).not.toBeChecked();
+  });
+
+  it('creates a content topic project when selected', async () => {
+    render(<ProjectWorkspace />);
+
+    fireEvent.change(screen.getByLabelText('Project title'), {
+      target: { value: 'Cell division' },
+    });
+
+    const topic = screen.getByRole('radio', { name: 'Content topic' });
+    fireEvent.click(topic);
+    expect(topic).toBeChecked();
+    expect(topic).toHaveAccessibleDescription('Can show students and instructors different views.');
+    expect(screen.getByRole('radio', { name: 'SCORM package' })).not.toBeChecked();
+
+    fireEvent.change(screen.getByLabelText('What should students learn or do?'), {
+      target: { value: 'Create a lesson.' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/projects',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            title: 'Cell division',
+            avenue: 'topic',
+          }),
+        }),
+      );
+    });
+
+    await waitFor(() => expect(Stream.latest).toBeDefined());
+  });
   it('starts from the chat and requires a title and request', () => {
     render(<ProjectWorkspace />);
     expect(screen.getByRole('region', { name: 'Design' })).toBeInTheDocument();
