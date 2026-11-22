@@ -40,7 +40,7 @@ Live progress and the working indicator sit in the build panel. At turn end it c
 
 The build panel shows the newest build. The preview shows the newest ready build, so a checking or failed build keeps the previous ready preview and its version label. Restart reloads the emulator with a fresh attempt. The desktop layout places chat and build side by side with preview below; narrow windows stack the three regions.
 
-An open project's Format menu changes its format between requests. Before a format is set it also shows Let CDK choose. Once the project has a version, a change asks first, then drafts a request to rebuild in the new format.
+An open project's Format menu changes its format between requests. Before a format is set it also shows Let CDK choose. Changing a format that is set asks first, because work that isn't in a version yet is lost, then drafts a request to rebuild in the new format. Until that rebuild, the build card says which format its version is in. Send is disabled while the change saves.
 
 ## Stub scenarios
 
