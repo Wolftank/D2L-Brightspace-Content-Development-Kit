@@ -128,7 +128,10 @@ describe('server startup', () => {
 
     await runServer(port);
 
-    expect(await logRecords()).toContainEqual(expect.objectContaining({ msg: 'back-end listening', url: `http://127.0.0.1:${port}` }));
+    // A record reaches standard output before the log file.
+    await vi.waitFor(async () =>
+      expect(await logRecords()).toContainEqual(expect.objectContaining({ msg: 'back-end listening', url: `http://127.0.0.1:${port}` })),
+    );
     expect(storedTurn()).toMatchObject({ status: 'failed', error: { code: 'interrupted' } });
     expect(storedBuild()).toMatchObject({ status: 'failed', error: { code: 'interrupted' } });
   }, 30_000);
