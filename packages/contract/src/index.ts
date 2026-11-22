@@ -160,6 +160,13 @@ export interface PedagogyReport {
   udl: unknown[];
 }
 
+export interface BuildSuggestion {
+  framework: 'tilt' | 'udl';
+  principle: string;
+  suggestion: string;
+  reason: string;
+}
+
 export interface Build {
   id: string;
   projectId: string;
@@ -171,6 +178,7 @@ export interface Build {
   /** Hash of the output the build copied; null while checking and when the copy failed. */
   outputHash: string | null;
   pedagogy: PedagogyReport | null;
+  suggestions?: BuildSuggestion[];
   turnId: string | null;
   createdAt: number;
 }

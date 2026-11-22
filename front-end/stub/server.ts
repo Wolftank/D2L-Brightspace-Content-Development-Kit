@@ -281,6 +281,7 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
             error: null,
             outputHash: null,
             pedagogy: null,
+            suggestions: [],
             turnId: turn.id,
             createdAt: Date.now(),
           };
@@ -295,6 +296,13 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
           if (!build) return;
           build.status = passed ? 'ready' : 'failed';
           build.qa = { passed, findings: passed ? [] : FAILED_FINDINGS };
+          const request = state.messages.find(message => message.turnId === turn.id && message.role === 'instructor');
+          if (request && textOf(request.content).includes('with design suggestions')) {
+            build.suggestions = [
+              { framework: 'tilt', principle: 'Criteria', suggestion: 'Show an example of a strong response before the activity.', reason: 'Students can compare their work with the criteria before submitting.' },
+              { framework: 'udl', principle: 'Action & Expression', suggestion: 'Let students explain their answer in writing or with a labeled diagram.', reason: 'Multiple response formats give students more ways to show what they know.' },
+            ];
+          }
           build.error = passed ? null : { code: 'qa_failed', message: 'The QA check found problems in this build.', nextStep: 'ask_for_fix' };
           recordActivity(state);
           append(state, 'build.updated', { build: { ...build } });
