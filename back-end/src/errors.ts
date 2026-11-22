@@ -35,6 +35,14 @@ export class TurnActive extends Error {
   }
 }
 
+/** A project's avenue is being changed; the caller must wait for that to finish. */
+export class AvenueChanging extends Error {
+  constructor() {
+    super("The project's avenue is being changed");
+    this.name = 'AvenueChanging';
+  }
+}
+
 /** A turn was requested for a project whose workspace directory is gone. */
 export class WorkspaceMissing extends Error {
   constructor(message = 'Workspace missing') {
@@ -103,6 +111,7 @@ export const API_ERRORS = {
   build_not_found: { status: 404, message: "This build doesn't exist.", nextStep: 'send_again' },
   turn_not_found: { status: 404, message: "This request doesn't exist.", nextStep: 'send_again' },
   turn_active: { status: 409, message: 'A request is already running for this project.', nextStep: 'wait' },
+  avenue_changing: { status: 409, message: "This project's format is being changed.", nextStep: 'wait' },
   build_not_ready: { status: 409, message: "This build isn't ready to download.", nextStep: 'try_later' },
   build_failed: { status: 409, message: "This build failed, so it can't be downloaded.", nextStep: 'ask_for_fix' },
   build_incomplete: { status: 409, message: 'This build is missing files it needs.', nextStep: 'send_again' },
@@ -141,6 +150,7 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   if (err instanceof BuildNotFound) return send(res, 'build_not_found');
   if (err instanceof TurnNotFound) return send(res, 'turn_not_found');
   if (err instanceof TurnActive) return send(res, 'turn_active', { turnId: err.turnId });
+  if (err instanceof AvenueChanging) return send(res, 'avenue_changing');
   if (err instanceof BuildNotReady) return send(res, 'build_not_ready');
   if (err instanceof BuildFailed) return send(res, 'build_failed');
   if (err instanceof BuildIncomplete) return send(res, 'build_incomplete', { missing: err.missing });

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import type { MessageHistoryResponse } from '@cdk/contract';
 import type { Deps } from '../deps.js';
+import { AvenueChanging } from '../errors.js';
 
 /** The most files one message can carry. */
 export const MAX_FILES_PER_MESSAGE = 10;
@@ -42,6 +43,7 @@ export function messagesRouter(deps: Deps): Router {
 
   router.post('/projects/:projectId/messages', (req, res) => {
     const { content } = sendMessageBody.parse(req.body);
+    if (deps.avenues.changing(req.params.projectId)) throw new AvenueChanging();
     res.status(202).json(deps.turns.start(req.user.id, req.params.projectId, content, req.log));
   });
 

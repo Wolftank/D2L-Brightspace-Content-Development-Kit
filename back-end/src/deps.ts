@@ -13,7 +13,7 @@ import type { TurnService } from './services/turns.js';
 export interface Deps {
   users: UsersRepo;
   projects: ProjectService;
-  avenues: Pick<AvenueService, 'setForOwner'>;
+  avenues: Pick<AvenueService, 'setForOwner' | 'changing'>;
   turns: TurnService;
   messages: MessageService;
   files: FileService;

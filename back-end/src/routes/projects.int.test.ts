@@ -156,6 +156,34 @@ describe('project routes', () => {
       expect(busy.body.error).toMatchObject({ code: 'turn_active', details: { turnId: 'turn-1' } });
       expect(projectsRepo.getById(projectId)?.avenue).toBe('scorm');
     });
+
+    it('refuses a message and a second change while a change is at work, and takes the message once it ends', async () => {
+      const projectId = await createScorm();
+      const message = { content: [{ type: 'text', text: 'Make it shorter.' }] };
+      let copying = false;
+      let finishCopy!: () => void;
+      const copyHeld = new Promise<void>((resolve) => { finishCopy = resolve; });
+      const server = app({
+        ...workspaces,
+        startOutput: async (id, avenue) => {
+          copying = true;
+          await copyHeld;
+          await workspaces.startOutput(id, avenue);
+        },
+      });
+
+      const change = request(server).patch(`/api/projects/${projectId}`).send({ avenue: 'topic' }).then((res) => res);
+      await vi.waitFor(() => expect(copying).toBe(true));
+      const during = await request(server).post(`/api/projects/${projectId}/messages`).send(message);
+      const second = await request(server).patch(`/api/projects/${projectId}`).send({ avenue: 'scorm' });
+      finishCopy();
+
+      expect(during.status).toBe(409);
+      expect(during.body.error).toMatchObject({ code: 'avenue_changing', nextStep: 'wait' });
+      expect(second.body.error).toMatchObject({ code: 'avenue_changing' });
+      expect((await change).body.project).toMatchObject({ avenue: 'topic' });
+      expect((await request(server).post(`/api/projects/${projectId}/messages`).send(message)).status).toBe(202);
+    });
   });
 
   describe('GET /api/projects', () => {

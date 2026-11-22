@@ -1,7 +1,7 @@
 import type { Project as ApiProject, BuildableAvenue } from '@cdk/contract';
 import type { ProjectsRepo } from '../db/projects.js';
 import type { TurnsRepo } from '../db/turns.js';
-import { NotFound, TurnActive } from '../errors.js';
+import { AvenueChanging, NotFound, TurnActive } from '../errors.js';
 import { log } from '../log.js';
 import type { EventService } from '../pipeline/events.js';
 import { toApi } from './projects.js';
@@ -26,13 +26,19 @@ export interface AvenueService {
 
   /**
    * `set` on `ownerId`'s project, between its turns. Throws `NotFound` for an
-   * unknown or another owner's project, and `TurnActive` while the project
-   * has a `queued` or `running` turn.
+   * unknown or another owner's project, `TurnActive` while the project has a
+   * `queued` or `running` turn, and `AvenueChanging` while an earlier call
+   * for the project is still at work.
    */
   setForOwner(ownerId: string, projectId: string, avenue: BuildableAvenue): Promise<ApiProject>;
+
+  /** Whether a `setForOwner` call for the project is still at work. No turn may start until it ends. */
+  changing(projectId: string): boolean;
 }
 
 export function createAvenueService(deps: AvenueServiceDeps): AvenueService {
+  const changing = new Set<string>();
+
   async function set(projectId: string, avenue: BuildableAvenue): Promise<ApiProject> {
     const project = deps.projects.getById(projectId);
     if (!project) throw new NotFound();
@@ -53,7 +59,16 @@ export function createAvenueService(deps: AvenueServiceDeps): AvenueService {
       if (!deps.projects.get(ownerId, projectId)) throw new NotFound();
       const active = deps.turns.findActive(projectId);
       if (active) throw new TurnActive(active.id);
-      return set(projectId, avenue);
+      if (changing.has(projectId)) throw new AvenueChanging();
+      // Claimed in the same step as the checks, so a message arriving while `set` waits on the disk is refused.
+      changing.add(projectId);
+      try {
+        return await set(projectId, avenue);
+      } finally {
+        changing.delete(projectId);
+      }
     },
+
+    changing: (projectId) => changing.has(projectId),
   };
 }
