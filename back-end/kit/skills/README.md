@@ -1,6 +1,7 @@
 # The D2L skill spectrum
 
-Six skills. One entry point, four build paths, one gate.
+Seven skills. One entry point, four build paths, one gate, and optional
+design suggestions.
 
 ```
                        d2l-experience-router
@@ -29,6 +30,7 @@ built-in tool   A. external  B. content  C. SCORM        D. homepage widget
 | [`d2l-homepage-widget`](d2l-homepage-widget/SKILL.md) | It must be seen without anyone navigating to it, or be genuinely invisible to students |
 | [`d2l-tenant-qa`](d2l-tenant-qa/SKILL.md) | Anything is about to be uploaded, or is misbehaving in D2L |
 | [`d2l-activity-deployer`](d2l-activity-deployer/SKILL.md) | Getting a finished build into a course, and verifying it |
+| [`d2l-tilt-udl-suggestions`](d2l-tilt-udl-suggestions/SKILL.md) | Anything was built or changed, or someone asks how an activity or assignment could be clearer or reach more students |
 
 ## Destinations, and one that isn't
 

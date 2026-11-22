@@ -82,7 +82,7 @@ describe('session service', () => {
     vi.restoreAllMocks();
   });
 
-  it("opens a new session in the project workspace with the avenues' skills, its instructions, and its own CDK tools", async () => {
+  it("opens a new session in the project workspace with the avenues', QA, and suggestions skills, its instructions, and its own CDK tools", async () => {
     await service.acquire('p1');
 
     expect(opened).toHaveLength(1);
@@ -90,7 +90,7 @@ describe('session service', () => {
       workspaceDir: workspaceDirOf('p1'),
       sessionId: null,
       skillsDir: join(KIT_DIR, 'skills'),
-      skills: ['d2l-scorm-package', 'd2l-content-topic', 'd2l-tenant-qa'],
+      skills: ['d2l-scorm-package', 'd2l-content-topic', 'd2l-tenant-qa', 'd2l-tilt-udl-suggestions'],
     });
     expect(opened[0]?.tools).toBe(TOOLS);
     expect(toolsFor).toEqual(['p1']);
@@ -211,6 +211,7 @@ describe('session service', () => {
     await service.acquire('pn');
 
     expect(opened.map((req) => req.skills.includes('d2l-experience-router'))).toEqual([true, false]);
+    expect(opened.map((req) => req.skills.includes('d2l-tilt-udl-suggestions'))).toEqual([true, true]);
     expect(opened[0]?.instructions).toContain('Output format: not picked yet');
     expect(opened[1]?.instructions).toContain('Output format: content topic');
     expect(opened[1]?.sessionId).toBe('stored-session');

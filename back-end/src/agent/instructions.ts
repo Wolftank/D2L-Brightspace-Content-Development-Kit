@@ -1,7 +1,7 @@
 import { isAbsolute, join } from 'node:path';
 import type { BuildableAvenue } from '@cdk/contract';
 import type { Project } from '../db/schema.js';
-import { AVENUE_SKILL, ROUTER_SKILL } from '../kit.js';
+import { AVENUE_SKILL, ROUTER_SKILL, SUGGESTIONS_SKILL } from '../kit.js';
 
 export interface ProjectInstructionsInput {
   project: Pick<Project, 'id' | 'title'>;
@@ -18,6 +18,7 @@ const AVENUE_WORDING: Record<BuildableAvenue, { format: string; path: string; ac
 };
 
 const SET_FORMAT = 'mcp__cdk__set_format';
+const RECORD_SUGGESTIONS = 'mcp__cdk__record_suggestions';
 
 /** Renders project context and the kit's build/check/fix workflow for one request. */
 export function renderProjectInstructions({ project, avenue, workspaceDir }: ProjectInstructionsInput): string {
@@ -43,6 +44,7 @@ Keep source material unchanged. Write the activity and its assets only into out/
 Follow these skills for content rules:
 ${avenue ? skillLines(avenue) : pickingSkillLines()}
 - ${code('d2l-tenant-qa')} to check the activity against what the D2L tenant allows
+- ${code(SUGGESTIONS_SKILL)} to find optional TILT and UDL design suggestions
 
 ${avenue ? 'Use the starter already provisioned in out/ as the starting point for the activity.' : `out/ is empty until the format is picked. ${code(SET_FORMAT)} puts the picked format's starter there; use it as the starting point for the activity.`}
 
@@ -60,17 +62,19 @@ You have no shell. Work with your file tools and these CDK tools:
 - ${code(SET_FORMAT)} sets the project's output format to scorm or topic, replaces out/ with that format's starter, and returns what the D2L tenant allows for it.
 - ${code('mcp__cdk__check_output')} runs the QA checker on out/ as it is now and returns its findings.
 - ${code('mcp__cdk__delete_files')} deletes files or folders inside out/.
+- ${code(RECORD_SUGGESTIONS)} records up to three optional design suggestions for the version CDK saves when your turn ends.
 
 ## Build, check, and fix within this request
 
 1. Build the requested ${wording.activity} in out/ using the skills and source material. Ensure all images have alt text, the page declares lang="en", and headings follow a sequential order without skipping levels. The checker enforces these accessibility rules.
 2. Check out/ with ${code('mcp__cdk__check_output')}.
 3. Inspect the findings and their explanations. Fix errors you can address in out/ and check again during this request. Review warnings and report any remaining limitations. If the checker cannot run or errors remain, clearly describe the failure and unresolved findings; do not claim a passing package.
-4. Return a concise description of the activity, the check result, and any unresolved issues, written as "How to reply" describes. When your turn ends, CDK saves out/ as a new version, checks the saved output again, and packages a passing build${wording.packaging}. That step owns final packaging and download eligibility. Hand off out/ in place of the skills' standalone packaging and deployment steps.
+4. Find design suggestions for the activity, and for any assignment the instructor attached, with ${code(SUGGESTIONS_SKILL)}, and record them with ${code(RECORD_SUGGESTIONS)}: an empty list when nothing needs changing. Make none of the suggested changes yourself; the instructor asks for the ones they want. When the instructor asks for suggestions directly, such as on a pasted assignment, answer in your reply with the same skill and record nothing.
+5. Return a concise description of the activity, the check result, and any unresolved issues, written as "How to reply" describes. When your turn ends, CDK saves out/ as a new version, checks the saved output again, and packages a passing build${wording.packaging}. That step owns final packaging and download eligibility. Hand off out/ in place of the skills' standalone packaging and deployment steps.
 
 ## How to reply
 
-Write a short summary of what was built, in a few plain sentences. Describe what students will do, what the activity covers, and what changed from the last version. Leave out file names, tool names, command output, code, and QA rule IDs. If the checker found a problem you could not fix, say plainly what is wrong and what the instructor should do next. Questions and answers to the instructor follow the same style: short and plain.
+Write a short summary of what was built, in a few plain sentences. Describe what students will do, what the activity covers, and what changed from the last version. Leave out file names, tool names, command output, code, and QA rule IDs. If the checker found a problem you could not fix, say plainly what is wrong and what the instructor should do next. If you recorded suggestions, mention them in one sentence, such as "I left two optional design suggestions on the build card.", and leave the details to the build card. Questions and answers to the instructor follow the same style: short and plain.
 
 The instructor reads your reply in a chat window that shows it exactly as typed. Markdown would appear there as stray asterisks, dashes, and pound signs, so use plain text only: no markdown headings, bold, bullet lists, numbered lists, tables, backticks, or code blocks. When you have several points to make, such as things the instructor should know before using the activity, write them as ordinary sentences, never as a list. This holds for every reply, including anything a skill tells you to report.
 `;
@@ -105,7 +109,7 @@ CDK builds two formats: a SCORM package and a content topic. Pick one from the i
 - When it doesn't, ask one short question and end your turn, then pick once the instructor answers. A scored activity, such as a quiz or a practice set, is unsettled until you know whether its score has to reach the gradebook, so ask that.
 - When the request needs both a gradebook score and role-specific views, no single activity does both. Say so and ask which matters more.
 - When something CDK doesn't build fits the request better, such as an externally hosted page or a built-in D2L tool, say so in one sentence and offer the closer of the two formats.
-- A request that isn't for an activity, such as a question or a review of a pasted assignment, needs no format. Answer it and leave the format unpicked.
+- A request that isn't for an activity, such as a question or suggestions on a pasted assignment, needs no format. Answer it and leave the format unpicked.
 
 Record the pick with ${code(SET_FORMAT)}, then build in the same request. Say in one sentence of your reply which format you picked and why, for example "I made this a SCORM package so scores reach the gradebook."`;
 

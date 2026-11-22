@@ -53,7 +53,7 @@ Copy-Item .env.example .env
 
 ### The scripted agent
 
-`AGENT_DRIVER=scripted` replaces the agent with fixed turns that make no AI calls, so the real runner, build service, QA gate, and event stream run end to end for free. A marker in the instructor's message picks the scenario, and the same scenario always gives the same events and files. Markers shared with the front end's stub behave the same in both, so a browser spec runs against either. In a `topic` project the scripted agent builds from the content-topic starter instead of the SCORM starter. For a project with no avenue it first sets one with `set_format`: `topic` when the message mentions a content topic or student and instructor views, and `scorm` otherwise.
+`AGENT_DRIVER=scripted` replaces the agent with fixed turns that make no AI calls, so the real runner, build service, QA gate, and event stream run end to end for free. A marker in the instructor's message picks the scenario, and the same scenario always gives the same events and files. Markers shared with the front end's stub behave the same in both, so a browser spec runs against either. In a `topic` project the scripted agent builds from the content-topic starter instead of the SCORM starter. For a project with no avenue it first sets one with `set_format`: `topic` when the message mentions a content topic or student and instructor views, and `scorm` otherwise. A message containing "with design suggestions", the front-end stub's phrase, records the stub's two suggestions with `record_suggestions`, together with any marker below, and the reply mentions them in one sentence.
 
 | Marker | Turn in a `scorm` project | Turn in a `topic` project |
 |---|---|---|

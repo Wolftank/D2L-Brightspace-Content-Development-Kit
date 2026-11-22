@@ -23,11 +23,11 @@ export const SUGGESTIONS_SKILL = 'd2l-tilt-udl-suggestions';
 
 /**
  * The kit's skills an agent uses on a project: every avenue's skill, so it can
- * rebuild in another avenue within a request, and the QA skill. A project with
- * no avenue also gets the router skill.
+ * rebuild in another avenue within a request, the QA skill, and the
+ * suggestions skill. A project with no avenue also gets the router skill.
  */
 export function skillsFor(avenue: BuildableAvenue | null): string[] {
-  return [...(avenue ? [] : [ROUTER_SKILL]), ...BUILDABLE_AVENUES.map((each) => AVENUE_SKILL[each]), 'd2l-tenant-qa'];
+  return [...(avenue ? [] : [ROUTER_SKILL]), ...BUILDABLE_AVENUES.map((each) => AVENUE_SKILL[each]), 'd2l-tenant-qa', SUGGESTIONS_SKILL];
 }
 
 /**
