@@ -9,6 +9,7 @@ export interface CreateBuildInput {
   version: number;
   avenue: Build['avenue'];
   turnId?: string | null;
+  suggestions?: Build['suggestions'];
 }
 
 export interface FinishBuildInput {
@@ -47,7 +48,7 @@ export function createBuildsRepo(db: Db): BuildsRepo {
         .get();
       return (row?.latest ?? 0) + 1;
     },
-    create({ projectId, version, avenue, turnId }) {
+    create({ projectId, version, avenue, turnId, suggestions = [] }) {
       const build: Build = {
         id: randomUUID(),
         projectId,
@@ -57,6 +58,7 @@ export function createBuildsRepo(db: Db): BuildsRepo {
         qa: null,
         error: null,
         outputHash: null,
+        suggestions,
         turnId: turnId ?? null,
         createdAt: Date.now(),
       };

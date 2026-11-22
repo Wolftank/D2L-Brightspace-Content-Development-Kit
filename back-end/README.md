@@ -1,6 +1,6 @@
 # back-end
 
-The back end (`src/`): runs turns with the agent, runs the QA gate and the pedagogy check against `kit/`, creates builds, deploys to D2L, and translates findings into plain language for the front end.
+The back end (`src/`): runs turns with the agent, runs the QA gate against `kit/`, creates builds, deploys to D2L, and translates findings into plain language for the front end.
 
 `kit/` is the actual D2L Content Development Kit — the skills, QA/lint gate, and probes carried over from the internship prototype. It's hardened and extended in place as part of this project, not treated as a frozen reference copy. It stays plain CommonJS JavaScript (its own `kit/package.json` sets `"type": "commonjs"`) and is not part of the TypeScript toolchain below.
 
@@ -125,7 +125,6 @@ The folder stays small. A new file starts each day and whenever the current one 
 - `services/` — the project, turn, message, file, workspace, and build services the routes and the pipeline call
 - `agent/` — the `AgentDriver` interface, the Claude driver, and `createAgentDriver`, which builds the driver `AGENT_DRIVER` names
 - `pipeline/` — the runner and the session service, emitting events to the event stream
-- `tilt-udl/` — the pedagogy check
 - `deploy/` — the D2L API client; see its own README for why this is the piece most likely to need real design work
 
 Wiring lives in one `createApp(deps)` function; `server.ts` calls it with real dependencies, tests call it with fakes. Full design in [`../docs/architecture.md`](../docs/architecture.md).

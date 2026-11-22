@@ -72,7 +72,7 @@ describe('build routes', () => {
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ build, deployments: [] });
       expect(res.body.build.qa.passed).toBe(true);
-      expect(res.body.build.pedagogy).toBeNull();
+      expect(res.body.build.suggestions).toEqual([]);
     });
 
     it("returns 404 for another owner's build and for an unknown id", async () => {

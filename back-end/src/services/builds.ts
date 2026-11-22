@@ -5,7 +5,7 @@ import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { Readable } from 'node:stream';
 import { ZipArchive } from 'archiver';
 import { z } from 'zod';
-import type { Build as ApiBuild, BuildableAvenue, BuildError, QaReport } from '@cdk/contract';
+import type { Build as ApiBuild, BuildableAvenue, BuildError, BuildSuggestion, QaReport } from '@cdk/contract';
 import type { Logger } from 'pino';
 import type { BuildsRepo, FinishBuildInput } from '../db/builds.js';
 import type { ProjectsRepo } from '../db/projects.js';
@@ -86,17 +86,21 @@ export interface BuildService {
   /**
    * Stores the next build version as `checking`, copies the project's output
    * into it, runs the QA gate for the project's avenue on the copy, and
-   * returns the finished build.
+   * returns the finished build. The build keeps `suggestions`, which never
+   * affect its status or QA report.
    * Emits `build.created` once the build is stored, and `build.updated` once
    * its final status is stored. A failed copy finishes the build as `failed`.
    */
-  create(projectId: string, turnId?: string): Promise<ApiBuild>;
+  create(projectId: string, turnId?: string, suggestions?: BuildSuggestion[]): Promise<ApiBuild>;
 
   /** The build, if it belongs to one of `ownerId`'s projects; otherwise throws `BuildNotFound`. */
   get(ownerId: string, buildId: string): ApiBuild;
 
   /** Unscoped lookup of the project's highest build version, for pipeline code acting on a project a route has already authorized. */
   latest(projectId: string): Build | undefined;
+
+  /** Unscoped list of the project's builds, oldest version first, for pipeline code acting on a project a route has already authorized. */
+  listByProject(projectId: string): Build[];
 
   /** Whether the project's output can be built: the project has an avenue, and `out/` holds more than that avenue's untouched starter. */
   canBuild(projectId: string): Promise<boolean>;
@@ -263,18 +267,18 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
     }
   }
 
-  async function create(projectId: string, turnId?: string): Promise<ApiBuild> {
+  async function create(projectId: string, turnId?: string, suggestions: BuildSuggestion[] = []): Promise<ApiBuild> {
     const avenue = buildableAvenue(projectById(projectId));
     // No await between choosing the version and storing the row, so concurrent
     // calls never pick the same version and a failed copy uses its version up.
     const version = deps.builds.nextVersion(projectId);
-    const build = deps.builds.create({ projectId, version, avenue, turnId });
-    deps.events.append({ projectId, turnId, kind: 'build.created', payload: { build: toApi(build) } });
+    const build = deps.builds.create({ projectId, version, avenue, turnId, suggestions });
+    deps.events.append({ projectId, turnId, kind: 'build.created', payload: { build } });
     const buildLog = log.child({ projectId, turnId, buildId: build.id });
     buildLog.info({ version }, 'Build created');
 
     const result = await copyAndCheck(projectId, version, avenue, buildLog);
-    const finished = toApi(deps.builds.finish(build.id, result));
+    const finished = deps.builds.finish(build.id, result);
     buildLog.info(
       { status: finished.status, qaPassed: finished.qa?.passed, findings: finished.qa?.findings.length, errorCode: finished.error?.code },
       'Build checked',
@@ -346,15 +350,16 @@ export function createBuildService(deps: BuildServiceDeps): BuildService {
         projectId: build.projectId,
         turnId: build.turnId ?? undefined,
         kind: 'build.updated',
-        payload: { build: toApi(build) },
+        payload: { build },
       });
     }
   }
 
   return {
     create,
-    get: (ownerId, buildId) => toApi(owned(ownerId, buildId).build),
+    get: (ownerId, buildId) => owned(ownerId, buildId).build,
     latest: (projectId) => deps.builds.latest(projectId),
+    listByProject: (projectId) => deps.builds.listByProject(projectId),
     canBuild,
     download,
     previewFile,
@@ -383,10 +388,6 @@ async function packageFiles(buildDir: string): Promise<string[]> {
   }
   await walk('');
   return files;
-}
-
-function toApi(build: Build): ApiBuild {
-  return { ...build, pedagogy: null };
 }
 
 /**
