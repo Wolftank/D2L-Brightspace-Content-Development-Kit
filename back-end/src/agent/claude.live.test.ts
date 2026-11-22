@@ -291,7 +291,7 @@ describe('ClaudeAgentDriver, live SDK, in a provisioned workspace', () => {
     return turn.result;
   }
 
-  it('passes the session check with the allowed tools and the SCORM skills, or the turn would fail with agent_unrestricted', async () => {
+  it("passes the session check with the allowed tools and the project's skills, or the turn would fail with agent_unrestricted", async () => {
     const { session } = await openProject();
 
     const turn = session.send(
@@ -368,8 +368,8 @@ describe('ClaudeAgentDriver, live SDK, in a provisioned workspace', () => {
     expect(await builds.create(project.id)).toMatchObject({ status: 'ready', qa: { passed: true } });
   }, 900_000);
 
-  it('builds a content topic from the starter that passes the QA gate in topic mode, then version 2 for a follow-up', async () => {
-    const { project, builds, checks, session } = await openProject({ avenue: 'topic' });
+  it('builds a content topic from the starter that passes the QA gate in topic mode, then version 2 for a follow-up, keeping its format', async () => {
+    const { project, builds, checks, session, storedAvenue } = await openProject({ avenue: 'topic' });
 
     const first = session.send(
       {
@@ -381,7 +381,7 @@ describe('ClaudeAgentDriver, live SDK, in a provisioned workspace', () => {
       { maxSteps: 60, maxBudgetUsd: 5 },
       new AbortController().signal,
     );
-    await drain(first.events);
+    const firstEvents = await drain(first.events);
     expect((await first.result).error).toBeUndefined();
     expect(checks.length).toBeGreaterThan(0);
     expect(await builds.create(project.id)).toMatchObject({ version: 1, status: 'ready', avenue: 'topic', qa: { passed: true } });
@@ -391,9 +391,11 @@ describe('ClaudeAgentDriver, live SDK, in a provisioned workspace', () => {
       { maxSteps: 30, maxBudgetUsd: 3 },
       new AbortController().signal,
     );
-    await drain(second.events);
+    const secondEvents = await drain(second.events);
     expect((await second.result).error).toBeUndefined();
     expect(await builds.create(project.id)).toMatchObject({ version: 2, status: 'ready', avenue: 'topic', qa: { passed: true } });
+    expect(storedAvenue()).toBe('topic');
+    expect([...firstEvents, ...secondEvents].filter((event) => event.kind === 'tool_start' && event.name === 'mcp__cdk__set_format')).toEqual([]);
   }, 1_200_000);
 
   it('picks a SCORM package for a request that needs a gradebook score, builds it, and says why', async () => {
@@ -414,6 +416,7 @@ describe('ClaudeAgentDriver, live SDK, in a provisioned workspace', () => {
     expect(result.error).toBeUndefined();
     expect(storedAvenue()).toBe('scorm');
     expect(result.text).toMatch(/SCORM/i);
+    expect(result.text).not.toMatch(/\*\*|`|^#|^\s*([-*]|\d+\.)\s/m);
     expect(await builds.create(project.id)).toMatchObject({ status: 'ready', avenue: 'scorm', qa: { passed: true } });
   }, 900_000);
 
@@ -447,13 +450,23 @@ describe('ClaudeAgentDriver, live SDK, in a provisioned workspace', () => {
     expect(storedAvenue()).toBeNull();
   }, 180_000);
 
-  it('changes the format when the instructor asks for the other one', async () => {
-    const { session, storedAvenue } = await openProject({ avenue: 'scorm' });
+  it('changes the format when the instructor asks for the other one, and rebuilds in the same request', async () => {
+    const { project, builds, session, storedAvenue } = await openProject({ avenue: 'scorm' });
+    const send = async (text: string) => {
+      const turn = session.send({ text, attachments: [] }, { maxSteps: 60, maxBudgetUsd: 5 }, new AbortController().signal);
+      await drain(turn.events);
+      return turn.result;
+    };
 
-    await untilFormatSet(session, 'Change this project to a content topic: a one-page welcome message for students, with no score.');
+    expect((await send('Build a two-question multiple-choice quiz on photosynthesis for first-year biology students.')).error).toBeUndefined();
+    expect(await builds.create(project.id)).toMatchObject({ version: 1, status: 'ready', avenue: 'scorm' });
 
+    const changed = await send("Change this to a content topic. It doesn't need to record a score.");
+    console.log(`Reply: ${changed.text}`);
+    expect(changed.error).toBeUndefined();
     expect(storedAvenue()).toBe('topic');
-  }, 180_000);
+    expect(await builds.create(project.id)).toMatchObject({ version: 2, status: 'ready', avenue: 'topic', qa: { passed: true } });
+  }, 1_200_000);
 
   it('uses an attached PDF and Word document, then a follow-up in a reopened session uses the PDF attached earlier', async () => {
     const { ownerId, project, workspaceDir, files, session } = await openProject();
