@@ -28,6 +28,7 @@ describe('renderProjectInstructions', () => {
     expect(markdown).toContain('headings follow a sequential order');
     expect(markdown).toContain('plain text only');
     expect(markdown).toContain('no markdown headings');
+    expect(markdown).toContain('never as a list');
     expect(markdown).toContain('Leave out file names');
   });
 

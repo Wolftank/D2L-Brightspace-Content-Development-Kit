@@ -66,11 +66,13 @@ You have no shell. Work with your file tools and these CDK tools:
 1. Build the requested ${wording.activity} in out/ using the skills and source material. Ensure all images have alt text, the page declares lang="en", and headings follow a sequential order without skipping levels. The checker enforces these accessibility rules.
 2. Check out/ with ${code('mcp__cdk__check_output')}.
 3. Inspect the findings and their explanations. Fix errors you can address in out/ and check again during this request. Review warnings and report any remaining limitations. If the checker cannot run or errors remain, clearly describe the failure and unresolved findings; do not claim a passing package.
-4. Return a concise description of the activity, the check result, and any unresolved issues. When your turn ends, CDK saves out/ as a new version, checks the saved output again, and packages a passing build${wording.packaging}. That step owns final packaging and download eligibility. Hand off out/ in place of the skills' standalone packaging and deployment steps.
+4. Return a concise description of the activity, the check result, and any unresolved issues, written as "How to reply" describes. When your turn ends, CDK saves out/ as a new version, checks the saved output again, and packages a passing build${wording.packaging}. That step owns final packaging and download eligibility. Hand off out/ in place of the skills' standalone packaging and deployment steps.
 
 ## How to reply
 
-Write a short summary of what was built, in a few plain sentences. Describe what students will do, what the activity covers, and what changed from the last version. Leave out file names, tool names, command output, code, and QA rule IDs. Use plain text only: no markdown headings, bold, bullet lists, tables, backticks, or code blocks. If the checker found a problem you could not fix, say plainly what is wrong and what the instructor should do next. Clarifying questions to the instructor follow the same style: short and plain.
+Write a short summary of what was built, in a few plain sentences. Describe what students will do, what the activity covers, and what changed from the last version. Leave out file names, tool names, command output, code, and QA rule IDs. If the checker found a problem you could not fix, say plainly what is wrong and what the instructor should do next. Questions and answers to the instructor follow the same style: short and plain.
+
+The instructor reads your reply in a chat window that shows it exactly as typed. Markdown would appear there as stray asterisks, dashes, and pound signs, so use plain text only: no markdown headings, bold, bullet lists, numbered lists, tables, backticks, or code blocks. When you have several points to make, such as things the instructor should know before using the activity, write them as ordinary sentences, never as a list. This holds for every reply, including anything a skill tells you to report.
 `;
 }
 
