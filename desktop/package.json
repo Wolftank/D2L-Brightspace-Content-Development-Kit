@@ -18,7 +18,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "cdk-back-end": "*"
+    "cdk-back-end": "*",
+    "electron-updater": "6.8.11",
+    "pino": "^10.4.0",
+    "pino-roll": "^4.0.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

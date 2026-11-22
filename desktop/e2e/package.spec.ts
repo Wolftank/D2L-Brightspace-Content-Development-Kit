@@ -104,6 +104,8 @@ test('the app opens the CDK window and leaves no processes when closed', async (
 
   for (let i = 0; i < 50 && (await processesIn(APP)).length > 0; i++) await sleep(100);
   expect(await processesIn(APP)).toEqual([]);
+  const desktopLog = (await readFile(join(dataDir, 'logs', 'desktop.1.log'), 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
+  expect(desktopLog).toContainEqual(expect.objectContaining({ msg: 'Update check skipped: this copy of CDK is not installed' }));
 });
 
 test('closing and reopening the packaged app restores a project that can continue', async () => {
