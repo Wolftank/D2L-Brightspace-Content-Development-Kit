@@ -285,6 +285,9 @@ const [state, dispatch] = useReducer(projectEventReducer, projectId, readSavedSt
 const previousStorageStateKey = useRef(storageStateKey);
 const skipNextPersist = useRef(false);
 
+// Keep this effect above the stream effect. When the project changes,
+// readSavedState clears last-seq for discarded state before the stream
+// effect reads it to build the ?after= URL.
 useEffect(() => {
   if (previousStorageStateKey.current === storageStateKey) {
     return;
