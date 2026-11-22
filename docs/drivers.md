@@ -30,7 +30,7 @@ Every agent gets the same list, and nothing else. The session request carries th
 | | Allowed | Not loaded |
 |---|---|---|
 | Tools | File tools, reading inside the workspace and writing inside its `out/`; the `cdk` tools | The shell, web browsing and search, subagents, task lists, notebooks, scheduling, worktrees, and every other built-in tool |
-| Skills | The kit's skills for the project's output format: `d2l-scorm-package` and `d2l-tenant-qa` for SCORM, `d2l-content-topic` and `d2l-tenant-qa` for a content topic (`skillsFor` in `back-end/src/kit.ts`) | The agent CLI's own skills, the instructor's personal skills, and skills synced from their Claude account |
+| Skills | The kit's skills for the project: `d2l-scorm-package`, `d2l-content-topic`, and `d2l-tenant-qa`, plus `d2l-experience-router` while the project has no output format (`skillsFor` in `back-end/src/kit.ts`) | The agent CLI's own skills, the instructor's personal skills, and skills synced from their Claude account |
 | MCP servers | `cdk` | The account's outside connectors, `.mcp.json`, and servers from user settings or plugins |
 | Plugins | None | The agent CLI's built-in plugins and the instructor's own plugins |
 | Context | The project instructions | Account details such as name and email, and the agent's auto memory |
@@ -56,7 +56,7 @@ Read from the Agent SDK and CLI documentation and the recorded fixture, 2026-10-
 
 ### Copilot
 
-No driver yet. The equivalents to use: `availableTools` for the tool list, `skillDirectories` pointing at only the format's skill directories, `mcpServers` holding only `cdk`, and `env` on `CopilotClient` built from the same variable list. Which event reports what a session loaded, for the session check, is *unverified*.
+No driver yet. The equivalents to use: `availableTools` for the tool list, `skillDirectories` pointing at only the project's skill directories, `mcpServers` holding only `cdk`, and `env` on `CopilotClient` built from the same variable list. Which event reports what a session loaded, for the session check, is *unverified*.
 
 ## Claude
 
@@ -74,7 +74,7 @@ No driver yet. The equivalents to use: `availableTools` for the tool list, `skil
 
 **Shell, read from the CLI 2.1.274 source, 2026-09-25.** The agent has no shell: `options.tools` lists neither `Bash` nor `PowerShell`, and no rule names them. Leaving the tool out is the only reliable way to keep commands from running. Both tools approve commands they recognize as read-only on their own, in `dontAsk` too (see the addendum above), and `Read(/**)` and `Edit(/**)` bind the file tools, not shell commands, so a command can read and write anything the instructor can, the agent's own sign-in included. Narrower rules are no boundary: `Bash(node *)` matches the literal command text, and `node -e` runs anything.
 
-**Instructions and skills.** Claude reads `CLAUDE.md`, `.claude/skills/`, and `.claude/settings.json` from the workspace when `settingSources: ['project']` is set, so the driver writes the instructions, a copy of the kit's skills for the project's output format, and the permission rules there at every `open`.
+**Instructions and skills.** Claude reads `CLAUDE.md`, `.claude/skills/`, and `.claude/settings.json` from the workspace when `settingSources: ['project']` is set, so the driver writes the instructions, a copy of the project's skills, and the permission rules there at every `open`.
 
 **Reading attachments, read from the CLI bundled with SDK 0.3.274 and its `sdk-tools.d.ts`, 2026-11-15.** The driver lists a turn's attachments by path in the prompt, and the agent opens each with `Read`. `Read` returns PNG and JPG files as images, text as text, and a PDF whole, as a document the model reads page by page, figures included. A Word file is not readable this way, which is why the back end gives the agent its text instead. A PDF has two limits:
 

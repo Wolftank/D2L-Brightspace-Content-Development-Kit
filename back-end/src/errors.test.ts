@@ -46,6 +46,7 @@ describe('errors an instructor can see', () => {
       build_not_found: 'send_again',
       turn_not_found: 'send_again',
       turn_active: 'wait',
+      avenue_changing: 'wait',
       build_not_ready: 'try_later',
       build_failed: 'ask_for_fix',
       build_incomplete: 'send_again',

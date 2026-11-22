@@ -1,9 +1,11 @@
 import { join } from 'node:path';
+import type { BuildableAvenue } from '@cdk/contract';
 import type { AgentDriver, AgentSession, ToolServerSpec } from '../agent/AgentDriver.js';
 import { renderProjectInstructions } from '../agent/instructions.js';
 import type { ProjectsRepo } from '../db/projects.js';
+import type { Project } from '../db/schema.js';
 import { NotFound } from '../errors.js';
-import { buildableAvenue, KIT_DIR, skillsFor } from '../kit.js';
+import { KIT_DIR, pickedAvenue, skillsFor } from '../kit.js';
 import { log } from '../log.js';
 import type { WorkspaceService } from '../services/workspaces.js';
 
@@ -26,8 +28,9 @@ export interface SessionServiceDeps {
 export interface SessionService {
   /**
    * Returns the project's open session, or opens one in its workspace with the
-   * Project's stored session id. The session is busy until `release` or
-   * `close`; another `acquire` for the project rejects until then.
+   * Project's stored session id. An open session for another avenue than the
+   * project now has is closed and opened again. The session is busy until
+   * `release` or `close`; another `acquire` for the project rejects until then.
    *
    * @throws NotFound when the project does not exist.
    * @throws WorkspaceMissing when the project's workspace is not provisioned, before a session is opened.
@@ -50,6 +53,8 @@ export interface SessionService {
 interface OpenSession {
   session: AgentSession;
   savedSessionId: string | null;
+  /** The project's avenue when the session opened, which its instructions and skills are for. */
+  avenue: BuildableAvenue | null;
   idleTimer?: ReturnType<typeof setTimeout>;
 }
 
@@ -57,11 +62,15 @@ export function createSessionService(deps: SessionServiceDeps): SessionService {
   const openSessions = new Map<string, OpenSession>();
   const busy = new Set<string>();
 
-  async function openSession(projectId: string): Promise<OpenSession> {
+  function projectById(projectId: string): Project {
     const project = deps.projects.getById(projectId);
     if (!project) throw new NotFound('Project not found');
+    return project;
+  }
 
-    const avenue = buildableAvenue(project);
+  async function openSession(projectId: string): Promise<OpenSession> {
+    const project = projectById(projectId);
+    const avenue = pickedAvenue(project);
     const workspaceDir = await deps.workspaces.locate(projectId);
     const session = await deps.driver.open({
       workspaceDir,
@@ -71,7 +80,7 @@ export function createSessionService(deps: SessionServiceDeps): SessionService {
       skills: skillsFor(avenue),
       tools: deps.tools(projectId),
     });
-    return { session, savedSessionId: project.sessionId };
+    return { session, savedSessionId: project.sessionId, avenue };
   }
 
   function saveSessionId(projectId: string, entry: OpenSession): void {
@@ -82,18 +91,22 @@ export function createSessionService(deps: SessionServiceDeps): SessionService {
     }
   }
 
-  async function close(projectId: string): Promise<void> {
-    const entry = openSessions.get(projectId);
-    if (!entry) return;
-
+  async function closeSession(projectId: string, entry: OpenSession): Promise<void> {
     openSessions.delete(projectId);
-    busy.delete(projectId);
     clearTimeout(entry.idleTimer);
     try {
       saveSessionId(projectId, entry);
     } finally {
       await entry.session.close();
     }
+  }
+
+  async function close(projectId: string): Promise<void> {
+    const entry = openSessions.get(projectId);
+    if (!entry) return;
+
+    busy.delete(projectId);
+    await closeSession(projectId, entry);
   }
 
   function closeIdle(projectId: string): void {
@@ -113,7 +126,8 @@ export function createSessionService(deps: SessionServiceDeps): SessionService {
         const live = openSessions.get(projectId);
         if (live) {
           clearTimeout(live.idleTimer);
-          return live.session;
+          if (live.avenue === pickedAvenue(projectById(projectId))) return live.session;
+          await closeSession(projectId, live);
         }
         const entry = await openSession(projectId);
         openSessions.set(projectId, entry);

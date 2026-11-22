@@ -21,6 +21,7 @@ export function fakeDeps(used: Partial<Deps> = {}): Deps {
   return {
     users: { ensureLocalUser: () => FAKE_USER, get: (id) => (id === FAKE_USER.id ? FAKE_USER : undefined) },
     projects: { create: unused, get: unused, list: unused },
+    avenues: { setForOwner: unused, changing: () => false },
     turns: { start: unused, cancel: unused },
     messages: { list: unused },
     builds: { get: unused, download: unused, previewFile: unused },

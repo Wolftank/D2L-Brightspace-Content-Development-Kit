@@ -17,6 +17,7 @@ import { fakeDeps, idleRunner } from '../test/deps.js';
 import { KIT_DIR } from '../kit.js';
 import { createEventService } from '../pipeline/events.js';
 import { createBuildService } from '../services/builds.js';
+import { createAvenueService } from '../services/avenues.js';
 import { createProjectService } from '../services/projects.js';
 import { createTurnService } from '../services/turns.js';
 import { createWorkspaceService, type WorkspaceService } from '../services/workspaces.js';
@@ -39,6 +40,7 @@ describe('project routes', () => {
         builds: buildsRepo,
         turns: createTurnsRepo(db),
       }),
+      avenues: createAvenueService({ projects: projectsRepo, workspaces: workspaceService, turns: createTurnsRepo(db), events }),
       builds: createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces: workspaceService, events }),
       events,
       turns: createTurnService({ projects: projectsRepo, turns: createTurnsRepo(db), files: createFilesRepo(db), runner: idleRunner }),
@@ -64,18 +66,19 @@ describe('project routes', () => {
   });
 
   describe('POST /api/projects', () => {
-    it('creates a SCORM project with a provisioned workspace, trimming the title', async () => {
+    it('creates a project with no avenue and an empty out/, trimming the title', async () => {
       const res = await request(app()).post('/api/projects').send({ title: '  Cell division practice  ' });
 
       expect(res.status).toBe(201);
       expect(res.body.project).toMatchObject({
         ownerId: owner.id,
         title: 'Cell division practice',
-        avenue: 'scorm',
+        avenue: null,
         targetCourse: null,
         sessionId: null,
       });
-      await expect(workspaces.locate(res.body.project.id)).resolves.toBe(workspaces.pathFor(res.body.project.id));
+      const workspaceDir = await workspaces.locate(res.body.project.id);
+      expect(await fs.readdir(join(workspaceDir, 'out'))).toEqual([]);
     });
 
     it('accepts an explicit scorm avenue and ignores fields V1 does not take', async () => {
@@ -113,12 +116,73 @@ describe('project routes', () => {
     it('leaves no project or workspace behind when workspace setup fails', async () => {
       const brokenKit = createWorkspaceService({ dataDir, kitDir: join(dataDir, 'no-such-kit') });
 
-      const res = await request(app(brokenKit)).post('/api/projects').send({ title: 'Cell division practice' });
+      const res = await request(app(brokenKit)).post('/api/projects').send({ title: 'Cell division practice', avenue: 'scorm' });
 
       expect(res.status).toBe(500);
       expect(res.body.error.code).toBe('internal_error');
       expect(db.select().from(projectsTable).all()).toEqual([]);
       await expect(fs.readdir(join(dataDir, 'projects'))).resolves.toEqual([]);
+    });
+  });
+
+  describe('PATCH /api/projects/:projectId', () => {
+    async function createScorm(): Promise<string> {
+      return (await request(app()).post('/api/projects').send({ title: 'Cell division practice', avenue: 'scorm' })).body.project.id;
+    }
+
+    it("changes the avenue and replaces out/ with the new avenue's starter", async () => {
+      const projectId = await createScorm();
+      const outDir = join(workspaces.pathFor(projectId), 'out');
+      await fs.writeFile(join(outDir, 'draft.html'), '<p>draft</p>');
+
+      const res = await request(app()).patch(`/api/projects/${projectId}`).send({ avenue: 'topic' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.project).toMatchObject({ id: projectId, avenue: 'topic' });
+      expect(projectsRepo.getById(projectId)?.avenue).toBe('topic');
+      expect(await fs.readdir(outDir)).toEqual(['data.js', 'index.html']);
+    });
+
+    it('refuses while a turn is active, for an avenue CDK cannot build, and for an unknown project', async () => {
+      const projectId = await createScorm();
+      const unbuildable = await request(app()).patch(`/api/projects/${projectId}`).send({ avenue: 'widget' });
+      const unknown = await request(app()).patch('/api/projects/no-such-project').send({ avenue: 'topic' });
+      insertTurn('turn-1', projectId, 'running');
+      const busy = await request(app()).patch(`/api/projects/${projectId}`).send({ avenue: 'topic' });
+
+      expect(unbuildable.body.error).toMatchObject({ code: 'invalid_request' });
+      expect(unknown.body.error).toMatchObject({ code: 'not_found' });
+      expect(busy.status).toBe(409);
+      expect(busy.body.error).toMatchObject({ code: 'turn_active', details: { turnId: 'turn-1' } });
+      expect(projectsRepo.getById(projectId)?.avenue).toBe('scorm');
+    });
+
+    it('refuses a message and a second change while a change is at work, and takes the message once it ends', async () => {
+      const projectId = await createScorm();
+      const message = { content: [{ type: 'text', text: 'Make it shorter.' }] };
+      let copying = false;
+      let finishCopy!: () => void;
+      const copyHeld = new Promise<void>((resolve) => { finishCopy = resolve; });
+      const server = app({
+        ...workspaces,
+        startOutput: async (id, avenue) => {
+          copying = true;
+          await copyHeld;
+          await workspaces.startOutput(id, avenue);
+        },
+      });
+
+      const change = request(server).patch(`/api/projects/${projectId}`).send({ avenue: 'topic' }).then((res) => res);
+      await vi.waitFor(() => expect(copying).toBe(true));
+      const during = await request(server).post(`/api/projects/${projectId}/messages`).send(message);
+      const second = await request(server).patch(`/api/projects/${projectId}`).send({ avenue: 'scorm' });
+      finishCopy();
+
+      expect(during.status).toBe(409);
+      expect(during.body.error).toMatchObject({ code: 'avenue_changing', nextStep: 'wait' });
+      expect(second.body.error).toMatchObject({ code: 'avenue_changing' });
+      expect((await change).body.project).toMatchObject({ avenue: 'topic' });
+      expect((await request(server).post(`/api/projects/${projectId}/messages`).send(message)).status).toBe(202);
     });
   });
 

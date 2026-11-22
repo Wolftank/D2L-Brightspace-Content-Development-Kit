@@ -30,9 +30,13 @@ export interface WorkspaceService {
 
   /**
    * Provisions a fresh workspace: an empty `files/` for instructor uploads,
-   * the avenue's starter copied into `out/`, and the sibling `builds/` directory. Writes nothing agent-specific.
+   * the avenue's starter copied into `out/`, and the sibling `builds/` directory.
+   * With no avenue, `out/` is empty. Writes nothing agent-specific.
    */
-  create(projectId: string, avenue: BuildableAvenue): Promise<void>;
+  create(projectId: string, avenue: BuildableAvenue | null): Promise<void>;
+
+  /** Replaces `out/` with the avenue's starter. */
+  startOutput(projectId: string, avenue: BuildableAvenue): Promise<void>;
 
   /** Removes the project's directory, its workspace and builds included. */
   remove(projectId: string): Promise<void>;
@@ -43,6 +47,9 @@ export interface WorkspaceService {
    * delete, or rename under it. Never affected by file mtimes.
    */
   hashOutput(projectId: string): Promise<string>;
+
+  /** What `hashOutput` gives for an `out/` holding only the avenue's starter. */
+  starterHash(avenue: BuildableAvenue): Promise<string>;
 
   /**
    * Copies `out/` into `builds/<version>/` and returns that path. Refuses to
@@ -86,36 +93,34 @@ export function createWorkspaceService(deps: WorkspaceServiceDeps): WorkspaceSer
     return workspaceDir;
   }
 
-  async function create(projectId: string, avenue: BuildableAvenue): Promise<void> {
-    const starterDir = join(kitDir, 'skills', AVENUE_SKILL[avenue], 'assets', 'starter');
+  function starterDir(avenue: BuildableAvenue): string {
+    return join(kitDir, 'skills', AVENUE_SKILL[avenue], 'assets', 'starter');
+  }
+
+  async function create(projectId: string, avenue: BuildableAvenue | null): Promise<void> {
     const workspaceDir = pathFor(projectId);
+    const outDir = join(workspaceDir, 'out');
     await fs.mkdir(join(workspaceDir, 'files'), { recursive: true });
-    await copyWithRetry(starterDir, join(workspaceDir, 'out'));
+    if (avenue) {
+      await copyWithRetry(starterDir(avenue), outDir);
+    } else {
+      await fs.mkdir(outDir, { recursive: true });
+    }
     await fs.mkdir(buildsDir(projectId), { recursive: true });
   }
 
+  async function startOutput(projectId: string, avenue: BuildableAvenue): Promise<void> {
+    const outDir = join(await locate(projectId), 'out');
+    await removeWithRetry(outDir);
+    await copyWithRetry(starterDir(avenue), outDir);
+  }
+
   async function remove(projectId: string): Promise<void> {
-    await fs.rm(projectDir(projectId), {
-      recursive: true,
-      force: true,
-      maxRetries: LOCK_RETRY_ATTEMPTS - 1,
-      retryDelay: LOCK_RETRY_DELAY_MS,
-    });
+    await removeWithRetry(projectDir(projectId));
   }
 
   async function hashOutput(projectId: string): Promise<string> {
-    const workspaceDir = await locate(projectId);
-    const outDir = join(workspaceDir, 'out');
-    const relPaths = (await collectRelativePaths(outDir)).sort();
-
-    const hash = createHash('sha256');
-    for (const rel of relPaths) {
-      hash.update(rel);
-      hash.update('\0');
-      hash.update(await fs.readFile(join(outDir, rel)));
-      hash.update('\0');
-    }
-    return hash.digest('hex');
+    return hashDir(join(await locate(projectId), 'out'));
   }
 
   async function copyOutput(projectId: string, version: string): Promise<string> {
@@ -128,7 +133,41 @@ export function createWorkspaceService(deps: WorkspaceServiceDeps): WorkspaceSer
     return dest;
   }
 
-  return { pathFor, locate, buildPathFor, create, remove, hashOutput, copyOutput };
+  return {
+    pathFor,
+    locate,
+    buildPathFor,
+    create,
+    startOutput,
+    remove,
+    hashOutput,
+    starterHash: (avenue) => hashDir(starterDir(avenue)),
+    copyOutput,
+  };
+}
+
+/** A content hash over the sorted relative paths and contents of `dir`. */
+async function hashDir(dir: string): Promise<string> {
+  const relPaths = (await collectRelativePaths(dir)).sort();
+
+  const hash = createHash('sha256');
+  for (const rel of relPaths) {
+    hash.update(rel);
+    hash.update('\0');
+    hash.update(await fs.readFile(join(dir, rel)));
+    hash.update('\0');
+  }
+  return hash.digest('hex');
+}
+
+/** Removes `path` and everything under it, retrying past transient Windows locks. */
+async function removeWithRetry(path: string): Promise<void> {
+  await fs.rm(path, {
+    recursive: true,
+    force: true,
+    maxRetries: LOCK_RETRY_ATTEMPTS - 1,
+    retryDelay: LOCK_RETRY_DELAY_MS,
+  });
 }
 
 async function pathExists(path: string): Promise<boolean> {

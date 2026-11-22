@@ -8,17 +8,19 @@ import { createEventsRepo } from '../db/events.js';
 import { createFilesRepo } from '../db/files.js';
 import { createProjectsRepo } from '../db/projects.js';
 import { testDb } from '../db/test-db.js';
+import { createTurnsRepo } from '../db/turns.js';
 import { createUsersRepo } from '../db/users.js';
 import { KIT_DIR, skillsFor } from '../kit.js';
 import { createEventService } from '../pipeline/events.js';
 import { log } from '../log.js';
+import { createAvenueService } from '../services/avenues.js';
 import { createBuildService } from '../services/builds.js';
 import { attachmentFor, createFileService } from '../services/files.js';
 import { createWorkspaceService } from '../services/workspaces.js';
 import { createCdkTools } from '../tools/index.js';
 import { createClaudeAgentDriver } from './claude.js';
 import { renderProjectInstructions } from './instructions.js';
-import type { AgentEvent, SessionRequest, ToolServerSpec } from './AgentDriver.js';
+import type { AgentEvent, AgentSession, SessionRequest, ToolServerSpec, TurnResult } from './AgentDriver.js';
 
 const driver = createClaudeAgentDriver();
 
@@ -250,12 +252,14 @@ describe('ClaudeAgentDriver, live SDK, in a provisioned workspace', () => {
     };
   }
 
-  /** Opens a session for a new project of `avenue`, with `prepare` run on its workspace first. */
-  async function openProject({ avenue = 'scorm', prepare = async () => {} }: { avenue?: BuildableAvenue; prepare?: (outDir: string) => Promise<void> } = {}) {
+  /** Opens a session for a new project of `avenue`, or with none, with `prepare` run on its workspace first. */
+  async function openProject({ avenue = 'scorm', prepare = async () => {} }: { avenue?: BuildableAvenue | null; prepare?: (outDir: string) => Promise<void> } = {}) {
     const db = testDb();
     const projects = createProjectsRepo(db);
     const workspaces = createWorkspaceService({ dataDir });
-    const builds = createBuildService({ builds: createBuildsRepo(db), projects, workspaces, events: createEventService(createEventsRepo(db)) });
+    const events = createEventService(createEventsRepo(db));
+    const builds = createBuildService({ builds: createBuildsRepo(db), projects, workspaces, events });
+    const avenues = createAvenueService({ projects, workspaces, turns: createTurnsRepo(db), events });
     const ownerId = createUsersRepo(db).ensureLocalUser().id;
     const project = projects.create({ id: 'live-project', ownerId, title: 'Photosynthesis check', avenue });
     await workspaces.create(project.id, avenue);
@@ -268,13 +272,26 @@ describe('ClaudeAgentDriver, live SDK, in a provisioned workspace', () => {
       instructions: renderProjectInstructions({ project, avenue, workspaceDir }),
       skillsDir: join(KIT_DIR, 'skills'),
       skills: skillsFor(avenue),
-      tools: recordingChecks(createCdkTools({ projects, workspaces, builds }, project.id), checks),
+      tools: recordingChecks(createCdkTools({ projects, avenues, workspaces, builds }, project.id), checks),
     });
     const files = createFileService({ projects, files: createFilesRepo(db), workspaces });
-    return { ownerId, project, workspaces, workspaceDir, builds, files, checks, session };
+    const storedAvenue = () => projects.getById(project.id)?.avenue;
+    return { ownerId, project, workspaces, workspaceDir, builds, files, checks, session, storedAvenue };
   }
 
-  it('passes the session check with the allowed tools and the SCORM skills, or the turn would fail with agent_unrestricted', async () => {
+  /** Runs a turn to its end, or stops it once the agent's `set_format` call has finished. */
+  async function untilFormatSet(session: AgentSession, text: string): Promise<TurnResult> {
+    const controller = new AbortController();
+    const turn = session.send({ text, attachments: [] }, { maxSteps: 12, maxBudgetUsd: 1 }, controller.signal);
+    let setting: string | undefined;
+    for await (const event of turn.events) {
+      if (event.kind === 'tool_start' && event.name === 'mcp__cdk__set_format') setting = event.callId;
+      if (event.kind === 'tool_end' && event.callId === setting) controller.abort();
+    }
+    return turn.result;
+  }
+
+  it("passes the session check with the allowed tools and the project's skills, or the turn would fail with agent_unrestricted", async () => {
     const { session } = await openProject();
 
     const turn = session.send(
@@ -351,8 +368,8 @@ describe('ClaudeAgentDriver, live SDK, in a provisioned workspace', () => {
     expect(await builds.create(project.id)).toMatchObject({ status: 'ready', qa: { passed: true } });
   }, 900_000);
 
-  it('builds a content topic from the starter that passes the QA gate in topic mode, then version 2 for a follow-up', async () => {
-    const { project, builds, checks, session } = await openProject({ avenue: 'topic' });
+  it('builds a content topic from the starter that passes the QA gate in topic mode, then version 2 for a follow-up, keeping its format', async () => {
+    const { project, builds, checks, session, storedAvenue } = await openProject({ avenue: 'topic' });
 
     const first = session.send(
       {
@@ -364,7 +381,7 @@ describe('ClaudeAgentDriver, live SDK, in a provisioned workspace', () => {
       { maxSteps: 60, maxBudgetUsd: 5 },
       new AbortController().signal,
     );
-    await drain(first.events);
+    const firstEvents = await drain(first.events);
     expect((await first.result).error).toBeUndefined();
     expect(checks.length).toBeGreaterThan(0);
     expect(await builds.create(project.id)).toMatchObject({ version: 1, status: 'ready', avenue: 'topic', qa: { passed: true } });
@@ -374,8 +391,80 @@ describe('ClaudeAgentDriver, live SDK, in a provisioned workspace', () => {
       { maxSteps: 30, maxBudgetUsd: 3 },
       new AbortController().signal,
     );
-    await drain(second.events);
+    const secondEvents = await drain(second.events);
     expect((await second.result).error).toBeUndefined();
+    expect(await builds.create(project.id)).toMatchObject({ version: 2, status: 'ready', avenue: 'topic', qa: { passed: true } });
+    expect(storedAvenue()).toBe('topic');
+    expect([...firstEvents, ...secondEvents].filter((event) => event.kind === 'tool_start' && event.name === 'mcp__cdk__set_format')).toEqual([]);
+  }, 1_200_000);
+
+  it('picks a SCORM package for a request that needs a gradebook score, builds it, and says why', async () => {
+    const { project, builds, session, storedAvenue } = await openProject({ avenue: null });
+
+    const turn = session.send(
+      {
+        text: 'Build a three-question multiple-choice quiz on photosynthesis. Each student\'s best score should go to the gradebook on its own.',
+        attachments: [],
+      },
+      { maxSteps: 60, maxBudgetUsd: 5 },
+      new AbortController().signal,
+    );
+    await drain(turn.events);
+    const result = await turn.result;
+
+    console.log(`Reply: ${result.text}`);
+    expect(result.error).toBeUndefined();
+    expect(storedAvenue()).toBe('scorm');
+    expect(result.text).toMatch(/SCORM/i);
+    expect(result.text).not.toMatch(/\*\*|`|^#|^\s*([-*]|\d+\.)\s/m);
+    expect(await builds.create(project.id)).toMatchObject({ status: 'ready', avenue: 'scorm', qa: { passed: true } });
+  }, 900_000);
+
+  it('picks a content topic for a request that needs different student and instructor views', async () => {
+    const { session, storedAvenue } = await openProject({ avenue: null });
+
+    await untilFormatSet(session, 'Build a lab safety checklist for first-year chemistry students, with notes for running the first lab that only instructors see.');
+
+    expect(storedAvenue()).toBe('topic');
+  }, 180_000);
+
+  it('asks one short question when the request does not settle the format, then picks from the answer', async () => {
+    const { session, storedAvenue } = await openProject({ avenue: null });
+
+    const asked = await untilFormatSet(session, 'Build a practice quiz on photosynthesis for my first-year biology class.');
+    console.log(`Question: ${asked.text}`);
+    expect(asked.status).toBe('completed');
+    expect(storedAvenue()).toBeNull();
+    expect(asked.text).toContain('?');
+
+    await untilFormatSet(session, 'Yes, the score has to go to the gradebook automatically.');
+    expect(storedAvenue()).toBe('scorm');
+  }, 300_000);
+
+  it('leaves the format unpicked for a request that is not for an activity', async () => {
+    const { session, storedAvenue } = await openProject({ avenue: null });
+
+    const result = await untilFormatSet(session, 'What is the difference between the two formats you can build? Answer in two sentences.');
+
+    expect(result.status).toBe('completed');
+    expect(storedAvenue()).toBeNull();
+  }, 180_000);
+
+  it('changes the format when the instructor asks for the other one, and rebuilds in the same request', async () => {
+    const { project, builds, session, storedAvenue } = await openProject({ avenue: 'scorm' });
+    const send = async (text: string) => {
+      const turn = session.send({ text, attachments: [] }, { maxSteps: 60, maxBudgetUsd: 5 }, new AbortController().signal);
+      await drain(turn.events);
+      return turn.result;
+    };
+
+    expect((await send('Build a two-question multiple-choice quiz on photosynthesis for first-year biology students.')).error).toBeUndefined();
+    expect(await builds.create(project.id)).toMatchObject({ version: 1, status: 'ready', avenue: 'scorm' });
+
+    const changed = await send("Change this to a content topic. It doesn't need to record a score.");
+    console.log(`Reply: ${changed.text}`);
+    expect(changed.error).toBeUndefined();
+    expect(storedAvenue()).toBe('topic');
     expect(await builds.create(project.id)).toMatchObject({ version: 2, status: 'ready', avenue: 'topic', qa: { passed: true } });
   }, 1_200_000);
 

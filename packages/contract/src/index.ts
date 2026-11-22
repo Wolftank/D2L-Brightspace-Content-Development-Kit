@@ -252,6 +252,15 @@ export interface CreateProjectResponse {
   project: Project;
 }
 
+/** Changes a project's avenue, which replaces its working output with the avenue's starter. Earlier builds stay. */
+export interface UpdateProjectRequest {
+  avenue: BuildableAvenue;
+}
+
+export interface UpdateProjectResponse {
+  project: Project;
+}
+
 export interface ProjectResponse {
   project: Project;
   builds: BuildSummary[];

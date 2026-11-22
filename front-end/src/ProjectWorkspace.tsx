@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiError, cancelTurn, createProject, listProjectFiles, sendMessage, uploadProjectFile } from './api/client';
+import { ApiError, cancelTurn, createProject, listProjectFiles, sendMessage, updateProject, uploadProjectFile } from './api/client';
 import type { Build, BuildableAvenue, ContentBlock, Message, Project, ProjectFile } from '@cdk/contract';
 import { useAgentSignIn } from './hooks/useAgentSignIn';
 import { useProjectEvents } from './hooks/useProjectEvents';
@@ -24,8 +24,13 @@ function messageFiles(message: Message) {
   return message.content.filter(block => block.type === 'file');
 }
 
-function BuildPanel({ build, turn, statusLines, connection, outcome, disabled, onAskForFix, onSendAgain, onEdit, onNewProject }: {
+/** Each format as a sentence names it. */
+const A_FORMAT: Record<BuildableAvenue, string> = { scorm: 'a SCORM package', topic: 'a content topic' };
+
+function BuildPanel({ build, projectAvenue, turn, statusLines, connection, outcome, disabled, onAskForFix, onSendAgain, onEdit, onNewProject }: {
   build: Build | null;
+  /** The project's format, which a build made before a format change differs from. */
+  projectAvenue: BuildableAvenue | null;
   turn: ProjectEventState['turn'];
   statusLines: ProjectEventState['statusLines'];
   connection: ConnectionStatus;
@@ -45,6 +50,8 @@ function BuildPanel({ build, turn, statusLines, connection, outcome, disabled, o
       <article className={`build-result build-${build.status}`} aria-labelledby="build-result-title">
         <p className="result-label">Version {build.version}</p>
         <h3 id="build-result-title">{build.status === 'ready' ? 'Ready to download' : build.status === 'failed' ? 'QA needs attention' : 'Build is being checked'}</h3>
+        {projectAvenue && (build.avenue === 'scorm' || build.avenue === 'topic') && build.avenue !== projectAvenue &&
+          <p>{`This version is ${A_FORMAT[build.avenue]}. Send a request to rebuild it as ${A_FORMAT[projectAvenue]}.`}</p>}
         {build.error && <ErrorNotice failure={readFailure(build.error)} disabled={disabled} onAskForFix={onAskForFix} onSendAgain={onSendAgain} onEdit={onEdit} onNewProject={onNewProject} />}
         {!!build.qa?.findings.length && <ul className="findings">{build.qa.findings.map((finding, index) =>
           <li key={index}><strong>{finding.severity === 'warn' ? 'WARNING' : 'ERROR'}</strong> {finding.message}{finding.because && <p>{finding.because}</p>}</li>)}</ul>}
@@ -67,6 +74,49 @@ const FORMATS: Record<FormatChoice, { name: string; description: string }> = {
   scorm: { name: 'SCORM package', description: 'Can record a grade in D2L.' },
   topic: { name: 'Content topic', description: 'Can show students and instructors different views.' },
 };
+
+const BUILDABLE_AVENUES: BuildableAvenue[] = ['scorm', 'topic'];
+
+/** The open project's format, as a menu that changes it. Changing a format that is set asks first. */
+function FormatSetting({ avenue, disabled, onChange }: {
+  avenue: BuildableAvenue | null;
+  disabled: boolean;
+  onChange: (avenue: BuildableAvenue) => Promise<void>;
+}) {
+  const [asking, setAsking] = useState<BuildableAvenue | null>(null);
+  const [error, setError] = useState('');
+  const menu = useRef<HTMLSelectElement>(null);
+
+  async function change(next: BuildableAvenue) {
+    setAsking(null); setError('');
+    try {
+      await onChange(next);
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : 'Try again.');
+    }
+  }
+
+  function choose(next: string) {
+    if (next !== 'scorm' && next !== 'topic') return;
+    if (next === avenue) setAsking(null);
+    else if (avenue) setAsking(next);
+    else void change(next);
+  }
+
+  return <div className="format-setting">
+    <label htmlFor="project-format">Format</label>
+    <select ref={menu} id="project-format" value={asking ?? avenue ?? 'auto'} disabled={disabled} onChange={event => choose(event.target.value)}>
+      {!avenue && <option value="auto">{FORMATS.auto.name}</option>}
+      {BUILDABLE_AVENUES.map(value => <option key={value} value={value}>{FORMATS[value].name}</option>)}
+    </select>
+    {asking && <div className="format-confirm" role="group" aria-label="Change format">
+      <p role="status">{`Change to ${FORMATS[asking].name}? The activity starts over in that format. Work that isn't in a version yet is lost. Your earlier versions stay.`}</p>
+      <button type="button" disabled={disabled} onClick={() => void change(asking)}>Change format</button>
+      <button type="button" className="format-keep" onClick={() => { setAsking(null); menu.current?.focus(); }}>Cancel</button>
+    </div>}
+    {error && <p className="error" role="alert">Unable to change the format. {error}</p>}
+  </div>;
+}
 
 export function ProjectWorkspace({ initialProject = null, initialTurnId }: { initialProject?: Project | null; initialTurnId?: string }) {
   const [project, setProject] = useState<Project | null>(initialProject);
@@ -95,7 +145,8 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
   const activeTurnId = pendingTurn !== null && turn.id !== pendingTurn && awaitingTurn
     ? pendingTurn : turn.status === 'running' ? turn.id : null;
   const isBuilding = sending || activeTurnId !== null;
-  const cannotSend = isBuilding || !agent.ready;
+  const [savingFormat, setSavingFormat] = useState(false);
+  const cannotSend = isBuilding || savingFormat || !agent.ready;
   const activeStop = stopAttempt?.turnId === activeTurnId ? stopAttempt : null;
   const stopping = activeStop !== null && !activeStop.error;
   const latestBuild = [...builds].sort((a, b) => b.version - a.version)[0] ?? null;
@@ -103,8 +154,9 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
   const latestAgent = messages.filter(message => message.role === 'agent').at(-1);
   const hasMessages = messages.length > 0 || streamingMessages.length > 0;
   const chatHistory = useRef<HTMLDivElement>(null);
-  const projectAvenue = updatedProject && updatedProject.id === project?.id ? updatedProject.avenue : project?.avenue;
-  const format = projectAvenue === 'scorm' || projectAvenue === 'topic' ? FORMATS[projectAvenue].name : null;
+  const latestProject = updatedProject && project && updatedProject.id === project.id && updatedProject.updatedAt >= project.updatedAt ? updatedProject : project;
+  const projectAvenue = latestProject?.avenue === 'scorm' || latestProject?.avenue === 'topic' ? latestProject.avenue : null;
+  const format = projectAvenue ? FORMATS[projectAvenue].name : null;
 
   useEffect(() => { sessionStorage.setItem(draftKey, requestText); }, [draftKey, requestText]);
   useEffect(() => { if (agent.confirmed) messageBox.current?.focus(); }, [agent.confirmed]);
@@ -169,6 +221,20 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
     }
   }
 
+  async function changeFormat(next: BuildableAvenue) {
+    if (!project) return;
+    const startsOver = projectAvenue !== null;
+    setSavingFormat(true);
+    try {
+      setProject((await updateProject(project.id, { avenue: next })).project);
+    } finally {
+      setSavingFormat(false);
+    }
+    if (!startsOver) return;
+    setRequestText(current => current.trim() ? current : 'Rebuild this activity as ' + A_FORMAT[next] + '.');
+    messageBox.current?.focus();
+  }
+
   function askForFix() {
     setRequestText(current => current.trim() ? current : 'Please fix the problems reported by the QA check' + (latestBuild ? ' in build ' + latestBuild.version : '') + '.');
     messageBox.current?.focus();
@@ -230,7 +296,10 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
     <AppHeader />
     <section className="intro" aria-labelledby="page-title">
       <p className="workspace-eyebrow">{!project ? 'Course material workspace' : format ? `Project · ${format}` : 'Project'}</p>
-      <h1 id="page-title">{project?.title ?? 'Create an activity'}</h1>
+      <div className="title-row">
+        <h1 id="page-title">{project?.title ?? 'Create an activity'}</h1>
+        {project && <FormatSetting key={project.id} avenue={projectAvenue} disabled={isBuilding || savingFormat} onChange={changeFormat} />}
+      </div>
     </section>
     <div className="workspace">
       <section className="card chat-panel" aria-labelledby="chat-title" tabIndex={0}>
@@ -291,7 +360,7 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
           {error && <ErrorNotice failure={error} disabled={cannotSend} onSendAgain={() => void submitRequest(requestText, attachments)} onEdit={() => messageBox.current?.focus()} onNewProject={startNewProject} onAskForFix={askForFix} onSignIn={() => void agent.start()} />}
         </form>
       </section>
-      <BuildPanel build={latestBuild} turn={turn} statusLines={statusLines} connection={connection} outcome={outcomes[turn.id ?? '']?.message} disabled={isBuilding} onAskForFix={askForFix}
+      <BuildPanel build={latestBuild} projectAvenue={projectAvenue} turn={turn} statusLines={statusLines} connection={connection} outcome={outcomes[turn.id ?? '']?.message} disabled={isBuilding} onAskForFix={askForFix}
         onSendAgain={() => { const original = messages.find(message => message.role === 'instructor' && message.turnId === latestBuild?.turnId); if (original) void submitRequest(messageText(original), [], messageFiles(original)); }}
         onEdit={() => messageBox.current?.focus()} onNewProject={startNewProject} />
       <PreviewPanel build={readyBuild} />

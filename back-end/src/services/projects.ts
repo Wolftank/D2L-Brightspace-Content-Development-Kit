@@ -10,7 +10,8 @@ import type { WorkspaceService } from './workspaces.js';
 
 export interface CreateProjectInput {
   title: string;
-  avenue: BuildableAvenue;
+  /** Omitted for a project whose avenue the agent picks. */
+  avenue?: BuildableAvenue;
 }
 
 export interface ProjectServiceDeps {
@@ -38,7 +39,7 @@ export function createProjectService(deps: ProjectServiceDeps): ProjectService {
     async create(ownerId, { title, avenue }) {
       const id = randomUUID();
       try {
-        await deps.workspaces.create(id, avenue);
+        await deps.workspaces.create(id, avenue ?? null);
         return toApi(deps.projects.create({ id, ownerId, title, avenue }));
       } catch (err) {
         await deps.workspaces.remove(id).catch((removeErr: unknown) => {
@@ -73,6 +74,6 @@ function toSummary({ id, version, status, createdAt }: Build): BuildSummary {
   return { id, version, status, createdAt };
 }
 
-function toApi(project: Project): ApiProject {
+export function toApi(project: Project): ApiProject {
   return { ...project, targetCourse: null };
 }
