@@ -24,10 +24,14 @@ background is `docs/TILT_UDL_Reference.docx` in the kit.
 - **After every build or change**, once the activity is finished and checked,
   before you reply. Look at the activity in `out/` as students will see it.
 - **An attached assignment counts too.** When the instructor attached an
-  assignment as source material, look at it as well. Criteria the assignment
-  never states are a gap even if the activity is fine.
+  assignment as source material, check it for each TILT element on its own,
+  as students will read it. Each element it never states is a gap, even when
+  the activity you built is fine, such as a practice quiz whose answers are
+  clear while the assignment it prepares for names no criteria.
 - **A direct request**, such as "what would you improve in this assignment?",
-  gets an answer in the chat that follows the same steps. Record nothing and
+  gets an answer in the chat that follows the same steps: at most three
+  suggestions, most useful first, each with its reason, written as ordinary
+  sentences with no list, as your reply rules require. Record nothing and
   build nothing for it.
 
 ---
@@ -44,6 +48,10 @@ them, before they start:
 | `Purpose` | What skill or knowledge the work builds, why it matters for the course, and how it carries beyond it |
 | `Task` | Concrete steps for what to do and how, and the format to hand in |
 | `Criteria` | The named traits that separate strong work from weak, before they submit, not only as a rubric after grading |
+
+An element counts as stated once students can find it in student-facing
+words. A stated element is done: make no suggestion about it, not even to add
+detail such as rubric levels, examples, or more steps.
 
 Having a due date and a grade weight is not the same as stating a purpose.
 Reasoning that lives only in the instructor's message or in instructor-only
@@ -70,8 +78,9 @@ An essay is not a problem; an objective that only an essay can show is.
    has already seen each of them and can ask for any in the chat. Never repeat
    one, in the same or different words, and never suggest something the
    instructor declined.
-2. List the gaps. Missing TILT elements usually matter most, because they
-   decide whether students know what to do and what success looks like.
+2. List the gaps, in the activity and in any attached assignment. Missing
+   TILT elements come first, because they decide whether students know what
+   to do and what success looks like.
 3. Keep at most three, most useful first. One suggestion per element or
    principle.
 4. Leave out anything already done, anything the activity's format cannot do,
@@ -109,6 +118,7 @@ changing, so the build shows none. The last call in a request wins.
 **Do not make the suggested changes.** Build what the instructor asked for.
 They read the suggestions on the build card and ask for the ones they want.
 
-In your reply, mention the suggestions in one sentence, for example "I left two
-optional design suggestions on the build card.", and leave the details to the
-card. Say nothing about suggestions when you recorded none.
+In your reply, mention the suggestions once, in a single sentence, for example
+"I left two optional design suggestions on the build card.", and leave the
+details to the card. Never say that you recorded them. Say nothing about
+suggestions when you recorded none.

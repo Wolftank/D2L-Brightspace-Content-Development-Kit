@@ -51,8 +51,9 @@ describe('renderProjectInstructions', () => {
       expect(markdown).toContain('for any assignment the instructor attached');
       expect(markdown).toContain('an empty list when nothing needs changing');
       expect(markdown).toContain('Make none of the suggested changes yourself');
-      expect(markdown).toContain('answer in your reply with the same skill and record nothing');
-      expect(markdown).toContain('mention them in one sentence');
+      expect(markdown).toContain('answer in your reply with the same skill, in plain sentences with no list, and record nothing');
+      expect(markdown).toContain('mention them once, in a single sentence');
+      expect(markdown).toContain('nowhere else in the reply');
     }
   });
 
