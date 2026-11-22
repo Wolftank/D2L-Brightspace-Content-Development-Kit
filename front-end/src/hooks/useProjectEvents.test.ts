@@ -566,6 +566,13 @@ describe('useProjectEvents', () => {
       expect(lineTexts(hook.result.current)).toEqual(['Starting your build']);
     });
 
+    it('replays the stream from the start when the saved state is unreadable', () => {
+      sessionStorage.setItem('progress-p1-event-state', '{"turn":');
+      sessionStorage.setItem('progress-p1-last-seq', '7');
+      renderHook(() => useProjectEvents('p1'));
+      expect(Stream.instances[0]!.url).toBe('/api/projects/p1/events');
+    });
+
     it('falls back to the empty state when the switched-to project has unreadable saved state', () => {
       sessionStorage.setItem('progress-p2-event-state', 'not json');
       const hook = renderHook(({ projectId }) => useProjectEvents(projectId), { initialProps: { projectId: 'p1' } });
