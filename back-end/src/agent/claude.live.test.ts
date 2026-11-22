@@ -12,6 +12,7 @@ import { createTurnsRepo } from '../db/turns.js';
 import { createUsersRepo } from '../db/users.js';
 import { KIT_DIR, skillsFor } from '../kit.js';
 import { createEventService } from '../pipeline/events.js';
+import { createSuggestionStore } from '../pipeline/suggestions.js';
 import { log } from '../log.js';
 import { createAvenueService } from '../services/avenues.js';
 import { createBuildService } from '../services/builds.js';
@@ -266,17 +267,18 @@ describe('ClaudeAgentDriver, live SDK, in a provisioned workspace', () => {
     const workspaceDir = workspaces.pathFor(project.id);
     await prepare(join(workspaceDir, 'out'));
     const checks: boolean[] = [];
+    const suggestions = createSuggestionStore();
     const session = await driver.open({
       workspaceDir,
       sessionId: null,
       instructions: renderProjectInstructions({ project, avenue, workspaceDir }),
       skillsDir: join(KIT_DIR, 'skills'),
       skills: skillsFor(avenue),
-      tools: recordingChecks(createCdkTools({ projects, avenues, workspaces, builds }, project.id), checks),
+      tools: recordingChecks(createCdkTools({ projects, avenues, workspaces, builds, suggestions }, project.id), checks),
     });
     const files = createFileService({ projects, files: createFilesRepo(db), workspaces });
     const storedAvenue = () => projects.getById(project.id)?.avenue;
-    return { ownerId, project, workspaces, workspaceDir, builds, files, checks, session, storedAvenue };
+    return { ownerId, project, workspaces, workspaceDir, builds, files, checks, suggestions, session, storedAvenue };
   }
 
   /** Runs a turn to its end, or stops it once the agent's `set_format` call has finished. */

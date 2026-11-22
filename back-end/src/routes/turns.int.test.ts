@@ -21,6 +21,7 @@ import { fakeDeps } from '../test/deps.js';
 import { createEventService, type EventService } from '../pipeline/events.js';
 import { createRunner } from '../pipeline/runner.js';
 import { createSessionService, type SessionService } from '../pipeline/sessions.js';
+import { createSuggestionStore } from '../pipeline/suggestions.js';
 import { createBuildService } from '../services/builds.js';
 import { createMessageService } from '../services/messages.js';
 import { createProjectService } from '../services/projects.js';
@@ -110,6 +111,7 @@ describe('POST /api/turns/:turnId/cancel', () => {
       sessions,
       workspaces,
       builds,
+      suggestions: createSuggestionStore(),
       turnLimits: { maxSteps: 60, maxBudgetUsd: 10 },
     });
     deps = fakeDeps({

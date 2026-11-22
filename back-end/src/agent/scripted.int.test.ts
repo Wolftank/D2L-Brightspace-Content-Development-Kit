@@ -6,13 +6,13 @@ import { promisify } from 'node:util';
 import type { BuildableAvenue } from '@cdk/contract';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AVENUE_SKILL, KIT_DIR } from '../kit.js';
-import { createScriptedAgentDriver } from './scripted.js';
+import { createScriptedAgentDriver, SUGGESTIONS } from './scripted.js';
 import type { AgentEvent, AgentSession, SessionRequest, ToolServerSpec } from './AgentDriver.js';
 
 const execFileAsync = promisify(execFile);
 
-/** The `cdk` tools the scripted agent calls, for a project whose avenue starts as `avenue`. */
-function projectTools(avenue: BuildableAvenue | null): ToolServerSpec {
+/** The `cdk` tools the scripted agent calls, for a project whose avenue starts as `avenue`, keeping each `record_suggestions` input in `recorded`. */
+function projectTools(avenue: BuildableAvenue | null, recorded: unknown[] = []): ToolServerSpec {
   const report = async () => ({ content: JSON.stringify({ avenue }) });
   const tool = { description: '', summary: '', input: {} };
   return {
@@ -25,6 +25,14 @@ function projectTools(avenue: BuildableAvenue | null): ToolServerSpec {
         handler: (input: Record<string, unknown>) => {
           avenue = input.format as BuildableAvenue;
           return report();
+        },
+      },
+      {
+        ...tool,
+        name: 'record_suggestions',
+        handler: async (input: Record<string, unknown>) => {
+          recorded.push(input);
+          return { content: 'Recorded.' };
         },
       },
     ],
@@ -85,6 +93,18 @@ describe('scripted agent driver', () => {
       'Writing imsmanifest.xml',
     ]);
     expect(await gate(join(dir, 'out'))).toMatchObject({ pass: true });
+  });
+
+  it('records the suggestions for a message asking for design suggestions, and mentions them in one sentence', async () => {
+    const recorded: unknown[] = [];
+    const session = await createScriptedAgentDriver().open({ ...request(dir), tools: projectTools('scorm', recorded) });
+
+    const { events, result } = await play(session, 'Create a workplace safety quiz with design suggestions');
+    const { result: plain } = await play(session, 'Create a workplace safety quiz');
+
+    expect(recorded).toEqual([{ suggestions: SUGGESTIONS }]);
+    expect(events).toContainEqual({ kind: 'tool_start', callId: 'record-suggestions', name: 'mcp__cdk__record_suggestions', summary: 'Noting suggestions', category: 'checking' });
+    expect(result.text).toBe(`${plain.text} I left two optional design suggestions on the build card.`);
   });
 
   it('builds a package the QA gate rejects for [qa-fail]', async () => {

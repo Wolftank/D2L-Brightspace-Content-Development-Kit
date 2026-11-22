@@ -18,6 +18,9 @@ export const AVENUE_SKILL: Record<BuildableAvenue, string> = {
 /** The kit skill that picks an avenue from the instructor's request. */
 export const ROUTER_SKILL = 'd2l-experience-router';
 
+/** The kit skill that finds TILT and UDL suggestions for what the agent builds. */
+export const SUGGESTIONS_SKILL = 'd2l-tilt-udl-suggestions';
+
 /**
  * The kit's skills an agent uses on a project: every avenue's skill, so it can
  * rebuild in another avenue within a request, and the QA skill. A project with

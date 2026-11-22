@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-import type { EventKind, EventPayloads, ProgressCategory, TurnError } from '@cdk/contract';
+import type { BuildSuggestion, EventKind, EventPayloads, ProgressCategory, TurnError } from '@cdk/contract';
 import type { AgentEvent, AgentSession, TurnErrorCode, TurnInput, TurnLimits, TurnResult } from '../agent/AgentDriver.js';
 import type { FilesRepo } from '../db/files.js';
 import type { MessagesRepo } from '../db/messages.js';
@@ -13,6 +13,7 @@ import { attachmentFor } from '../services/files.js';
 import type { WorkspaceService } from '../services/workspaces.js';
 import type { EventService } from './events.js';
 import type { SessionService } from './sessions.js';
+import type { SuggestionStore } from './suggestions.js';
 
 export type RunnerErrorCode = TurnErrorCode | 'workspace_missing' | 'interrupted' | 'internal_error';
 
@@ -40,6 +41,8 @@ export interface RunnerDeps {
   files: Pick<FilesRepo, 'findInProject'>;
   workspaces: Pick<WorkspaceService, 'hashOutput' | 'pathFor'>;
   builds: Pick<BuildService, 'create' | 'latest' | 'canBuild'>;
+  /** Where the agent's `record_suggestions` calls leave the suggestions for the request's build. */
+  suggestions: Pick<SuggestionStore, 'take'>;
   /** The caps on every turn. */
   turnLimits: TurnLimits;
 }
@@ -224,14 +227,17 @@ export function createRunner(deps: RunnerDeps): Runner {
     }
   }
 
-  /** Builds the output when it can be built and differs from the latest build's, or from `startHash` before the project's first build. */
-  async function buildIfChanged(turn: Turn, startHash: string, feed: StatusFeed): Promise<void> {
+  /**
+   * Builds the output, with `suggestions`, when it can be built and differs
+   * from the latest build's, or from `startHash` before the project's first build.
+   */
+  async function buildIfChanged(turn: Turn, startHash: string, feed: StatusFeed, suggestions: BuildSuggestion[]): Promise<void> {
     const outputHash = await deps.workspaces.hashOutput(turn.projectId);
     const latest = deps.builds.latest(turn.projectId);
     if (outputHash === (latest ? latest.outputHash : startHash)) return;
     if (!(await deps.builds.canBuild(turn.projectId))) return;
     feed.status('Checking your build', 'checking');
-    await deps.builds.create(turn.projectId, turn.id);
+    await deps.builds.create(turn.projectId, turn.id, suggestions);
   }
 
   async function run(turn: RunningTurn, controller: AbortController): Promise<FinishTurnInput> {
@@ -242,7 +248,9 @@ export function createRunner(deps: RunnerDeps): Runner {
     turnLog(turn).debug({ messageId: turn.messageId, text: input.text }, 'Instructor message');
     let replyId: string = randomUUID();
     const feed = statusFeed(turn);
+    deps.suggestions.take(turn.projectId);
     const { result, replies } = await converseInSession(turn, input, replyId, feed, controller);
+    const suggestions = deps.suggestions.take(turn.projectId);
 
     if (result.status === 'cancelled') return { status: 'cancelled', usage: result.usage };
     if (result.status === 'failed') {
@@ -271,7 +279,7 @@ export function createRunner(deps: RunnerDeps): Runner {
       }
     }
     try {
-      await buildIfChanged(turn, startHash, feed);
+      await buildIfChanged(turn, startHash, feed, suggestions);
     } catch (err) {
       return failure(turn, thrownCode(err), err, { usage: result.usage, replyId });
     }

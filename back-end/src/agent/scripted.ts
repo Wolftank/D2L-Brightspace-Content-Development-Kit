@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { BuildableAvenue } from '@cdk/contract';
+import type { BuildableAvenue, BuildSuggestion } from '@cdk/contract';
 import { AVENUE_SKILL, KIT_DIR } from '../kit.js';
 import { toolCategory } from './progress.js';
 import type {
@@ -204,6 +204,28 @@ function splitIntoChunks(text: string, maxLen: number): string[] {
 /** A message that makes the scripted agent pick a content topic for a project with no avenue. */
 const ASKS_FOR_TOPIC = /student and instructor views|content topic/i;
 
+/** A message that makes the scripted agent record `SUGGESTIONS`, the phrase the front end's stub answers the same way. */
+const ASKS_FOR_SUGGESTIONS = 'with design suggestions';
+
+/** The suggestions the scripted agent records, the same as the front end's stub. */
+export const SUGGESTIONS: BuildSuggestion[] = [
+  {
+    framework: 'tilt',
+    principle: 'Criteria',
+    suggestion: 'Show an example of a strong response before the activity.',
+    reason: 'Students can compare their work with the criteria before submitting.',
+  },
+  {
+    framework: 'udl',
+    principle: 'Action & Expression',
+    suggestion: 'Let students explain their answer in writing or with a labeled diagram.',
+    reason: 'Multiple response formats give students more ways to show what they know.',
+  },
+];
+
+/** The sentence a reply adds about recorded suggestions. */
+const SUGGESTIONS_SENTENCE = 'I left two optional design suggestions on the build card.';
+
 /** The sentence that opens the reply of a turn that picked the avenue. */
 const PICK_REASONS: Record<BuildableAvenue, string> = {
   scorm: 'I made this a SCORM package so scores reach the gradebook.',
@@ -260,6 +282,14 @@ async function* runScenario(
       yield { kind: 'tool_end', callId: 'set-format', ok: true };
     }
 
+    const suggests = text.includes(ASKS_FOR_SUGGESTIONS);
+    if (suggests) {
+      const name = `mcp__${tools.name}__record_suggestions`;
+      yield { kind: 'tool_start', callId: 'record-suggestions', name, summary: 'Noting suggestions', category: toolCategory(name, {}) };
+      await callTool(tools, 'record_suggestions', { suggestions: SUGGESTIONS });
+      yield { kind: 'tool_end', callId: 'record-suggestions', ok: true };
+    }
+
     if (scenario === 'cancelled') {
       yield { kind: 'status', text: BUILDING_STATUS[avenue], category: 'building' };
       await delay(200, signal);
@@ -282,7 +312,7 @@ async function* runScenario(
     }
 
     const built = (avenue === 'topic' ? TOPIC_REPLIES : REPLIES)[building];
-    const reply = stored ? built : `${PICK_REASONS[avenue]} ${built}`;
+    const reply = [stored ? '' : PICK_REASONS[avenue], built, suggests ? SUGGESTIONS_SENTENCE : ''].filter(Boolean).join(' ');
     for (const chunk of splitIntoChunks(reply, 60)) {
       yield { kind: 'text_delta', text: chunk };
       await delay(100, signal);
@@ -322,7 +352,8 @@ function createScriptedSession(sessionId: string, workspaceDir: string, tools: T
  * calls. It builds the project's avenue, which it reads with `get_project`.
  * For a project with none it first sets one with `set_format`: a content
  * topic when the message mentions a content topic or student and instructor
- * views, and a SCORM package otherwise. The marker in the instructor's
+ * views, and a SCORM package otherwise. A message asking for the turn
+ * "with design suggestions" records `SUGGESTIONS`. The marker in the instructor's
  * message picks the scenario; the same scenario always gives the same events
  * and files.
  */

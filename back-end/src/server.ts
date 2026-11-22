@@ -18,6 +18,7 @@ import { startLogging } from './log-file.js';
 import { createEventService } from './pipeline/events.js';
 import { createRunner, type Runner } from './pipeline/runner.js';
 import { createSessionService, type SessionService } from './pipeline/sessions.js';
+import { createSuggestionStore } from './pipeline/suggestions.js';
 import { createAvenueService } from './services/avenues.js';
 import { createBuildService, type BuildService } from './services/builds.js';
 import { createFileService } from './services/files.js';
@@ -48,12 +49,13 @@ function buildBackEnd(cfg: Config): BackEnd {
   const builds = createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces, events });
   const driver = createAgentDriver(cfg.agent);
   const avenues = createAvenueService({ projects: projectsRepo, workspaces, turns: turnsRepo, events });
+  const suggestions = createSuggestionStore();
 
   const sessions = createSessionService({
     projects: projectsRepo,
     workspaces,
     driver,
-    tools: (projectId) => createCdkTools({ projects: projectsRepo, avenues, workspaces, builds }, projectId),
+    tools: (projectId) => createCdkTools({ projects: projectsRepo, avenues, workspaces, builds, suggestions }, projectId),
   });
   const runner = createRunner({
     turns: turnsRepo,
@@ -63,6 +65,7 @@ function buildBackEnd(cfg: Config): BackEnd {
     sessions,
     workspaces,
     builds,
+    suggestions,
     turnLimits: cfg.turnLimits,
   });
 

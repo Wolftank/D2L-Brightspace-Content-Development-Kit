@@ -5,9 +5,10 @@ import type { CreateMessageInput } from '../db/messages.js';
 import type { Event, File, Message, Turn } from '../db/schema.js';
 import type { FinishTurnInput } from '../db/turns.js';
 import { WorkspaceMissing } from '../errors.js';
-import type { Build as ApiBuild } from '@cdk/contract';
+import type { Build as ApiBuild, BuildSuggestion } from '@cdk/contract';
 import type { AppendEventInput } from './events.js';
 import { createRunner, TURN_ERRORS, type RunnerDeps } from './runner.js';
+import { createSuggestionStore } from './suggestions.js';
 import { captureLog } from '../test/log.js';
 
 const INSTRUCTOR_MESSAGE: Message = {
@@ -28,6 +29,24 @@ const COMPLETED: TurnResult = {
   text: 'Built a five-question self-check.',
   usage: { inputTokens: 10, outputTokens: 20, costUsd: 0.5, steps: 3 },
 };
+
+const CRITERIA: BuildSuggestion = { framework: 'tilt', principle: 'Criteria', suggestion: 'Name what a strong answer includes.', reason: 'Students do better when they see the criteria first.' };
+const ENGAGEMENT: BuildSuggestion = { framework: 'udl', principle: 'Engagement', suggestion: 'Open with a real case.', reason: 'A relevant case recruits interest.' };
+
+/** A session whose turn records `suggestions` while it runs, then ends with `result`. */
+function suggestingSession(record: () => void, result: TurnResult): AgentSession {
+  return {
+    sessionId: null,
+    send: () => ({
+      events: (async function* () {
+        record();
+        yield { kind: 'text_delta' as const, text: 'Done.' };
+      })(),
+      result: Promise.resolve(result),
+    }),
+    close: async () => {},
+  };
+}
 
 function queuedTurn(id: string): Turn {
   return {
@@ -61,7 +80,7 @@ function scriptedSession(events: AgentEvent[], result: TurnResult | Promise<Turn
   return { session, signals };
 }
 
-function setup(options: { session?: AgentSession; hashes?: string[] } = {}) {
+function setup(options: { session?: AgentSession; hashes?: string[]; suggestions?: ReturnType<typeof createSuggestionStore> } = {}) {
   const turns = new Map([['turn-1', queuedTurn('turn-1')]]);
   const appended: AppendEventInput[] = [];
   const replies: CreateMessageInput[] = [];
@@ -119,8 +138,9 @@ function setup(options: { session?: AgentSession; hashes?: string[] } = {}) {
     builds: {
       latest: vi.fn((): ApiBuild | undefined => undefined),
       canBuild: vi.fn(async () => true),
-      create: vi.fn(async (projectId: string, turnId?: string) => ({ projectId, turnId, status: 'ready' }) as ApiBuild),
+      create: vi.fn(async (projectId: string, turnId?: string, _suggestions?: BuildSuggestion[]) => ({ projectId, turnId, status: 'ready' }) as ApiBuild),
     },
+    suggestions: options.suggestions ?? createSuggestionStore(),
     turnLimits: TURN_LIMITS,
   } satisfies RunnerDeps;
 
@@ -175,11 +195,45 @@ describe('runner', () => {
     ]);
     expect(replies[0]).toMatchObject({ role: 'agent', content: [{ type: 'text', text: COMPLETED.text }], turnId: 'turn-1' });
 
-    expect(deps.builds.create).toHaveBeenCalledWith('project-1', 'turn-1');
+    expect(deps.builds.create).toHaveBeenCalledWith('project-1', 'turn-1', []);
     expect(finished).toEqual([{ id: 'turn-1', input: { status: 'completed', usage: COMPLETED.usage, replyId } }]);
     expect(payloadsOf('turn.completed')).toEqual([{ turnId: 'turn-1', usage: COMPLETED.usage }]);
     expect(deps.sessions.release).toHaveBeenCalledOnce();
     expect(deps.sessions.close).not.toHaveBeenCalled();
+  });
+
+  it('builds with the suggestions recorded during the turn, dropping any left from before it', async () => {
+    const suggestions = createSuggestionStore();
+    suggestions.record('project-1', [ENGAGEMENT]);
+    const { deps, runner } = setup({ session: suggestingSession(() => suggestions.record('project-1', [CRITERIA]), COMPLETED), suggestions });
+
+    await runner.executeTurn('turn-1');
+
+    expect(deps.builds.create).toHaveBeenCalledWith('project-1', 'turn-1', [CRITERIA]);
+    expect(suggestions.take('project-1')).toEqual([]);
+  });
+
+  it('builds with no suggestions when the turn recorded none, even if an earlier turn left some', async () => {
+    const suggestions = createSuggestionStore();
+    suggestions.record('project-1', [ENGAGEMENT]);
+    const { deps, runner } = setup({ suggestions });
+
+    await runner.executeTurn('turn-1');
+
+    expect(deps.builds.create).toHaveBeenCalledWith('project-1', 'turn-1', []);
+  });
+
+  it.each([
+    ['failed', { status: 'failed', sessionId: null, text: '', error: { code: 'agent_error', message: 'stopped' } }],
+    ['cancelled', { status: 'cancelled', sessionId: null, text: '' }],
+  ] as const)('drops the suggestions recorded in a %s turn', async (_status, result) => {
+    const suggestions = createSuggestionStore();
+    const { deps, runner } = setup({ session: suggestingSession(() => suggestions.record('project-1', [CRITERIA]), result), suggestions });
+
+    await runner.executeTurn('turn-1');
+
+    expect(deps.builds.create).not.toHaveBeenCalled();
+    expect(suggestions.take('project-1')).toEqual([]);
   });
 
   it('marks a failed tool call in its finished summary', async () => {

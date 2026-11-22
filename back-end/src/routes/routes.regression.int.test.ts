@@ -24,6 +24,7 @@ import { KIT_DIR } from '../kit.js';
 import { createEventService, type EventService } from '../pipeline/events.js';
 import { createRunner } from '../pipeline/runner.js';
 import { createSessionService, type SessionService } from '../pipeline/sessions.js';
+import { createSuggestionStore } from '../pipeline/suggestions.js';
 import { createBuildService, type BuildService } from '../services/builds.js';
 import { createFileService } from '../services/files.js';
 import { createMessageService } from '../services/messages.js';
@@ -191,6 +192,7 @@ describe('R8 regression: project, message and build routes', () => {
       sessions,
       workspaces,
       builds,
+      suggestions: createSuggestionStore(),
       turnLimits: { maxSteps: 60, maxBudgetUsd: 10 },
     });
     deps = fakeDeps({
