@@ -15,9 +15,14 @@ files:
 extraResources:
   - from: ../front-end/dist
     to: front-end
+publish:
+  provider: github
+  owner: Wolftank
+  repo: D2L-Brightspace-Content-Development-Kit
 win:
   target: nsis
 nsis:
+  artifactName: CDK-Setup-${version}.${ext}
   oneClick: true
   perMachine: false
   deleteAppDataOnUninstall: true

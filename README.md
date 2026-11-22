@@ -28,17 +28,22 @@ Then run the back end and the front end from their folders, as their READMEs des
 
 ## The Windows app
 
-The Windows app runs CDK without a terminal, Node, or developer tools. One launch starts the back end and opens the CDK window. Launching it again brings the open window to the front. Closing the window stops the back end and any request the agent is running. A request still running when the window closes is marked as interrupted, and its changes so far are kept.
+The Windows app runs CDK without a terminal, Node, or developer tools. One launch starts the back end and opens the CDK window. Launching it again brings the open window to the front. Closing the window stops the back end and any request the agent is running. A request still running when the window closes is stopped, and its changes so far are kept. The installed app updates itself from the repository's releases.
 
 ### Get the installer
 
 Released versions are on the repository's **Releases** page. Download `CDK-Setup-<version>.exe` from the latest release. No GitHub sign-in is needed.
 
-CI also builds the installer for every pull request and every merge to `main`, for testing changes before they are released. On GitHub, open **Actions**, select the run (the latest **CI** run on `main` for the current app), and download `CDK-Setup-<version>-<commit>.exe` from **Artifacts** at the bottom of the run's summary. Downloading needs a GitHub sign-in, and CI keeps each installer for 30 days.
+CI also builds the installer for every pull request and every merge to `main`, for testing changes before they are released. On GitHub, open **Actions**, select the run (the latest **CI** run on `main` for the current app), and download `CDK-Setup-<version>-<commit>` from **Artifacts** at the bottom of the run's summary. It is a zip: extract it and run `CDK-Setup-<version>.exe`. Downloading needs a GitHub sign-in, and CI keeps each artifact for 30 days.
 
 ### Publish a release
 
-On GitHub, open **Actions**, select **CI**, then **Run workflow**. Keep the branch as `main`, enter the new version, such as `0.2.0`, and select **Run workflow**. CI runs every check on the latest commit on `main`, builds the installer with that version, and publishes it as release `v<version>` with notes listing the pull requests merged since the last release. If any check fails, nothing is published. A version that is already released is refused.
+A release takes its version from `desktop/package.json`, and installed apps update to it the next time they start.
+
+1. In a pull request, raise the version, such as to `0.2.1`, with `npm version 0.2.1 --no-git-tag-version --workspace cdk-desktop`, and merge it.
+2. On GitHub, open **Actions**, select **CI**, then **Run workflow**. Keep the branch as `main` and select **Run workflow**.
+
+CI runs every check on the latest commit on `main`, builds the installer, and publishes it as release `v<version>` with `latest.yml`, which installed apps read, and notes listing the pull requests merged since the last release. If any check fails, nothing is published. A version that is already released is refused. [The desktop README](desktop/README.md#publish-a-release-that-installed-apps-pick-up) has the details.
 
 To build it yourself instead, on Windows, at the repository root, after `npm install`:
 
@@ -46,7 +51,7 @@ To build it yourself instead, on Windows, at the repository root, after `npm ins
 npm run package
 ```
 
-This builds every package, then writes the installer to `desktop/release/CDK Setup <version>.exe` and a runnable copy to `desktop/release/win-unpacked/CDK.exe`. Packaging downloads Electron and the Electron build of better-sqlite3 the first time, so it needs internet access. It takes about a minute and a half.
+This builds every package, then writes the installer to `desktop/release/CDK-Setup-<version>.exe` and a runnable copy to `desktop/release/win-unpacked/CDK.exe`. Packaging downloads Electron and the Electron build of better-sqlite3 the first time, so it needs internet access. It takes about a minute and a half.
 
 ### Install and run
 
@@ -63,13 +68,20 @@ The agent uses the Claude sign-in on the laptop, like the development setup. If 
 
 Projects and builds are stored in `%LOCALAPPDATA%\CDK`, the same folder the development back end uses, so the app and a development back end on the same laptop share projects. The window's own browser data is in `%APPDATA%\CDK`.
 
-When something goes wrong, choose **Help > Open logs folder** in the app and send the team the newest `cdk.<date>.<n>.log` file from `%LOCALAPPDATA%\CDK\logs`. The log holds no API keys or tokens and, at the default level, none of the instructor's messages. [The back end's README](back-end/README.md#logs) says what is logged.
+When something goes wrong, choose **Help > Open logs folder** in the app and send the team the newest `cdk.<date>.<n>.log` file from `%LOCALAPPDATA%\CDK\logs`. For a problem with updates, send `desktop.<n>.log` from the same folder. The log holds no API keys or tokens and, at the default level, none of the instructor's messages. [The back end's README](back-end/README.md#logs) says what is logged.
 
 ### Update and uninstall
 
-To update, run the newer installer. It closes CDK if it is open, replaces the app, keeps your projects, and opens CDK again. This can take several minutes.
+CDK updates itself from version 0.2.0 on. When it starts, it checks the Releases page and downloads a newer version in the background. When the download finishes, it says the new version is ready:
 
-To uninstall, open Settings > Apps > Installed apps, select **CDK**, then **Uninstall**. If CDK is open, the uninstaller offers to close it. It then asks whether to also delete your projects and builds in `%LOCALAPPDATA%\CDK`. **No**, the default, keeps them. Either way it removes the app, its Start menu and desktop shortcuts, the copy of the installer it keeps in `%LOCALAPPDATA%\cdk-desktop-updater`, and the window's browser data in `%APPDATA%\CDK`.
+- **Restart now** stops any running request, keeping its changes so far, closes CDK, and installs the update. CDK opens again when it finishes, which can take several minutes.
+- **Later** installs the update the next time you close CDK.
+
+The update keeps your projects and needs no admin rights. With no internet connection, CDK starts and works as usual and tries again at the next start.
+
+To update by hand, or from version 0.1.0, which can't update itself, run the newer installer. It closes CDK if it is open, replaces the app, keeps your projects, and opens CDK again. This can take several minutes.
+
+To uninstall, open Settings > Apps > Installed apps, select **CDK**, then **Uninstall**. If CDK is open, the uninstaller offers to close it. It then asks whether to also delete your projects and builds in `%LOCALAPPDATA%\CDK`. **No**, the default, keeps them. Either way it removes the app, its Start menu and desktop shortcuts, `%LOCALAPPDATA%\cdk-desktop-updater` with the copy of the installer it keeps and any downloaded update, and the window's browser data in `%APPDATA%\CDK`.
 
 ## Why front-end and back-end are separate top-level folders
 

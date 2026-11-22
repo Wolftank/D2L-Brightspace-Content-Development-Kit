@@ -1,7 +1,7 @@
 {
   "name": "cdk-desktop",
   "productName": "CDK",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "The Windows app: starts the back end, opens the CDK window, and stops everything on close",
   "type": "module",
@@ -18,7 +18,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "cdk-back-end": "*"
+    "cdk-back-end": "*",
+    "electron-updater": "6.8.11",
+    "pino": "^10.4.0",
+    "pino-roll": "^4.0.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
