@@ -10,9 +10,9 @@ For the full proposal, see [`docs/Capstone_Project_Proposal.pdf`](docs/Capstone_
 |---|---|
 | [`docs/`](docs/) | The finished project proposal, plus the contract the tracks build against (`architecture.md`) and what was verified about each agent (`drivers.md`) |
 | [`back-end/kit/`](back-end/kit/) | The actual D2L Content Development Kit — skills, QA/lint gate, probes, kit-level docs. Hardened and extended in place; not a frozen reference copy |
-| [`back-end/src/`](back-end/src/) | The back end — runs turns with the agent, runs the QA gate and the pedagogy check, creates builds, deploys to D2L, translates findings to plain language |
+| [`back-end/src/`](back-end/src/) | The back end — runs turns with the agent, runs the QA gate, creates builds, deploys to D2L, translates findings to plain language |
 | [`packages/contract/`](packages/contract/) | The HTTP API and event stream contract from `architecture.md` as TypeScript types, imported by both the back end and the front end |
-| [`front-end/`](front-end/) | Local server + browser app: chat, configurator, build panel, preview. Displays the turn status, QA gate findings, and pedagogy check findings the back end produces — does not run those checks itself |
+| [`front-end/`](front-end/) | Local server + browser app: chat, configurator, build panel, preview. Displays the turn status, QA gate findings, and suggestions the back end produces — does not run those checks itself |
 | [`desktop/`](desktop/) | The Windows app: starts the back end, opens the CDK window, and stops everything when the window closes |
 | [`.github/`](.github/) | Issue/PR templates, CI workflow |
 

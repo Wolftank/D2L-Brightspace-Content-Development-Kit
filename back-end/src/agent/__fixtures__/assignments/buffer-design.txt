@@ -1,0 +1,24 @@
+Lab Report 4: Designing a Buffer
+
+Due Friday at 5 pm. Worth 20 points.
+
+Why you are doing this
+This report practises the skill chemists use most outside the lab: choosing a
+method and defending the choice with data. You will use it again in the
+capstone project and in any job that asks you to justify a decision.
+
+What to do
+1. Choose a weak acid from the list on the lab handout and calculate the
+   ratio of acid to conjugate base for a buffer at pH 5.0.
+2. Make the buffer in the lab and measure its pH three times.
+3. Write a report of no more than four pages with an introduction, your
+   calculation, your measurements in a table, and a discussion.
+4. Submit it to the dropbox as a PDF.
+
+How it will be graded
+A strong report:
+- shows the Henderson-Hasselbalch calculation with units at every step (6 points)
+- reports all three measurements and their mean in a labelled table (4 points)
+- explains any difference between the target and measured pH with at least
+  one specific source of error (6 points)
+- is clearly written and no longer than four pages (4 points)

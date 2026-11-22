@@ -156,7 +156,7 @@ describe('projectEventReducer', () => {
         status: 'checking',
         avenue: 'scorm',
         qa: null,
-        pedagogy: null,
+        suggestions: [],
         error: null,
         outputHash: null,
         turnId: 'turn-1',
@@ -185,7 +185,7 @@ it('handles build.updated by replacing the existing build', () => {
         status: 'checking',
         avenue: 'scorm',
         qa: null,
-        pedagogy: null,
+        suggestions: [],
         error: null,
         outputHash: null,
         turnId: 'turn-1',
@@ -208,7 +208,7 @@ it('handles build.updated by replacing the existing build', () => {
           passed: true,
           findings: [],
         },
-        pedagogy: null,
+        suggestions: [],
         error: null,
         outputHash: null,
         turnId: 'turn-1',
@@ -404,7 +404,7 @@ function lineTexts(state: ProjectEventState): string[] {
 }
 
 function build(status: Build['status']): Build {
-  return { id: 'build-1', projectId: 'p1', version: 1, status, avenue: 'scorm', qa: null, pedagogy: null, error: null, outputHash: null, turnId: 't1', createdAt: 1 };
+  return { id: 'build-1', projectId: 'p1', version: 1, status, avenue: 'scorm', qa: null, suggestions: [], error: null, outputHash: null, turnId: 't1', createdAt: 1 };
 }
 
 function chatMessage(id: string, seq: number, role: Message['role'], turnId: string, text: string): Message {

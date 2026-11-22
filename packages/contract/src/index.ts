@@ -155,17 +155,17 @@ export interface BuildError {
   nextStep: NextStep;
 }
 
-export interface PedagogyReport {
-  tilt: unknown[];
-  udl: unknown[];
-}
+/** The TILT elements an assignment states to students. */
+export type TiltElement = 'Purpose' | 'Task' | 'Criteria';
 
-export interface BuildSuggestion {
-  framework: 'tilt' | 'udl';
-  principle: string;
-  suggestion: string;
-  reason: string;
-}
+/** The UDL principles. */
+export type UdlPrinciple = 'Engagement' | 'Representation' | 'Action & Expression';
+
+/** An optional design suggestion on a build, from one TILT element or UDL principle. */
+export type BuildSuggestion = { suggestion: string; reason: string } & (
+  | { framework: 'tilt'; principle: TiltElement }
+  | { framework: 'udl'; principle: UdlPrinciple }
+);
 
 export interface Build {
   id: string;
@@ -177,8 +177,8 @@ export interface Build {
   error: BuildError | null;
   /** Hash of the output the build copied; null while checking and when the copy failed. */
   outputHash: string | null;
-  pedagogy: PedagogyReport | null;
-  suggestions?: BuildSuggestion[];
+  /** The agent's suggestions for this build, most useful first; empty when it made none. */
+  suggestions: BuildSuggestion[];
   turnId: string | null;
   createdAt: number;
 }

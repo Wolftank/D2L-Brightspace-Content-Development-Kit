@@ -14,7 +14,7 @@ class Stream extends EventTarget {
 }
 const project: Project = { id: 'p1', title: 'Cell division', ownerId: 'u1', avenue: 'scorm', targetCourse: null, sessionId: null, createdAt: 1, updatedAt: 1 };
 const message = (id: string, seq: number, role: Message['role'], text: string, turnId = 't1'): Message => ({ id, projectId: 'p1', seq, role, content: [{ type: 'text', text }], turnId, createdAt: seq });
-const build = (version: number, status: Build['status'] = 'ready'): Build => ({ id: `b${version}`, projectId: 'p1', version, status, avenue: 'scorm', qa: { passed: status === 'ready', findings: [] }, error: null, outputHash: null, pedagogy: null, turnId: 't1', createdAt: version });
+const build = (version: number, status: Build['status'] = 'ready'): Build => ({ id: `b${version}`, projectId: 'p1', version, status, avenue: 'scorm', qa: { passed: status === 'ready', findings: [] }, error: null, outputHash: null, suggestions: [], turnId: 't1', createdAt: version });
 let history: Message[];
 let sent: number;
 let fetchMock: ReturnType<typeof vi.fn>;

@@ -1,8 +1,9 @@
 import * as fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { BuildableAvenue } from '@cdk/contract';
+import type { BuildableAvenue, BuildSuggestion } from '@cdk/contract';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import type { ToolResult, ToolServerSpec } from '../agent/AgentDriver.js';
 import { createBuildsRepo } from '../db/builds.js';
 import { createEventsRepo } from '../db/events.js';
@@ -12,10 +13,15 @@ import { createTurnsRepo } from '../db/turns.js';
 import { createUsersRepo } from '../db/users.js';
 import { KIT_DIR } from '../kit.js';
 import { createEventService, type EventService } from '../pipeline/events.js';
+import { createSuggestionStore, type SuggestionStore } from '../pipeline/suggestions.js';
 import { createAvenueService, type AvenueService } from '../services/avenues.js';
 import { createBuildService, type BuildService } from '../services/builds.js';
 import { createWorkspaceService, type WorkspaceService } from '../services/workspaces.js';
 import { createCdkTools } from './index.js';
+
+const CRITERIA: BuildSuggestion = { framework: 'tilt', principle: 'Criteria', suggestion: 'Name what a strong answer includes.', reason: 'Students do better when they see the criteria first.' };
+const PURPOSE: BuildSuggestion = { framework: 'tilt', principle: 'Purpose', suggestion: 'Say what the quiz prepares students for.', reason: 'Knowing why the work matters raises motivation.' };
+const ENGAGEMENT: BuildSuggestion = { framework: 'udl', principle: 'Engagement', suggestion: 'Open with a real case.', reason: 'A relevant case recruits interest.' };
 
 describe('CDK tools', () => {
   let dataDir: string;
@@ -24,6 +30,7 @@ describe('CDK tools', () => {
   let builds: BuildService;
   let events: EventService;
   let avenues: AvenueService;
+  let suggestions: SuggestionStore;
 
   async function addProject(id: string, title: string, avenue: BuildableAvenue | null = 'scorm'): Promise<string> {
     const ownerId = createUsersRepo(db).ensureLocalUser().id;
@@ -48,6 +55,7 @@ describe('CDK tools', () => {
     events = createEventService(createEventsRepo(db));
     builds = createBuildService({ builds: createBuildsRepo(db), projects, workspaces, events });
     avenues = createAvenueService({ projects, workspaces, turns: createTurnsRepo(db), events });
+    suggestions = createSuggestionStore();
   });
 
   afterEach(async () => {
@@ -56,10 +64,10 @@ describe('CDK tools', () => {
   });
 
   function toolsFor(projectId: string): ToolServerSpec {
-    return createCdkTools({ projects, avenues, workspaces, builds }, projectId);
+    return createCdkTools({ projects, avenues, workspaces, builds, suggestions }, projectId);
   }
 
-  it('serves get_project, set_format, check_output, and delete_files as the cdk server, each with a status line', async () => {
+  it('serves get_project, set_format, check_output, record_suggestions, and delete_files as the cdk server, each with a status line', async () => {
     await addProject('p1', 'Cell division practice');
     const tools = toolsFor('p1');
 
@@ -68,6 +76,7 @@ describe('CDK tools', () => {
       ['get_project', 'Reading the project'],
       ['set_format', 'Setting the format'],
       ['check_output', 'Checking the activity'],
+      ['record_suggestions', 'Noting suggestions'],
       ['delete_files', 'Deleting files'],
     ]);
   });
@@ -104,6 +113,52 @@ describe('CDK tools', () => {
       expect(Object.keys(project.tenant)).toEqual(['fileLoading', 'storage', 'brightspaceApi', 'rendering']);
       expect(project.tenant.brightspaceApi.roleDetection.value).toContain('myenrollments');
       expect(project.tenant.storage.sharedAcrossEntireLms.note).toContain('HTML topics');
+    });
+  });
+
+  describe('get_project, earlierSuggestions', () => {
+    it('lists each suggestion on the earlier builds once, without its reason, and none before the first build', async () => {
+      await addProject('p1', 'Cell division practice');
+      const read = async () => JSON.parse((await call(toolsFor('p1'), 'get_project')).content).earlierSuggestions;
+      expect(await read()).toEqual([]);
+
+      await builds.create('p1', undefined, [CRITERIA, ENGAGEMENT]);
+      await builds.create('p1');
+      await builds.create('p1', undefined, [{ ...CRITERIA, reason: 'Worded another way.' }, PURPOSE]);
+
+      expect(await read()).toEqual([CRITERIA, ENGAGEMENT, PURPOSE].map(({ framework, principle, suggestion }) => ({ framework, principle, suggestion })));
+    });
+  });
+
+  describe('record_suggestions', () => {
+    function inputOf(name: string): z.ZodObject {
+      return z.object(toolsFor('p1').tools.find((tool) => tool.name === name)!.input);
+    }
+
+    it('keeps the last list recorded for its own project, and changes nothing in out/', async () => {
+      const outDir = await addProject('p1', 'Cell division practice');
+      await addProject('p2', 'Photosynthesis');
+      const before = await workspaces.hashOutput('p1');
+
+      await call(toolsFor('p1'), 'record_suggestions', { suggestions: [CRITERIA, ENGAGEMENT] });
+      const result = await call(toolsFor('p1'), 'record_suggestions', { suggestions: [PURPOSE] });
+
+      expect(result.isError).toBeFalsy();
+      expect(suggestions.take('p1')).toEqual([PURPOSE]);
+      expect(suggestions.take('p2')).toEqual([]);
+      expect(await workspaces.hashOutput('p1')).toBe(before);
+      expect(await fs.readdir(outDir)).not.toContain('suggestions.json');
+    });
+
+    it('takes up to three suggestions whose principle belongs to their framework, and an empty list', () => {
+      const input = inputOf('record_suggestions');
+
+      expect(input.safeParse({ suggestions: [] }).success).toBe(true);
+      expect(input.safeParse({ suggestions: [CRITERIA, PURPOSE, ENGAGEMENT] }).success).toBe(true);
+      expect(input.safeParse({ suggestions: [CRITERIA, PURPOSE, ENGAGEMENT, CRITERIA] }).success).toBe(false);
+      expect(input.safeParse({ suggestions: [{ ...CRITERIA, framework: 'udl' }] }).success).toBe(false);
+      expect(input.safeParse({ suggestions: [{ ...ENGAGEMENT, principle: 'Fairness' }] }).success).toBe(false);
+      expect(input.safeParse({ suggestions: [{ ...CRITERIA, reason: '' }] }).success).toBe(false);
     });
   });
 

@@ -1,10 +1,11 @@
 import { readFile, realpath, rm } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { z, type ZodRawShape } from 'zod';
-import type { BuildableAvenue } from '@cdk/contract';
+import type { BuildableAvenue, BuildSuggestion } from '@cdk/contract';
 import type { ToolDef, ToolResult, ToolServerSpec } from '../agent/AgentDriver.js';
 import type { ProjectsRepo } from '../db/projects.js';
-import { AVENUE_SKILL, BUILDABLE_AVENUES, KIT_DIR, pickedAvenue } from '../kit.js';
+import { AVENUE_SKILL, BUILDABLE_AVENUES, KIT_DIR, pickedAvenue, SUGGESTIONS_SKILL } from '../kit.js';
+import type { SuggestionStore } from '../pipeline/suggestions.js';
 import type { AvenueService } from '../services/avenues.js';
 import type { BuildService } from '../services/builds.js';
 import type { WorkspaceService } from '../services/workspaces.js';
@@ -20,11 +21,23 @@ const TENANT_SECTIONS: Record<BuildableAvenue, string[]> = {
   topic: ['fileLoading', 'storage', 'brightspaceApi', 'rendering'],
 };
 
+/** The most suggestions one build keeps. */
+const MAX_SUGGESTIONS = 3;
+
+const suggestionText = { suggestion: z.string().min(1), reason: z.string().min(1) };
+
+/** One suggestion, whose principle must belong to its framework. */
+const suggestionSchema = z.discriminatedUnion('framework', [
+  z.object({ framework: z.literal('tilt'), principle: z.enum(['Purpose', 'Task', 'Criteria']), ...suggestionText }),
+  z.object({ framework: z.literal('udl'), principle: z.enum(['Engagement', 'Representation', 'Action & Expression']), ...suggestionText }),
+]) satisfies z.ZodType<BuildSuggestion>;
+
 export interface CdkToolsDeps {
   projects: Pick<ProjectsRepo, 'getById'>;
   avenues: Pick<AvenueService, 'set'>;
   workspaces: Pick<WorkspaceService, 'locate'>;
-  builds: Pick<BuildService, 'latest' | 'checkOutput'>;
+  builds: Pick<BuildService, 'latest' | 'listByProject' | 'checkOutput'>;
+  suggestions: Pick<SuggestionStore, 'record'>;
 }
 
 /**
@@ -35,7 +48,7 @@ export function createCdkTools(deps: CdkToolsDeps, projectId: string): ToolServe
   const getProject = defineTool({
     name: 'get_project',
     description:
-      "The project's title and avenue, the latest build's version, status, QA findings, and error, and what the D2L tenant allows for this avenue. The avenue and the tenant limits are null until a format is set.",
+      "The project's title and avenue, the latest build's version, status, QA findings, and error, what the D2L tenant allows for this avenue, and earlierSuggestions: every suggestion the instructor has already seen on an earlier build. The avenue and the tenant limits are null until a format is set.",
     summary: 'Reading the project',
     input: {},
     async handler() {
@@ -48,6 +61,7 @@ export function createCdkTools(deps: CdkToolsDeps, projectId: string): ToolServe
         avenue,
         latestBuild: latest ? { version: latest.version, status: latest.status, qa: latest.qa, error: latest.error } : null,
         tenant: avenue ? await tenantLimits(avenue) : null,
+        earlierSuggestions: earlierSuggestions(deps.builds.listByProject(projectId).flatMap((build) => build.suggestions)),
       });
     },
   });
@@ -86,6 +100,19 @@ export function createCdkTools(deps: CdkToolsDeps, projectId: string): ToolServe
     },
   });
 
+  const recordSuggestions = defineTool({
+    name: 'record_suggestions',
+    description:
+      `Records up to ${MAX_SUGGESTIONS} optional TILT or UDL design suggestions for the activity, most useful first, as the ${SUGGESTIONS_SKILL} skill describes. ` +
+      "CDK keeps the last list recorded in a request and stores it with the build it makes when the request ends, so record an empty list when nothing needs changing. Recording changes nothing in out/ and never affects the build's QA result or download.",
+    summary: 'Noting suggestions',
+    input: { suggestions: z.array(suggestionSchema).max(MAX_SUGGESTIONS) },
+    async handler({ suggestions }) {
+      deps.suggestions.record(projectId, suggestions);
+      return { content: `Recorded ${suggestions.length} suggestion(s) for the build made when this request ends.` };
+    },
+  });
+
   const deleteFiles = defineTool({
     name: 'delete_files',
     description: 'Deletes files or folders inside out/. Paths are relative to out/.',
@@ -119,12 +146,21 @@ export function createCdkTools(deps: CdkToolsDeps, projectId: string): ToolServe
     },
   });
 
-  return { name: 'cdk', tools: [getProject, setFormat, checkOutput, deleteFiles] };
+  return { name: 'cdk', tools: [getProject, setFormat, checkOutput, recordSuggestions, deleteFiles] };
 }
 
 /** Keeps a tool's input fields and its handler's argument type in step. */
 function defineTool<Shape extends ZodRawShape>(def: ToolDef<Shape>): ToolDef<Shape> {
   return def;
+}
+
+/** Each distinct suggestion in `suggestions`, by its framework, principle, and text, without its reason. */
+function earlierSuggestions(suggestions: BuildSuggestion[]): Array<Omit<BuildSuggestion, 'reason'>> {
+  const seen = new Map<string, Omit<BuildSuggestion, 'reason'>>();
+  for (const { framework, principle, suggestion } of suggestions) {
+    seen.set(JSON.stringify([framework, principle, suggestion]), { framework, principle, suggestion });
+  }
+  return [...seen.values()];
 }
 
 function json(value: unknown): ToolResult {

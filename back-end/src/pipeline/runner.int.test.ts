@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { inArray } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { AgentDriver, AgentEvent, AgentSession, TurnErrorCode, TurnLimits, TurnResult } from '../agent/AgentDriver.js';
-import { createScriptedAgentDriver } from '../agent/scripted.js';
+import { createScriptedAgentDriver, SUGGESTIONS } from '../agent/scripted.js';
 import { createBuildsRepo } from '../db/builds.js';
 import { createEventsRepo } from '../db/events.js';
 import { createFilesRepo } from '../db/files.js';
@@ -23,6 +23,7 @@ import { createCdkTools } from '../tools/index.js';
 import { createEventService, type EventService } from './events.js';
 import { createRunner, type Runner } from './runner.js';
 import { createSessionService, type SessionService } from './sessions.js';
+import { createSuggestionStore } from './suggestions.js';
 import { captureLog } from '../test/log.js';
 import type { Build as ApiBuild } from '@cdk/contract';
 
@@ -188,8 +189,9 @@ describe('runner, end to end', () => {
   function useAgent(driver: Pick<AgentDriver, 'open'>, turnLimits: TurnLimits): void {
     const builds = createBuildService({ builds: createBuildsRepo(db), projects, workspaces, events });
     const avenues = createAvenueService({ projects, workspaces, turns: createTurnsRepo(db), events });
-    sessions = createSessionService({ projects, workspaces, driver, tools: (id) => createCdkTools({ projects, avenues, workspaces, builds }, id) });
-    runner = createRunner({ turns: createTurnsRepo(db), messages, files: createFilesRepo(db), events, sessions, workspaces, builds, turnLimits });
+    const suggestions = createSuggestionStore();
+    sessions = createSessionService({ projects, workspaces, driver, tools: (id) => createCdkTools({ projects, avenues, workspaces, builds, suggestions }, id) });
+    runner = createRunner({ turns: createTurnsRepo(db), messages, files: createFilesRepo(db), events, sessions, workspaces, builds, suggestions, turnLimits });
   }
 
   beforeEach(async () => {
@@ -275,6 +277,60 @@ describe('runner, end to end', () => {
       expect(build!.qa!.findings).toContainEqual(expect.objectContaining({ rule: 'topic/no-static-script-src', severity: 'error' }));
       expect(turnRow('turn-1').status).toBe('completed');
     });
+  });
+
+  describe('suggestions, with the scripted agent', () => {
+    beforeEach(() => {
+      useAgent(createScriptedAgentDriver(), { maxSteps: 60, maxBudgetUsd: 10 });
+    });
+
+    async function run(turnId: string, text: string): Promise<void> {
+      queueTurn(turnId, 'queued', text);
+      await runner.executeTurn(turnId);
+    }
+
+    const storedSuggestions = () => createBuildsRepo(db).listByProject(projectId).map((build) => build.suggestions);
+
+    it('stores the suggestions recorded in a request with its build, and the next build replaces them with an empty list', async () => {
+      await run('turn-1', 'Create a workplace safety quiz with design suggestions');
+      await run('turn-2', 'Add two questions [follow-up]');
+
+      expect(storedSuggestions()).toEqual([SUGGESTIONS, []]);
+      const stored = events.after(projectId, 0);
+      expect(stored.filter((event) => event.kind === 'build.created').map((event) => (event.payload as { build: ApiBuild }).build.suggestions)).toEqual([SUGGESTIONS, []]);
+      expect(stored.find((event) => event.kind === 'tool.started')?.payload).toMatchObject({ name: 'mcp__cdk__record_suggestions', summary: 'Noting suggestions', category: 'checking' });
+    }, 30_000);
+
+    it('drops suggestions recorded in a request that makes no build, so a later build does not get them', async () => {
+      await run('turn-1', 'Create a workplace safety quiz');
+      await run('turn-2', 'Create a workplace safety quiz with design suggestions');
+      await run('turn-3', 'Add two questions [follow-up]');
+
+      expect(storedSuggestions()).toEqual([[], []]);
+    }, 30_000);
+
+    it('drops suggestions recorded in a cancelled request', async () => {
+      await run('turn-1', 'Create a workplace safety quiz with design suggestions [cancelled]');
+      await run('turn-2', 'Create a workplace safety quiz');
+
+      expect(turnRow('turn-1').status).toBe('cancelled');
+      expect(storedSuggestions()).toEqual([[]]);
+    });
+
+    it('never changes the QA result or status of a build', async () => {
+      await run('turn-1', 'Create a workplace safety quiz with design suggestions [qa-fail]');
+      await run('turn-2', 'Create a workplace safety quiz');
+      await run('turn-3', 'Create a workplace safety quiz [qa-fail]');
+      await run('turn-4', 'Create a workplace safety quiz with design suggestions [follow-up]');
+
+      const [failedWith, ready, failedWithout, readyWith] = createBuildsRepo(db).listByProject(projectId);
+      expect(failedWith!.suggestions).toEqual(SUGGESTIONS);
+      expect(failedWithout!.suggestions).toEqual([]);
+      expect(failedWith).toMatchObject({ status: failedWithout!.status, qa: failedWithout!.qa, error: failedWithout!.error });
+      expect(failedWith).toMatchObject({ status: 'failed', error: { code: 'qa_failed' } });
+      expect(ready).toMatchObject({ status: 'ready', suggestions: [] });
+      expect(readyWith).toMatchObject({ status: 'ready', qa: { passed: true }, suggestions: SUGGESTIONS });
+    }, 30_000);
   });
 
   describe('for a project with no avenue, with the scripted agent', () => {

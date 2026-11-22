@@ -2,6 +2,7 @@ import * as fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Readable } from 'node:stream';
+import type { BuildSuggestion } from '@cdk/contract';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fromBufferPromise } from 'yauzl';
 import { createBuildsRepo, type BuildsRepo } from '../db/builds.js';
@@ -20,6 +21,11 @@ import { captureLog, type LogRecord } from '../test/log.js';
 
 const BAD_SCORM = join(KIT_DIR, 'qa', 'lint', 'fixtures', 'bad-scorm');
 const BAD_TOPIC = join(KIT_DIR, 'qa', 'lint', 'fixtures', 'bad-topic');
+
+const SUGGESTIONS: BuildSuggestion[] = [
+  { framework: 'tilt', principle: 'Criteria', suggestion: 'Show what a strong answer includes.', reason: 'Students do better when they see the criteria before they start.' },
+  { framework: 'udl', principle: 'Representation', suggestion: 'Add a labeled diagram beside the text.', reason: 'More than one way to present the content reaches more students.' },
+];
 
 describe('build service', () => {
   let dataDir: string;
@@ -82,6 +88,28 @@ describe('build service', () => {
       expect(build.qa?.passed).toBe(true);
     });
 
+    it('stores no suggestions when given none', async () => {
+      expect((await builds.create(projectId)).suggestions).toEqual([]);
+    });
+
+    it('keeps its suggestions from build.created on, with the QA result and status a build without them gets', async () => {
+      await replaceOutput(BAD_SCORM);
+      const payloads: unknown[] = [];
+      events.subscribe(projectId, (event) => payloads.push(event.payload));
+
+      const without = await builds.create(projectId);
+      const withSuggestions = await builds.create(projectId, 'turn-2', SUGGESTIONS);
+
+      expect(withSuggestions.suggestions).toEqual(SUGGESTIONS);
+      expect(buildsRepo.get(withSuggestions.id)?.suggestions).toEqual(SUGGESTIONS);
+      expect(payloads.slice(2)).toMatchObject([{ build: { status: 'checking', suggestions: SUGGESTIONS } }, { build: { suggestions: SUGGESTIONS } }]);
+      expect({ status: withSuggestions.status, qa: withSuggestions.qa, error: withSuggestions.error }).toEqual({
+        status: without.status,
+        qa: without.qa,
+        error: without.error,
+      });
+    });
+
     it('produces a failed build with findings, explanations included, for fixtures/bad-scorm', async () => {
       await replaceOutput(BAD_SCORM);
 
@@ -130,7 +158,7 @@ describe('build service', () => {
       const build = await builds.create(projectId);
 
       expect(build.outputHash).toBe(outputHash);
-      expect({ ...builds.latest(projectId), pedagogy: null }).toEqual(build);
+      expect(builds.latest(projectId)).toEqual(build);
     });
 
     it('gives concurrent builds of one project distinct versions', async () => {
@@ -319,7 +347,7 @@ describe('build service', () => {
       const failed = { ...left, status: 'failed', error: { code: 'interrupted', message: 'The app closed before this build was checked.', nextStep: 'send_again' } };
       expect(buildsRepo.get(left.id)).toEqual(failed);
       expect(updates).toMatchObject([{ kind: 'build.updated', turnId: 'turn-1' }]);
-      expect(updates[0]!.payload).toEqual({ build: { ...failed, pedagogy: null } });
+      expect(updates[0]!.payload).toEqual({ build: failed });
     });
   });
 
@@ -349,6 +377,16 @@ describe('build service', () => {
       expect(names).toContain('imsmanifest.xml');
       expect(names).toContain('index.html');
       expect(names).not.toContain('qa.json');
+    });
+
+    it('zips a ready build with suggestions the same as one without', async () => {
+      const without = await builds.create(projectId);
+      const withSuggestions = await builds.create(projectId, undefined, SUGGESTIONS);
+
+      expect(withSuggestions.status).toBe('ready');
+      expect(await zipEntryNames((await builds.download(ownerId, withSuggestions.id)).stream)).toEqual(
+        await zipEntryNames((await builds.download(ownerId, without.id)).stream),
+      );
     });
 
     it('refuses a build that failed', async () => {

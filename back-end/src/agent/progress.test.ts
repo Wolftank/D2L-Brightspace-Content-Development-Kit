@@ -11,7 +11,7 @@ it.each([
   ['mcp__cdk__create_build', {}, 'building'],
   ['mcp__cdk__check_output', {}, 'checking'],
   ['mcp__cdk__get_build', {}, 'checking'],
-  ['mcp__cdk__check_pedagogy', {}, 'checking'],
+  ['mcp__cdk__record_suggestions', {}, 'checking'],
   ['PowerShell', { command: 'node kit/scripts/lint.js' }, 'checking'],
   ['Bash', { command: 'ls out/' }, 'reading'],
   ['Bash', { command: 'rg heading out/' }, 'searching'],

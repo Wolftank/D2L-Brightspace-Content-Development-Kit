@@ -6,8 +6,8 @@
 
 The app is two programs, built by two tracks, that meet only at the HTTP API and the event stream defined in this document. Both import the same contract as TypeScript types from `packages/contract/` (`@cdk/contract`); a change to the contract updates this document and that package in the same PR.
 
-- **Front end** — the browser app. Per project it shows the chat, a small configurator (title, target course, source files), a build panel (preview, QA gate findings, pedagogy check findings), and a deployment confirmation. It renders what the back end returns and runs no checks itself. V1 ships one text box; the full chat uses the same API, so nothing below changes when the UI grows.
-- **Back end** — an Express service. Owns identity, projects, chats, turns, builds, deployments, the QA gate, the pedagogy check, and the D2L client. It drives the agent (Claude first, Copilot later) through a driver in `back-end/src/agent/`, and exposes its own capabilities to the agent as tools. The agent decides, per message, whether to edit the output, run a check, create a build, or just answer. The same code runs in local mode and in hosted mode (see [Modes](#modes)).
+- **Front end** — the browser app. Per project it shows the chat, a small configurator (title, target course, source files), a build panel (preview, QA gate findings, suggestions), and a deployment confirmation. It renders what the back end returns and runs no checks itself. V1 ships one text box; the full chat uses the same API, so nothing below changes when the UI grows.
+- **Back end** — an Express service. Owns identity, projects, chats, turns, builds, deployments, the QA gate, and the D2L client. It drives the agent (Claude first, Copilot later) through a driver in `back-end/src/agent/`, and exposes its own capabilities to the agent as tools. The agent decides, per message, whether to edit the output, run a check, create a build, or just answer. The same code runs in local mode and in hosted mode (see [Modes](#modes)).
 
 The instructor is not a developer. They make exactly one kind of decision in the whole flow, confirming a deployment, and they make it in the build panel, not the chat. The agent never asks them to approve a tool.
 
@@ -30,7 +30,7 @@ User ─< Project ─┬─< Message
 | **Message** | `id, projectId, seq, role, content[], turnId?, createdAt` | `role` is `instructor \| agent`. `content` is a list of blocks (below) |
 | **Turn** | `id, projectId, messageId, replyId?, status, startedAt?, finishedAt?, error?, usage?` | `messageId` is the instructor's message, `replyId` the final agent message; earlier agent messages in the same turn share its `turnId`. `status` is `queued \| running \| completed \| failed \| cancelled` |
 | **File** | `id, projectId, name, mime, size, createdAt` | Instructor uploads: syllabus, assignment text, images. `name` is the name it was uploaded with, cleaned for display, and never a path on disk. `mime` is decided by the file's content: `application/pdf`, Word's `application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `text/plain`, `image/png`, or `image/jpeg`. `size` is in bytes. `ProjectFile` in `@cdk/contract` |
-| **Build** | `id, projectId, version, status, avenue, qa, error?, outputHash?, pedagogy?, turnId?, createdAt` | `status` is `checking \| ready \| failed`. `outputHash` is the hash of the output the build copied, null while `checking` and when the copy failed. `qa` is `{ passed, findings[] }`, each finding `{ rule, severity, file, line, message, because? }`, or null until the QA gate reports and when it produced no usable report. `error` is `{ code, message, nextStep }` explaining why a build is `failed` (see [Errors](#errors)), otherwise null. `pedagogy` is `{ tilt[], udl[] }` once the pedagogy check has run on this build, otherwise null |
+| **Build** | `id, projectId, version, status, avenue, qa, error?, outputHash?, suggestions, turnId?, createdAt` | `status` is `checking \| ready \| failed`. `outputHash` is the hash of the output the build copied, null while `checking` and when the copy failed. `qa` is `{ passed, findings[] }`, each finding `{ rule, severity, file, line, message, because? }`, or null until the QA gate reports and when it produced no usable report. `error` is `{ code, message, nextStep }` explaining why a build is `failed` (see [Errors](#errors)), otherwise null. `suggestions` lists up to three optional design suggestions, most useful first, each `{ framework, principle, suggestion, reason }`: `framework` is `tilt` with `principle` `Purpose`, `Task`, or `Criteria`, or `udl` with `Engagement`, `Representation`, or `Action & Expression`. It is empty when there are none, and never affects the build's status, QA report, or download |
 | **Deployment** | `id, buildId, status, targetCourse, location?, verification?, turnId?, confirmedAt?, createdAt` | `status` is `requested \| confirmed \| deploying \| verified \| failed`. Only the instructor moves it past `requested` |
 | **Event** | `seq, projectId, turnId?, kind, payload, ts` | What the event stream carries. Replayable by `seq` |
 
@@ -51,7 +51,7 @@ Storage: one SQLite database in the app-data folder. Per project on disk:
   workspace/                where the agent works
     files/                  instructor uploads, as <fileId>.<ext>; a Word file's text as <fileId>.txt
     out/                    the output; the only thing a build copies
-  builds/<version>/         builds: copies of out/ with qa.json and pedagogy.json
+  builds/<version>/         builds: copies of out/ with qa.json
 ```
 
 Anything agent-specific inside the workspace, such as Claude's `.claude/` directory and `CLAUDE.md`, is written by the driver when it opens a session, never by provisioning. See [Workspaces](#workspaces).
@@ -98,7 +98,7 @@ GET    /api/projects/:projectId/files       → { items: File[] }
 
 `POST /api/projects/:projectId/files` takes one file per request, in the `file` field of a `multipart/form-data` body, and answers `201 { file }`, the File. A PDF, a Word document (.docx), a text file, a PNG, or a JPG of up to 20 MB is accepted. Its content decides its type; the name and the declared type are ignored, so a renamed program is refused. A PDF, Word, PNG, or JPG file must carry that format's signature, and a file with none is text only when it is valid UTF-8 with no NUL character, which leaves out UTF-16 text. Any other file, an empty file, a file over 20 MB, and a Word file that can't be read get `422 file_not_accepted`, with `details.reason` set to `type`, `empty`, or `too_large`. A body without exactly one file in `file`, or with any other field, gets `400 invalid_request`. The file is stored in the workspace's `files/` under its new id, with the extension of its type; a Word file's text is stored beside it as `<fileId>.txt` for the agent. The name it was uploaded with is kept only as data: its last segment after `/` or `\`, in NFC, without control or format characters, trimmed, and cut to 255 characters keeping a short extension, or `file` when nothing is left. `GET /api/projects/:projectId/files` lists the project's files, oldest first, with no paging. Both answer `404 not_found` for another instructor's project or an unknown one. A project's files are removed with its directory.
 
-In V1, `POST /api/projects` takes `{ title, avenue? }`. `title` is trimmed and must not be blank, `avenue` is `scorm` (a SCORM package) or `topic` (a content topic), the type `BuildableAvenue` in `@cdk/contract`; without it the project's avenue is null and the agent picks one (see [Tools](#tools)). Any other field, `targetCourse` included, is ignored. `PATCH /api/projects/:projectId` takes `{ avenue }` and answers `{ project }`: it replaces `out/` with the avenue's starter, stores the avenue, and sends `project.updated`. The project's builds stay, and the next request rebuilds in the new avenue. A project that already has the avenue is returned as it is, and a project with a `queued` or `running` turn gets `409 turn_active`. While a change is at work, a message or another change for the project gets `409 avenue_changing`, so no turn starts on a working copy that is being replaced. Responses carry every field of a resource; a field a later layer fills, such as a project's `targetCourse` or a build's `pedagogy`, is null. In `GET /api/projects/:projectId`, `builds` lists summaries `{ id, version, status, createdAt }`, oldest first, and `activeTurn` is present only while a turn is `queued` or `running`.
+In V1, `POST /api/projects` takes `{ title, avenue? }`. `title` is trimmed and must not be blank, `avenue` is `scorm` (a SCORM package) or `topic` (a content topic), the type `BuildableAvenue` in `@cdk/contract`; without it the project's avenue is null and the agent picks one (see [Tools](#tools)). Any other field, `targetCourse` included, is ignored. `PATCH /api/projects/:projectId` takes `{ avenue }` and answers `{ project }`: it replaces `out/` with the avenue's starter, stores the avenue, and sends `project.updated`. The project's builds stay, and the next request rebuilds in the new avenue. A project that already has the avenue is returned as it is, and a project with a `queued` or `running` turn gets `409 turn_active`. While a change is at work, a message or another change for the project gets `409 avenue_changing`, so no turn starts on a working copy that is being replaced. Responses carry every field of a resource; a field a later layer fills, such as a project's `targetCourse`, is null. In `GET /api/projects/:projectId`, `builds` lists summaries `{ id, version, status, createdAt }`, oldest first, and `activeTurn` is present only while a turn is `queued` or `running`.
 
 ### Chat
 
@@ -122,21 +122,18 @@ Posting a message never blocks on the agent. It stores the message, creates a qu
 
 ### Builds and deployments
 
-Reading builds, creating one without the agent, running the pedagogy check on one, and the human gate for deployments.
+Reading builds, creating one without the agent, and the human gate for deployments.
 
 ```
 GET    /api/projects/:projectId/builds        → { items: Build[] }
 POST   /api/projects/:projectId/builds        { note? } → 202 { build }     instructor-triggered, no agent involved
 GET    /api/builds/:buildId                   → { build, deployments: [] }
-POST   /api/builds/:buildId/pedagogy          → 202 { build }               runs the pedagogy check on this build
 GET    /api/builds/:buildId/download          the build as a zip, for manual upload
 POST   /api/builds/:buildId/deploy            { targetCourse?, confirm: true } → 202 { deployment }
 GET    /api/deployments/:deploymentId         → { deployment }
 ```
 
 The download is an attachment named `<title>-v<version>.zip`, with the project's title folded to lowercase ASCII letters and digits joined by dashes (`build` when none are left). It is refused with `404 build_not_found` for a build that doesn't exist, `409 build_not_ready` while the build is `checking`, `409 build_failed` when it failed, and `409 build_incomplete` when a file the build needs is missing: for a SCORM package, `imsmanifest.xml` or a file it declares; for a content topic, a file one of its pages references, found by the QA gate's own `shared/missing-assets` rule. A SCORM package's zip has `imsmanifest.xml` at its root, and a content topic's zip has its pages and files at its root.
-
-A build always runs the QA gate. The pedagogy check is a separate step on a build, requested by the instructor here or by the agent through its tool, so an intermediate build costs nothing it does not need.
 
 `POST /builds/:id/deploy` is the **human gate**. The agent can propose a deployment; only this call, made by the instructor, executes one. The D2L write happens in `back-end/src/deploy/`, never inside the agent.
 
@@ -161,14 +158,6 @@ Every response is `no-store` and `nosniff`, with a Content-Security-Policy whose
 
 In local mode a build's id is what names its files: the back end listens on 127.0.0.1 only, the `Host` must be the preview origin's, and build ids are random. Hosted mode needs two more things before it serves previews: a separate preview domain, and short-lived signed preview links tied to the build and the instructor, because a build id can leak.
 
-### Checks without the agent
-
-```
-POST   /api/checks/pedagogy    { text } | { fileId } → { tilt: Finding[], udl: Finding[] }
-```
-
-Goal 4 in the proposal: the pedagogy check on assignment text without building anything. The same implementation backs the build-level check and the agent's tool.
-
 ## Event stream
 
 The event stream is how the back end pushes progress to the front end while a turn runs, over Server-Sent Events. One event stream per project. Everything asynchronous the UI needs to show arrives here; everything else is plain request/response.
@@ -189,7 +178,7 @@ Each event: `id` is the project-wide `seq`, `event` is the kind, `data` is JSON.
 | `tool.started` | `{ turnId, callId, name, summary, category }` | The agent is calling a tool. Sent once per `callId`, as soon as the driver knows `summary`, its plain-language line such as "Writing index.html", which can be before the call's input is complete |
 | `tool.finished` | `{ turnId, callId, ok, summary, category, buildId? }` | The tool returned, or the turn ended before it did, which is `ok: false`. `summary` repeats the started one, prefixed "Failed: " when `ok` is false |
 | `build.created` | `{ build }` | A new build exists (status `checking`) |
-| `build.updated` | `{ build }` | QA gate report attached, pedagogy check report attached, or failed |
+| `build.updated` | `{ build }` | QA gate report attached, or failed |
 | `deployment.updated` | `{ deployment }` | Any status change, including `requested` from the agent |
 | `turn.completed` | `{ turnId, usage? }` | |
 | `turn.failed` | `{ turnId, error }` | |
@@ -203,7 +192,7 @@ A turn is the agent's work in response to one instructor message. This section f
 
 ### Progress presentation
 
-Progress events carry a `category`: `thinking`, `reading`, `searching`, `writing`, `checking`, `building`, or `other`. Tool events exclude `thinking`; the driver classifies them from tool identity and structured input, and the runner preserves the category on completion. The UI never classifies display text. The default feed summarizes consecutive file edits as "Updating the activity", hides reading and searching, and retains checking, building, other activity, terminal summaries, and failed calls. Raw filenames appear in details. CDK check_output calls carry the checking category. Show details reveals all non-thinking steps, including after a turn finishes.
+Progress events carry a `category`: `thinking`, `reading`, `searching`, `writing`, `checking`, `building`, or `other`. Tool events exclude `thinking`; the driver classifies them from tool identity and structured input, and the runner preserves the category on completion. The UI never classifies display text. The default feed summarizes consecutive file edits as "Updating the activity", hides reading and searching, and retains checking, building, other activity, terminal summaries, and failed calls. Raw filenames appear in details. CDK `check_output` and `record_suggestions` calls carry the checking category. Show details reveals all non-thinking steps, including after a turn finishes.
 
 Thinking updates only the current-step indicator. It is never added to the progress list, including during replay or after a reload. The end of a thinking block, tool activity, and streamed replies replace it. A reply resets status deduplication so a later thinking phase can start with the same status text.
 
@@ -227,8 +216,9 @@ sequenceDiagram
   Runner-->>UI: turn.status, message.delta
   Agent->>Tools: check_output()
   Tools-->>Agent: QA findings for out/
+  Agent->>Tools: record_suggestions()
   Agent-->>Runner: result
-  Runner->>Runner: build out/: copy it, run the QA gate
+  Runner->>Runner: build out/: copy it, run the QA gate, keep the suggestions
   Runner-->>UI: build.created, build.updated
   Runner-->>UI: message.completed, turn.completed
   UI->>API: POST /builds/:id/deploy (instructor confirms)
@@ -241,7 +231,7 @@ Runner rules:
 3. When the driver's result arrives, the runner hands the session back to the session service: `release` after a completed result, `close` after anything else, so a failed or aborted agent process is never reused. On a completed result it stores each nonempty agent message in order and emits `message.completed` for each. Assistant message boundaries from the driver determine distinct message IDs; tool steps do not split text by themselves. The driver's final message completes the last reply, or its streamed text is used when that is empty. The turn's `replyId` references the final stored reply. It then builds per rule 6 and marks the turn.
 4. Every turn ends with exactly one of `turn.completed`, `turn.failed`, and `turn.cancelled`. A failed turn's `error` is `{ code, message, nextStep }`: the code from the driver, or `workspace_missing`, `interrupted`, or `internal_error` from the runner, with the fixed plain-language message and next step for that code from [Errors](#errors). The technical detail goes to the server log.
 5. `POST /turns/:id/cancel` cancels a turn. A `queued` turn becomes `cancelled` without starting. A `running` turn's abort signal fires: the driver stops the agent and returns `cancelled`, and the runner closes the session (rule 3), stores no reply, and makes no build. Output in `out/` stays for the next completed turn to build (rule 6), and the next message continues the same agent session. A cancel after the agent has finished changes nothing. On the desktop app's `shutdown` message, when its channel to the app closes, or on `SIGINT` or `SIGTERM`, the back end cancels every running turn this way, waits for each to end, closes the sessions and the database, and exits. A turn has no time limit; `AGENT_MAX_STEPS` and `AGENT_MAX_BUDGET_USD` end one that runs away.
-6. At the end of a completed turn, the runner compares the workspace service's hash of `out/` with the `outputHash` of the project's latest build, or with `out/` at the turn's start before the project's first build. When they differ it creates a build, with the QA gate and without the pedagogy check. A project with no avenue, or whose `out/` is its avenue's untouched starter, gets no build. This builds a turn's changes without relying on the agent to remember and, once the project has a build, also builds output a failed, cancelled, or interrupted turn left unbuilt. A build that fails the QA gate leaves the turn `completed`.
+6. At the end of a completed turn, the runner compares the workspace service's hash of `out/` with the `outputHash` of the project's latest build, or with `out/` at the turn's start before the project's first build. When they differ it creates a build, with the QA gate and the suggestions the agent recorded in the turn. A turn that makes no build, fails, or is cancelled drops its suggestions, and a build without any gets an empty list. A project with no avenue, or whose `out/` is its avenue's untouched starter, gets no build. This builds a turn's changes without relying on the agent to remember and, once the project has a build, also builds output a failed, cancelled, or interrupted turn left unbuilt. A build that fails the QA gate leaves the turn `completed`.
 7. On boot, once the back end holds its port and before it handles a request, every turn still `queued` or `running` becomes `failed` with `error.code = 'interrupted'`. Its message and the workspace output are kept, and the UI offers to resend. Every build still `checking` becomes `failed` with the same code. A back end that shut down (rule 5) leaves none.
 
 Not every message produces a build. A question gets an answer. A request to change a colour edits the output and produces a new build. The agent's clarifying questions are ordinary messages; the next instructor message continues the chat.
@@ -331,14 +321,16 @@ Tools are the functions the back end exposes to the agent, so that the agent act
 
 | Tool | Does | Side effect |
 |---|---|---|
-| `get_project` | Returns the title, the avenue, the latest build's version, status, QA findings, and error, and the tenant profile's sections for the avenue: `scorm`, `fileLoading`, `storage`, and `rendering` for a SCORM package; `fileLoading`, `storage`, `brightspaceApi`, and `rendering` for a content topic. Both are null before an avenue is set | none |
+| `get_project` | Returns the title, the avenue, the latest build's version, status, QA findings, and error, `earlierSuggestions`, each suggestion on the project's builds once without its reason, and the tenant profile's sections for the avenue: `scorm`, `fileLoading`, `storage`, and `rendering` for a SCORM package; `fileLoading`, `storage`, `brightspaceApi`, and `rendering` for a content topic. Both are null before an avenue is set | none |
 | `set_format({ format })` | Sets the project's avenue to `scorm` or `topic`, and returns the avenue's skill and its tenant profile sections | `out/` replaced with the avenue's starter, `project.updated`. None when the project already has the avenue |
 | `check_output` | Runs the QA gate on `out/` as it is and returns its findings | none |
+| `record_suggestions({ suggestions })` | Records up to three suggestions, each `{ framework, principle, suggestion, reason }` as on a Build, for the build the request makes. The last call in a request wins | none until the runner builds (Runner rule 6) |
 | `delete_files({ paths })` | Deletes files or folders inside `out/` | Files removed from `out/` |
-| `check_pedagogy({ buildId } \| { text })` | Planned: the pedagogy check on a build or on pasted text | On a build: report attached, `build.updated` |
 | `propose_deploy({ buildId, note })` | Planned: records that the agent thinks this build is ready | Deployment row in `requested`, `deployment.updated` |
 
 The agent checks its work with `check_output`, which records nothing. Builds come from the runner, which builds `out/` after every turn that changed it (Runner rule 6), so each request produces one build however many times the agent checked.
+
+**Suggestions.** Every session has the kit's `d2l-tilt-udl-suggestions` skill, written from `kit/docs/TILT_UDL_Reference.docx`. Each time the agent builds or changes the activity, it looks at the activity and any assignment the instructor attached for gaps in TILT's purpose, task, and criteria and UDL's engagement, representation, and action and expression, and records at most three suggestions, most useful first, with `record_suggestions`, or an empty list. It makes none of the suggested changes, and its reply mentions them in one sentence. It leaves out every suggestion in `get_project`'s `earlierSuggestions`, which the instructor has already seen, so a declined suggestion doesn't come back, even in a fresh session. When the instructor asks for suggestions directly, such as on a pasted assignment, the agent answers in the chat and records nothing.
 
 **Picking the avenue.** A project created without an avenue opens with the kit's router skill and instructions to pick `scorm` or `topic` from the instructor's request, asking one short question first only when the request doesn't settle it. The agent records the pick with `set_format` and builds in the same turn. A request that isn't for an activity leaves the avenue null. Once an avenue is set, the agent changes it only when the instructor asks for the other one, and rebuilds in the same turn.
 
@@ -403,7 +395,7 @@ A workspace is the directory where the agent works on one project. It holds the 
 
 **Provisioning.** The workspace service, called by `POST /projects` before the Project row is stored, creates the tree shown under [Resource model](#resource-model): `files/` empty, and `out/` holding the starter of the kit skill that builds the project's avenue: `d2l-scorm-package` for `scorm`, `d2l-content-topic` for `topic`. A project with no avenue starts with an empty `out/`, and setting the avenue replaces `out/` with that avenue's starter. The same service copies `out/` into a build, hashes `out/` so the runner can tell whether a turn changed it, and removes the tree when the project is deleted or its setup fails. Nothing it writes is specific to an agent.
 
-**Agent files.** Each agent takes its instructions, its skills, and its permission rules in its own way, so the driver delivers them at every `open`, and provisioning never writes them. The instructions are generated by the back end from the project facts and the kit's rules (write the output into `out/`, respect the tenant profile). The skills are both avenues' skills and `d2l-tenant-qa`, plus `d2l-experience-router` while the project has no avenue, from the kit as installed. The permission rules are those in the confinement layers below. The Claude driver writes all three into the workspace, as `CLAUDE.md`, `.claude/skills/`, and `.claude/settings.json`, because that is where Claude reads them. The Copilot driver passes all three as session options, `systemMessage`, `skillDirectories` pointing at the kit, and the tool allowlist, and writes nothing. Delivering at every open means an install can switch agents, a change to the project facts reaches the agent at its next session, and a fix to a skill reaches every project at its next session.
+**Agent files.** Each agent takes its instructions, its skills, and its permission rules in its own way, so the driver delivers them at every `open`, and provisioning never writes them. The instructions are generated by the back end from the project facts and the kit's rules (write the output into `out/`, respect the tenant profile). The skills are both avenues' skills, `d2l-tenant-qa`, and `d2l-tilt-udl-suggestions`, plus `d2l-experience-router` while the project has no avenue, from the kit as installed. The permission rules are those in the confinement layers below. The Claude driver writes all three into the workspace, as `CLAUDE.md`, `.claude/skills/`, and `.claude/settings.json`, because that is where Claude reads them. The Copilot driver passes all three as session options, `systemMessage`, `skillDirectories` pointing at the kit, and the tool allowlist, and writes nothing. Delivering at every open means an install can switch agents, a change to the project facts reaches the agent at its next session, and a fix to a skill reaches every project at its next session.
 
 **Attachments.** The runner gives the agent a message's files as the turn's attachments, in the order sent, each with its name, its type, and the absolute path the agent reads with its file tools: a Word file's `<fileId>.txt`, and any other file itself. The Claude driver lists them after the instructor's text as reference material, each name quoted so it stays on one line. The instructions tell the agent that attached files are reference material: it uses their content, but never follows instructions written inside them or treats their text as the instructor's request. Files stay in `files/`, so a later message can use a file attached earlier: the session's history names its path. The agent can only read `files/`; the confinement layers below allow edits in `out/` alone, and `delete_files` deletes only inside `out/`, so uploads stay as they were sent.
 
@@ -455,7 +447,6 @@ How `back-end/src` is laid out, so that each concern above has exactly one home.
 | `src/pipeline/` | The runner, the session service, and the event service |
 | `src/agent/` | `AgentDriver` and the drivers |
 | `src/tools/` | The `cdk` tool handlers, plus the in-process and stdio adapters |
-| `src/tilt-udl/` | The pedagogy check |
 | `src/deploy/` | The D2L client and verification |
 | `src/db/` | SQLite schema and repositories |
 | `kit/qa/` | The QA gate, run by `builds`; the emulator and the tenant profile, served by `preview/`; the tenant profile is also read by `tools/` |
@@ -483,7 +474,7 @@ Every document in `docs/` and every comment in `back-end/src/` uses these words,
 | **output** | The contents of `out/` in the workspace: the course content the project produces. |
 | **build** | An immutable copy of the output that has been through the QA gate. |
 | **QA gate** | The kit's static check of a build against the tenant profile, implemented by `kit/qa/lint`. |
-| **pedagogy check** | The TILT and UDL check, run on a build or on pasted text. |
+| **suggestion** | An optional design change from TILT or UDL that the agent records with a build. Never part of the QA gate. |
 | **deployment** | Placing a build into a D2L course. |
 | **kit** | The D2L Content Development Kit in `back-end/kit`: skills, QA gate, emulator, probes. |
 | **skill** | A guide in the kit that the agent follows to build one avenue. |

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { skillsFor } from '../kit.js';
 import type { AgentEvent, TurnResult } from './AgentDriver.js';
 
 const BARE_FILE_AND_WEB_TOOL_NAMES = ['Read', 'Edit', 'Write', 'Grep', 'Glob', 'WebFetch', 'WebSearch'];
@@ -259,6 +260,22 @@ describe('capabilityDifferences', () => {
   it.each(cases)('names %s', async (_case, change, expected) => {
     expect(await differences(change)).toEqual([expected]);
   });
+
+  it.each(['scorm', 'topic', null] as const)(
+    "requires every one of the project's skills, the suggestions skill included, for avenue %s",
+    async (avenue) => {
+      const { allowedCapabilities, capabilityDifferences } = await import('./claude.js');
+      const skills = skillsFor(avenue);
+      const allowed = allowedCapabilities({ tools: { name: 'cdk', tools: [] }, skills });
+      const init = await initMessage();
+
+      expect(skills).toContain('d2l-tilt-udl-suggestions');
+      expect(capabilityDifferences({ ...init, skills }, allowed)).toEqual([]);
+      expect(capabilityDifferences({ ...init, skills: skills.filter((skill) => skill !== 'd2l-tilt-udl-suggestions') }, allowed)).toEqual([
+        'missing skills: d2l-tilt-udl-suggestions',
+      ]);
+    },
+  );
 });
 
 describe('enforceCapabilities', () => {

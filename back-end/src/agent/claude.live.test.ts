@@ -1,7 +1,7 @@
 import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { BuildableAvenue } from '@cdk/contract';
+import type { BuildableAvenue, BuildSuggestion } from '@cdk/contract';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createBuildsRepo } from '../db/builds.js';
 import { createEventsRepo } from '../db/events.js';
@@ -10,8 +10,9 @@ import { createProjectsRepo } from '../db/projects.js';
 import { testDb } from '../db/test-db.js';
 import { createTurnsRepo } from '../db/turns.js';
 import { createUsersRepo } from '../db/users.js';
-import { KIT_DIR, skillsFor } from '../kit.js';
+import { KIT_DIR, pickedAvenue, skillsFor } from '../kit.js';
 import { createEventService } from '../pipeline/events.js';
+import { createSuggestionStore } from '../pipeline/suggestions.js';
 import { log } from '../log.js';
 import { createAvenueService } from '../services/avenues.js';
 import { createBuildService } from '../services/builds.js';
@@ -20,7 +21,7 @@ import { createWorkspaceService } from '../services/workspaces.js';
 import { createCdkTools } from '../tools/index.js';
 import { createClaudeAgentDriver } from './claude.js';
 import { renderProjectInstructions } from './instructions.js';
-import type { AgentEvent, AgentSession, SessionRequest, ToolServerSpec, TurnResult } from './AgentDriver.js';
+import type { AgentEvent, AgentSession, SessionRequest, ToolServerSpec, TurnInput, TurnResult } from './AgentDriver.js';
 
 const driver = createClaudeAgentDriver();
 
@@ -266,17 +267,23 @@ describe('ClaudeAgentDriver, live SDK, in a provisioned workspace', () => {
     const workspaceDir = workspaces.pathFor(project.id);
     await prepare(join(workspaceDir, 'out'));
     const checks: boolean[] = [];
-    const session = await driver.open({
-      workspaceDir,
-      sessionId: null,
-      instructions: renderProjectInstructions({ project, avenue, workspaceDir }),
-      skillsDir: join(KIT_DIR, 'skills'),
-      skills: skillsFor(avenue),
-      tools: recordingChecks(createCdkTools({ projects, avenues, workspaces, builds }, project.id), checks),
-    });
+    const suggestions = createSuggestionStore();
+    /** Opens a session on the project for its avenue now, reopening `sessionId` when given. */
+    const reopen = (sessionId: string | null) => {
+      const current = pickedAvenue(projects.getById(project.id)!);
+      return driver.open({
+        workspaceDir,
+        sessionId,
+        instructions: renderProjectInstructions({ project, avenue: current, workspaceDir }),
+        skillsDir: join(KIT_DIR, 'skills'),
+        skills: skillsFor(current),
+        tools: recordingChecks(createCdkTools({ projects, avenues, workspaces, builds, suggestions }, project.id), checks),
+      });
+    };
+    const session = await reopen(null);
     const files = createFileService({ projects, files: createFilesRepo(db), workspaces });
     const storedAvenue = () => projects.getById(project.id)?.avenue;
-    return { ownerId, project, workspaces, workspaceDir, builds, files, checks, session, storedAvenue };
+    return { ownerId, project, workspaces, workspaceDir, builds, files, checks, suggestions, session, reopen, storedAvenue };
   }
 
   /** Runs a turn to its end, or stops it once the agent's `set_format` call has finished. */
@@ -520,4 +527,80 @@ describe('ClaudeAgentDriver, live SDK, in a provisioned workspace', () => {
     expect(await snapshot()).toEqual(before);
     await reopened.close();
   }, 300_000);
+
+  describe('suggestions', () => {
+    const assignments = join(import.meta.dirname, '__fixtures__', 'assignments');
+    const MARKDOWN = /\*\*|`|^#|^\s*([-*]|\d+\.)\s/m;
+
+    /** Runs a request to its end and checks it completed with a plain-text reply. */
+    async function request(session: AgentSession, text: string, attachments: TurnInput['attachments'] = []) {
+      const turn = session.send({ text, attachments }, { maxSteps: 60, maxBudgetUsd: 5 }, new AbortController().signal);
+      const events = await drain(turn.events);
+      const result = await turn.result;
+      console.log(`Reply: ${result.text}`);
+      console.log(`Usage: ${JSON.stringify(result.usage)}`);
+      expect(result.error).toBeUndefined();
+      expect(result.text).not.toMatch(MARKDOWN);
+      return { result, events };
+    }
+
+    const pairs = (list: BuildSuggestion[]) => list.map(({ framework, principle }) => `${framework}:${principle}`);
+
+    it('suggests a purpose and criteria for an assignment that states neither, and does not bring them back once declined, even in a fresh session', async () => {
+      const { ownerId, project, workspaceDir, files, builds, suggestions, session, reopen } = await openProject();
+      const file = await files.upload(ownerId, project.id, { name: 'titration-report.txt', bytes: await readFile(join(assignments, 'titration-report.txt')) }, log);
+
+      const { result } = await request(
+        session,
+        'Build a five-question multiple-choice practice quiz for students to take before they write the attached lab report. Their best score should go to the gradebook.',
+        [attachmentFor(file, join(workspaceDir, 'files'))],
+      );
+      const first = await builds.create(project.id, undefined, suggestions.take(project.id));
+      console.log(`Version 1 suggestions: ${JSON.stringify(first.suggestions, null, 2)}`);
+      expect(first).toMatchObject({ status: 'ready', qa: { passed: true } });
+      expect(first.suggestions.length).toBeLessThanOrEqual(3);
+      expect(pairs(first.suggestions)).toEqual(expect.arrayContaining(['tilt:Purpose', 'tilt:Criteria']));
+      expect(first.suggestions.every(({ reason }) => reason.trim() !== '')).toBe(true);
+      expect(result.text).toMatch(/suggest/i);
+      expect(result.text.match(/suggest/gi)).toHaveLength(1);
+      await session.close();
+
+      const fresh = await reopen(null);
+      await request(fresh, "Thanks, but I don't want any of the suggested changes. Make the quiz six questions instead of five.");
+      const second = await builds.create(project.id, undefined, suggestions.take(project.id));
+      console.log(`Version 2 suggestions: ${JSON.stringify(second.suggestions, null, 2)}`);
+      expect(second).toMatchObject({ version: 2, status: 'ready', qa: { passed: true } });
+      expect(pairs(second.suggestions).filter((pair) => pairs(first.suggestions).includes(pair))).toEqual([]);
+      await fresh.close();
+    }, 1_800_000);
+
+    it('makes no TILT suggestions for an activity that states its purpose, task, and criteria', async () => {
+      const { ownerId, project, workspaceDir, files, builds, suggestions, session } = await openProject({ avenue: 'topic' });
+      const file = await files.upload(ownerId, project.id, { name: 'buffer-design.txt', bytes: await readFile(join(assignments, 'buffer-design.txt')) }, log);
+
+      await request(
+        session,
+        'Build a page that presents the attached lab report assignment to students as written, with its purpose, its steps, and how it will be graded.',
+        [attachmentFor(file, join(workspaceDir, 'files'))],
+      );
+      const build = await builds.create(project.id, undefined, suggestions.take(project.id));
+      console.log(`Suggestions: ${JSON.stringify(build.suggestions, null, 2)}`);
+      expect(build).toMatchObject({ status: 'ready', qa: { passed: true } });
+      expect(build.suggestions.filter(({ framework }) => framework === 'tilt')).toEqual([]);
+      await session.close();
+    }, 1_200_000);
+
+    it('answers a direct request for suggestions on a pasted assignment in the chat, recording and building nothing', async () => {
+      const { project, workspaces, session } = await openProject();
+      const before = await workspaces.hashOutput(project.id);
+      const assignment = await readFile(join(assignments, 'titration-report.txt'), 'utf8');
+
+      const { events, result } = await request(session, `Here is an assignment I give my students. What would you suggest improving in it?\n\n${assignment}`);
+
+      expect(events.filter((event) => event.kind === 'tool_start' && event.name === 'mcp__cdk__record_suggestions')).toEqual([]);
+      expect(await workspaces.hashOutput(project.id)).toBe(before);
+      expect(result.text).toMatch(/criteria|graded|grading/i);
+      await session.close();
+    }, 300_000);
+  });
 });

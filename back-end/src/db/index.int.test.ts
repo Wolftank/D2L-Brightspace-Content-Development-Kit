@@ -6,6 +6,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { getTableConfig } from 'drizzle-orm/sqlite-core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createBuildsRepo } from './builds.js';
 import { createEventsRepo } from './events.js';
 import { type Db, migrationsFolder, openDb } from './index.js';
 import { createProjectsRepo } from './projects.js';
@@ -20,7 +21,7 @@ import * as schema from './schema.js';
 type OpenDb = Db & { $client: Database.Database };
  
 const JOURNAL = JSON.parse(readFileSync(join(migrationsFolder, 'meta', '_journal.json'), 'utf8')) as {
-  entries: unknown[];
+  entries: Array<{ tag: string }>;
 };
 const SCHEMA_TABLES = Object.values(schema).map((table) => getTableConfig(table));
  
@@ -134,5 +135,20 @@ describe('R5 regression: database', () => {
       expect(appliedMigrations(open(path))).toBe(JOURNAL.entries.length);
     },
   );
+
+  it('gives a build stored before suggestions existed an empty list of them', () => {
+    const path = join(dataDir, 'cdk.db');
+    const existing = createWithMigrations(path, JOURNAL.entries.findIndex((entry) => entry.tag === '0004_broken_may_parker'));
+    existing.prepare("INSERT INTO users (id, display_name) VALUES ('user-1', 'Instructor')").run();
+    existing
+      .prepare("INSERT INTO projects (id, owner_id, title, created_at, updated_at) VALUES ('project-1', 'user-1', 'Cell division practice', 1, 1)")
+      .run();
+    existing
+      .prepare("INSERT INTO builds (id, project_id, version, status, avenue, created_at) VALUES ('build-1', 'project-1', 1, 'ready', 'scorm', 1)")
+      .run();
+    existing.close();
+
+    expect(createBuildsRepo(open(path)).get('build-1')?.suggestions).toEqual([]);
+  });
 });
  

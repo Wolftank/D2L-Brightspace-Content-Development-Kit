@@ -43,10 +43,24 @@ describe('renderProjectInstructions', () => {
     expect(markdown).toContain('A Word document is given as its text');
   });
 
+  it('has the agent record suggestions after every build, make none of them, and mention them in one sentence', () => {
+    for (const avenueOrNone of ['scorm', 'topic', null] as const) {
+      const markdown = renderProjectInstructions({ project, avenue: avenueOrNone, workspaceDir });
+      expect(markdown).toContain('d2l-tilt-udl-suggestions');
+      expect(markdown).toContain('mcp__cdk__record_suggestions');
+      expect(markdown).toContain('for any assignment the instructor attached');
+      expect(markdown).toContain('an empty list when nothing needs changing');
+      expect(markdown).toContain('Make none of the suggested changes yourself');
+      expect(markdown).toContain('answer in your reply with the same skill, in plain sentences with no list, and record nothing');
+      expect(markdown).toContain('mention them once, in a single sentence');
+      expect(markdown).toContain('nowhere else in the reply');
+    }
+  });
+
   it('names the CDK tools and no shell command', () => {
     const markdown = renderProjectInstructions({ project, avenue, workspaceDir });
     expect(markdown).toContain('You have no shell');
-    for (const tool of ['mcp__cdk__get_project', 'mcp__cdk__check_output', 'mcp__cdk__delete_files']) {
+    for (const tool of ['mcp__cdk__get_project', 'mcp__cdk__check_output', 'mcp__cdk__record_suggestions', 'mcp__cdk__delete_files']) {
       expect(markdown).toContain(tool);
     }
     expect(markdown).not.toMatch(/powershell|bash|lint\.js|qa\/lint/i);

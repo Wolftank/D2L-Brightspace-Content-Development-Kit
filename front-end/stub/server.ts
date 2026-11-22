@@ -282,7 +282,6 @@ function runTurn(state: ProjectState, turn: Turn, scenario: Scenario): void {
             qa: null,
             error: null,
             outputHash: null,
-            pedagogy: null,
             suggestions: [],
             turnId: turn.id,
             createdAt: Date.now(),

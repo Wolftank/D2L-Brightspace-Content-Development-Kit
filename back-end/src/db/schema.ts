@@ -1,5 +1,5 @@
 import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
-import type { BuildError, ContentBlock, FileMime, QaReport, TurnError, TurnUsage } from '@cdk/contract';
+import type { BuildError, BuildSuggestion, ContentBlock, FileMime, QaReport, TurnError, TurnUsage } from '@cdk/contract';
 
 export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
@@ -74,6 +74,7 @@ export const builds = sqliteTable(
     error: text('error', { mode: 'json' }).$type<BuildError>(),
     /** Hash of the output copied into the build; null while checking and when the copy failed. */
     outputHash: text('output_hash'),
+    suggestions: text('suggestions', { mode: 'json' }).notNull().default([]).$type<BuildSuggestion[]>(),
     turnId: text('turn_id'),
     createdAt: integer('created_at').notNull(),
   },
