@@ -68,7 +68,7 @@ function buildBackEnd(cfg: Config): BackEnd {
 
   const deps: Deps = {
     users: createUsersRepo(db),
-    projects: createProjectService({ projects: projectsRepo, workspaces, builds: buildsRepo, turns: turnsRepo }),
+    projects: createProjectService({ projects: projectsRepo, workspaces, builds: buildsRepo, turns: turnsRepo, events }),
     avenues,
     turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, files: filesRepo, runner }),
     messages: createMessageService({ projects: projectsRepo, messages: messagesRepo }),

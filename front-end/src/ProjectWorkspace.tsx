@@ -11,6 +11,7 @@ import './App.css';
 import { AttachmentLabels, AttachmentPicker } from './attachments/Attachments';
 import { attachmentProblem, MAX_ATTACHMENTS, type Attachment } from './attachments/validation';
 import { AppHeader } from './projects/AppHeader';
+import { ProjectTitle } from './projects/ProjectTitle';
 import { readFailure } from './api/failure';
 import { BuildDownload } from './d2l/BuildDownload';
 import { ErrorNotice } from './ErrorNotice';
@@ -235,6 +236,11 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
     messageBox.current?.focus();
   }
 
+  async function renameProject(next: string) {
+    if (!project) return;
+    setProject((await updateProject(project.id, { title: next })).project);
+  }
+
   function askForFix() {
     setRequestText(current => current.trim() ? current : 'Please fix the problems reported by the QA check' + (latestBuild ? ' in build ' + latestBuild.version : '') + '.');
     messageBox.current?.focus();
@@ -297,7 +303,9 @@ export function ProjectWorkspace({ initialProject = null, initialTurnId }: { ini
     <section className="intro" aria-labelledby="page-title">
       <p className="workspace-eyebrow">{!project ? 'Course material workspace' : format ? `Project · ${format}` : 'Project'}</p>
       <div className="title-row">
-        <h1 id="page-title">{project?.title ?? 'Create an activity'}</h1>
+        {project
+          ? <ProjectTitle level={1} id="page-title" title={(latestProject ?? project).title} onRename={renameProject} />
+          : <h1 id="page-title">Create an activity</h1>}
         {project && <FormatSetting key={project.id} avenue={projectAvenue} disabled={isBuilding || savingFormat} onChange={changeFormat} />}
       </div>
     </section>

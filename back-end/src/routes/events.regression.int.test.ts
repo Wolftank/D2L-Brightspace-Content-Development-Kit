@@ -79,7 +79,7 @@ describe('R7 regression: event stream and reconnect', () => {
     events = createEventService(createEventsRepo(db));
     deps = fakeDeps({
       users: createUsersRepo(db),
-      projects: createProjectService({ projects: projectsRepo, workspaces, builds: buildsRepo, turns: turnsRepo }),
+      projects: createProjectService({ projects: projectsRepo, workspaces, builds: buildsRepo, turns: turnsRepo, events }),
       turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, files: createFilesRepo(db), runner: idleRunner }),
       builds: createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces, events }),
       events,

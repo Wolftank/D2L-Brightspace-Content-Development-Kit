@@ -48,7 +48,7 @@ describe('build routes', () => {
     builds = createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces, events });
     deps = fakeDeps({
       users: createUsersRepo(db),
-      projects: createProjectService({ projects: projectsRepo, workspaces, builds: buildsRepo, turns: createTurnsRepo(db) }),
+      projects: createProjectService({ projects: projectsRepo, workspaces, builds: buildsRepo, turns: createTurnsRepo(db), events }),
       builds,
       events,
     });
@@ -107,6 +107,21 @@ describe('build routes', () => {
       for await (const entry of zip.eachEntry()) names.push(entry.fileName);
       expect(names).toContain('imsmanifest.xml');
       expect(names).not.toContain('qa.json');
+    });
+
+    it("names a download after the project's title at the time, so a renamed project's next download uses the new title", async () => {
+      const build = await builds.create('mine');
+      expect((await request(createApp(deps)).patch('/api/projects/mine').send({ title: 'Mitosis review' })).status).toBe(200);
+
+      const res = await request(createApp(deps))
+        .get(`/api/builds/${build.id}/download`)
+        .buffer(true)
+        .parse((response, done) => {
+          response.on('data', () => {});
+          response.on('end', () => done(null, null));
+        });
+
+      expect(res.headers['content-disposition']).toBe('attachment; filename="mitosis-review-v1.zip"');
     });
 
     it('releases the zip when the client disconnects mid-download', async () => {

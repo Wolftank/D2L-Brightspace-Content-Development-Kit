@@ -114,7 +114,7 @@ describe('POST /api/turns/:turnId/cancel', () => {
     });
     deps = fakeDeps({
       users: createUsersRepo(db),
-      projects: createProjectService({ projects: projectsRepo, workspaces, builds: buildsRepo, turns: turnsRepo }),
+      projects: createProjectService({ projects: projectsRepo, workspaces, builds: buildsRepo, turns: turnsRepo, events }),
       turns: createTurnService({ projects: projectsRepo, turns: turnsRepo, files: createFilesRepo(db), runner }),
       messages: createMessageService({ projects: projectsRepo, messages: messagesRepo }),
       builds,

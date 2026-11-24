@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import type { Avenue, BuildSummary, ProjectListItem } from '@cdk/contract';
-import { listProjects } from '../api/client';
+import { listProjects, updateProject } from '../api/client';
 import { ProjectWorkspace } from '../ProjectWorkspace';
 import { AppHeader } from './AppHeader';
+import { ProjectTitle } from './ProjectTitle';
 import './projects.css';
 
 const FORMATS: Record<Avenue, string> = { scorm: 'SCORM', topic: 'Content topic', widget: 'Widget', external: 'External activity' };
@@ -19,6 +20,11 @@ export function ProjectList() {
     return () => { cancelled = true; };
   }, [attempt]);
 
+  async function rename(projectId: string, title: string) {
+    const { project } = await updateProject(projectId, { title });
+    setItems(current => current && current.map(item => item.project.id === projectId ? { ...item, project } : item));
+  }
+
   if (items?.length === 0) return <ProjectWorkspace />;
   return <main className="app-shell"><AppHeader />
     <section className="intro projects-intro" aria-labelledby="page-title">
@@ -30,7 +36,7 @@ export function ProjectList() {
         <button onClick={() => { setFailed(false); setAttempt(value => value + 1); }}>Try loading projects again</button></div>
         : items === null ? <p role="status">Loading your projects…</p>
         : <ul>{items.map(({ project, latestBuild }) => <li className="card project-row" key={project.id}>
-          <h2><a href={'/?project=' + encodeURIComponent(project.id)}>{project.title}</a></h2>
+          <ProjectTitle level={2} title={project.title} href={'/?project=' + encodeURIComponent(project.id)} onRename={title => rename(project.id, title)} />
           <dl>
             <div><dt>Format</dt><dd>{project.avenue ? FORMATS[project.avenue] : 'Not selected'}</dd></div>
             <div><dt>Latest build</dt><dd>{latestBuild ? `${BUILD_STATES[latestBuild.status]} · Version ${latestBuild.version}` : 'No build yet'}</dd></div>

@@ -357,3 +357,111 @@ describe('format of an open project', () => {
     expect(screen.getByText('This version is a SCORM package. Send a request to rebuild it as a content topic.')).toBeVisible();
   });
 });
+
+describe('renaming the open project', () => {
+  let patches: unknown[];
+  beforeEach(() => {
+    patches = [];
+    fetchMock.mockImplementation(async (_url: string, init?: RequestInit) => {
+      if (init?.method !== 'PATCH') return Response.json({ items: [] });
+      const body = JSON.parse(init.body as string);
+      patches.push(body);
+      return Response.json({ project: { ...project, title: body.title, updatedAt: 2 } });
+    });
+  });
+
+  it('turns the title into a field holding it, with focus in the field, and saves with Enter', async () => {
+    render(<ProjectWorkspace initialProject={project} />);
+    const quill = screen.getByRole('button', { name: 'Rename project' });
+    expect(quill).toHaveAccessibleDescription('Cell division');
+
+    fireEvent.click(quill);
+    const field = screen.getByRole('textbox', { name: 'Project title' });
+    expect(field).toHaveValue('Cell division');
+    expect(field).toHaveFocus();
+    expect(screen.queryByRole('button', { name: 'Rename project' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save title' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Cancel rename' })).toBeVisible();
+
+    fireEvent.change(field, { target: { value: '  Mitosis review  ' } });
+    fireEvent.keyDown(field, { key: 'Enter' });
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Mitosis review' })).toBeVisible();
+    expect(patches).toEqual([{ title: 'Mitosis review' }]);
+    expect(await screen.findByRole('button', { name: 'Rename project' })).toHaveFocus();
+  });
+
+  it('saves with the check button', async () => {
+    render(<ProjectWorkspace initialProject={project} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Rename project' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Project title' }), { target: { value: 'Mitosis review' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save title' }));
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Mitosis review' })).toBeVisible();
+    expect(await screen.findByRole('button', { name: 'Rename project' })).toHaveFocus();
+  });
+
+  it.each([
+    ['Esc', (field: HTMLElement) => fireEvent.keyDown(field, { key: 'Escape' })],
+    ['the X button', () => fireEvent.click(screen.getByRole('button', { name: 'Cancel rename' }))],
+  ])('cancels with %s, keeps the old title, and sends nothing', (_case, cancel) => {
+    render(<ProjectWorkspace initialProject={project} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Rename project' }));
+    const field = screen.getByRole('textbox', { name: 'Project title' });
+    fireEvent.change(field, { target: { value: 'Something else' } });
+
+    cancel(field);
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Cell division' })).toBeVisible();
+    expect(screen.queryByRole('textbox', { name: 'Project title' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Rename project' })).toHaveFocus();
+    expect(patches).toEqual([]);
+  });
+
+  it('refuses a blank title with a plain message and keeps the field open', () => {
+    render(<ProjectWorkspace initialProject={project} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Rename project' }));
+    const field = screen.getByRole('textbox', { name: 'Project title' });
+    fireEvent.change(field, { target: { value: '   ' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save title' }));
+
+    expect(screen.getByText('Enter a title for the project.')).toHaveAttribute('role', 'alert');
+    expect(field).toBeVisible();
+    expect(field).toHaveFocus();
+    expect(field).toHaveAccessibleDescription('Enter a title for the project.');
+    expect(patches).toEqual([]);
+  });
+
+  it('keeps the field open with the service message when saving fails', async () => {
+    fetchMock.mockImplementation(async (_url: string, init?: RequestInit) => init?.method === 'PATCH'
+      ? Response.json({ error: { code: 'not_found', message: "This project doesn't exist.", nextStep: 'new_project' } }, { status: 404 })
+      : Response.json({ items: [] }));
+    render(<ProjectWorkspace initialProject={project} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Rename project' }));
+    const field = screen.getByRole('textbox', { name: 'Project title' });
+    fireEvent.change(field, { target: { value: 'Mitosis review' } });
+    fireEvent.keyDown(field, { key: 'Enter' });
+
+    expect(await screen.findByText("Unable to rename the project. This project doesn't exist.")).toHaveAttribute('role', 'alert');
+    expect(field).toHaveValue('Mitosis review');
+  });
+
+  it('closes without a request when the title is unchanged', () => {
+    render(<ProjectWorkspace initialProject={project} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Rename project' }));
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Project title' }), { key: 'Enter' });
+
+    expect(screen.getByRole('button', { name: 'Rename project' })).toHaveFocus();
+    expect(patches).toEqual([]);
+  });
+
+  it('shows a title renamed elsewhere when project.updated arrives', async () => {
+    render(<ProjectWorkspace initialProject={project} />);
+    await waitFor(() => expect(Stream.latest).toBeDefined());
+
+    emit({ seq: 1, kind: 'project.updated', payload: { project: { ...project, title: 'Renamed in another tab', updatedAt: 2 } } });
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Renamed in another tab' })).toBeVisible();
+  });
+});

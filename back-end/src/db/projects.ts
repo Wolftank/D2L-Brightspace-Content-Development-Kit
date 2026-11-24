@@ -20,6 +20,8 @@ export interface ProjectsRepo {
   setSessionId(id: string, sessionId: string): void;
   /** Stores the project's avenue and returns the updated project, if it exists. */
   setAvenue(id: string, avenue: NonNullable<Project['avenue']>): Project | undefined;
+  /** Stores the project's title and returns the updated project, if it exists. */
+  setTitle(id: string, title: string): Project | undefined;
   /** Records that the project was used now, by setting its `updatedAt`, which orders the project list. */
   recordActivity(id: string): void;
 }
@@ -66,6 +68,9 @@ export function createProjectsRepo(db: Db): ProjectsRepo {
     },
     setAvenue(id, avenue) {
       return db.update(projects).set({ avenue, updatedAt: Date.now() }).where(eq(projects.id, id)).returning().get();
+    },
+    setTitle(id, title) {
+      return db.update(projects).set({ title, updatedAt: Date.now() }).where(eq(projects.id, id)).returning().get();
     },
     recordActivity(id) {
       db.update(projects).set({ updatedAt: Date.now() }).where(eq(projects.id, id)).run();
