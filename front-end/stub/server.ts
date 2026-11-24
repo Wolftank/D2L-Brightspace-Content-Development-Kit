@@ -401,12 +401,21 @@ function createProject(body: unknown): CreateProjectResponse {
   return { project };
 }
 
+/** Changes the avenue first, as the back end does, so a refused avenue change renames nothing. */
 function updateProject(state: ProjectState, body: unknown): UpdateProjectResponse {
-  const { avenue } = body as Partial<UpdateProjectRequest>;
-  if (avenue !== 'scorm' && avenue !== 'topic') throw new HttpError('invalid_request');
-  if (state.activeTurn) throw new HttpError('turn_active', { turnId: state.activeTurn.id });
-  if (state.project.avenue !== avenue) {
-    state.project = { ...state.project, avenue, updatedAt: Date.now() };
+  const { title, avenue } = (body ?? {}) as Partial<UpdateProjectRequest>;
+  if (title === undefined && avenue === undefined) throw new HttpError('invalid_request');
+  if (title !== undefined && (typeof title !== 'string' || !title.trim())) throw new HttpError('invalid_request');
+  if (avenue !== undefined && avenue !== 'scorm' && avenue !== 'topic') throw new HttpError('invalid_request');
+  if (avenue !== undefined) {
+    if (state.activeTurn) throw new HttpError('turn_active', { turnId: state.activeTurn.id });
+    if (state.project.avenue !== avenue) {
+      state.project = { ...state.project, avenue, updatedAt: Date.now() };
+      append(state, 'project.updated', { project: state.project });
+    }
+  }
+  if (title !== undefined) {
+    state.project = { ...state.project, title: title.trim(), updatedAt: Date.now() };
     append(state, 'project.updated', { project: state.project });
   }
   return { project: state.project };

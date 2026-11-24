@@ -35,6 +35,7 @@ describe('GET /api/projects/:projectId/events', () => {
         workspaces: { create: async () => {}, remove: async () => {} },
         builds: createBuildsRepo(db),
         turns: createTurnsRepo(db),
+        events: service,
       }),
       events: service,
       ...overrides,

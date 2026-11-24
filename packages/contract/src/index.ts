@@ -252,9 +252,12 @@ export interface CreateProjectResponse {
   project: Project;
 }
 
-/** Changes a project's avenue, which replaces its working output with the avenue's starter. Earlier builds stay. */
+/** Changes a project's title, its avenue, or both. At least one is required. */
 export interface UpdateProjectRequest {
-  avenue: BuildableAvenue;
+  /** The new title, with the rule for creating a project: trimmed, and not blank. */
+  title?: string;
+  /** Replaces the project's working output with the avenue's starter. Earlier builds stay. */
+  avenue?: BuildableAvenue;
 }
 
 export interface UpdateProjectResponse {

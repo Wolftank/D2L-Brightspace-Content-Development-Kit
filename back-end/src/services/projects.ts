@@ -6,6 +6,7 @@ import type { Build, Project } from '../db/schema.js';
 import type { TurnsRepo } from '../db/turns.js';
 import { NotFound } from '../errors.js';
 import { log } from '../log.js';
+import type { EventService } from '../pipeline/events.js';
 import type { WorkspaceService } from './workspaces.js';
 
 export interface CreateProjectInput {
@@ -15,10 +16,11 @@ export interface CreateProjectInput {
 }
 
 export interface ProjectServiceDeps {
-  projects: Pick<ProjectsRepo, 'create' | 'get' | 'listByOwner'>;
+  projects: Pick<ProjectsRepo, 'create' | 'get' | 'listByOwner' | 'setTitle'>;
   workspaces: Pick<WorkspaceService, 'create' | 'remove'>;
   builds: Pick<BuildsRepo, 'listByProject' | 'latest'>;
   turns: Pick<TurnsRepo, 'findActive'>;
+  events: Pick<EventService, 'append'>;
 }
 
 export interface ProjectService {
@@ -32,6 +34,13 @@ export interface ProjectService {
   get(ownerId: string, id: string): ProjectResponse;
   /** `ownerId`'s projects, most recently used first, each with its latest build. */
   list(ownerId: string): ProjectListResponse;
+  /**
+   * Stores a new title for `ownerId`'s project and emits `project.updated`.
+   * The title must already be trimmed and not blank. Allowed during a turn,
+   * since a turn reads the title when it starts. Throws `NotFound` for an
+   * unknown or another owner's project.
+   */
+  rename(ownerId: string, id: string, title: string): ApiProject;
 }
 
 export function createProjectService(deps: ProjectServiceDeps): ProjectService {
@@ -66,6 +75,16 @@ export function createProjectService(deps: ProjectServiceDeps): ProjectService {
           return { project: toApi(project), latestBuild: latest ? toSummary(latest) : null };
         }),
       };
+    },
+
+    rename(ownerId, id, title) {
+      const project = deps.projects.get(ownerId, id);
+      if (!project) throw new NotFound();
+      const updated = deps.projects.setTitle(id, title);
+      if (!updated) throw new NotFound();
+      log.info({ projectId: id }, 'Project renamed');
+      deps.events.append({ projectId: id, kind: 'project.updated', payload: { project: toApi(updated) } });
+      return toApi(updated);
     },
   };
 }

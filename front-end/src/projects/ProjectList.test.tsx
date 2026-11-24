@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Project, ProjectListResponse } from '@cdk/contract';
 import { App } from '../App';
 
@@ -67,4 +67,50 @@ it('retries opening a project using fresh server metadata and its own draft', as
   expect(await screen.findByRole('heading', { name: project.title })).toBeVisible();
   await waitFor(() => expect(screen.getByLabelText('Describe a change')).toHaveValue('Keep this draft'));
   expect(screen.getByRole('link', { name: 'My projects' })).toHaveAttribute('href', '/');
+});
+
+describe('renaming from the list', () => {
+  it('renames one project in place, from its own row, and sends only its title', async () => {
+    const fetch = vi.fn(async (_url: string, init?: RequestInit) => init?.method === 'PATCH'
+      ? Response.json({ project: { ...project, title: JSON.parse(init.body as string).title, updatedAt: 1700000100000 } })
+      : Response.json(list));
+    vi.stubGlobal('fetch', fetch);
+    render(<App />);
+    const rows = await screen.findAllByRole('listitem');
+
+    fireEvent.click(within(rows[0]!).getByRole('button', { name: 'Rename project' }));
+    const field = within(rows[0]!).getByRole('textbox', { name: 'Project title' });
+    expect(field).toHaveFocus();
+    fireEvent.change(field, { target: { value: 'Mitosis review' } });
+    fireEvent.keyDown(field, { key: 'Enter' });
+
+    const link = await within(rows[0]!).findByRole('link', { name: 'Mitosis review' });
+    expect(link).toHaveAttribute('href', '/?project=p1');
+    expect(within(rows[0]!).getByRole('button', { name: 'Rename project' })).toHaveFocus();
+    expect(rows[1]).toHaveTextContent('Older project');
+    expect(fetch).toHaveBeenCalledWith('/api/projects/p1', expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ title: 'Mitosis review' }) }));
+  });
+
+  it('gives each row its own rename button, described by that row title', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(list)));
+    render(<App />);
+    const buttons = await screen.findAllByRole('button', { name: 'Rename project' });
+    expect(buttons.map(button => button.getAttribute('aria-describedby') && document.getElementById(button.getAttribute('aria-describedby')!)?.textContent))
+      .toEqual(['Cell division', 'Older project']);
+  });
+
+  it('cancels with Esc and keeps the old title in the row', async () => {
+    const fetch = vi.fn().mockResolvedValue(Response.json(list));
+    vi.stubGlobal('fetch', fetch);
+    render(<App />);
+    const rows = await screen.findAllByRole('listitem');
+    fireEvent.click(within(rows[1]!).getByRole('button', { name: 'Rename project' }));
+    const field = within(rows[1]!).getByRole('textbox', { name: 'Project title' });
+    fireEvent.change(field, { target: { value: 'Something else' } });
+    fireEvent.keyDown(field, { key: 'Escape' });
+
+    expect(within(rows[1]!).getByRole('link', { name: 'Older project' })).toBeVisible();
+    expect(within(rows[1]!).getByRole('button', { name: 'Rename project' })).toHaveFocus();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
 });

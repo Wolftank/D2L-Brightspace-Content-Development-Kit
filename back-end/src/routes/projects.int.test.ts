@@ -39,6 +39,7 @@ describe('project routes', () => {
         workspaces: workspaceService,
         builds: buildsRepo,
         turns: createTurnsRepo(db),
+        events,
       }),
       avenues: createAvenueService({ projects: projectsRepo, workspaces: workspaceService, turns: createTurnsRepo(db), events }),
       builds: createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces: workspaceService, events }),
@@ -183,6 +184,97 @@ describe('project routes', () => {
       expect(second.body.error).toMatchObject({ code: 'avenue_changing' });
       expect((await change).body.project).toMatchObject({ avenue: 'topic' });
       expect((await request(server).post(`/api/projects/${projectId}/messages`).send(message)).status).toBe(202);
+    });
+  });
+
+  describe('PATCH /api/projects/:projectId with a title', () => {
+    async function create(title = 'Cell divison practice'): Promise<string> {
+      return (await request(app()).post('/api/projects').send({ title, avenue: 'scorm' })).body.project.id;
+    }
+
+    it('renames the project, trimming the title, and leaves its avenue and out/ alone', async () => {
+      const projectId = await create();
+      const outDir = join(workspaces.pathFor(projectId), 'out');
+      await fs.writeFile(join(outDir, 'draft.html'), '<p>draft</p>');
+      const before = (await fs.readdir(outDir)).sort();
+
+      const res = await request(app()).patch(`/api/projects/${projectId}`).send({ title: '  Cell division practice  ' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.project).toMatchObject({ id: projectId, title: 'Cell division practice', avenue: 'scorm', targetCourse: null });
+      expect((await fs.readdir(outDir)).sort()).toEqual(before);
+    });
+
+    it('keeps the new title in the database, so a new app instance and the project list show it', async () => {
+      const projectId = await create();
+      await request(app()).patch(`/api/projects/${projectId}`).send({ title: 'Mitosis review' });
+
+      // Every app() call builds its services afresh over the same database, as a restart does.
+      const reopened = await request(app()).get(`/api/projects/${projectId}`);
+      const listed = await request(app()).get('/api/projects');
+
+      expect(reopened.body.project.title).toBe('Mitosis review');
+      expect(listed.body.items.map((item: { project: { title: string } }) => item.project.title)).toEqual(['Mitosis review']);
+    });
+
+    it('sends project.updated with the renamed project', async () => {
+      const projectId = await create();
+
+      const res = await request(app()).patch(`/api/projects/${projectId}`).send({ title: 'Mitosis review' });
+
+      const events = createEventService(createEventsRepo(db)).after(projectId, 0);
+      expect(events.at(-1)).toMatchObject({ kind: 'project.updated', payload: { project: res.body.project } });
+    });
+
+    it.each([
+      ['a blank title', { title: '' }],
+      ['a title of only spaces', { title: '   ' }],
+      ['a title that is not text', { title: 42 }],
+      ['a body with neither a title nor an avenue', {}],
+      ['a body with only a field V1 does not take', { targetCourse: '12345' }],
+    ])('refuses %s with the validation envelope and keeps the old title', async (_case, body) => {
+      const projectId = await create();
+
+      const res = await request(app()).patch(`/api/projects/${projectId}`).send(body);
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('invalid_request');
+      expect(projectsRepo.getById(projectId)?.title).toBe('Cell divison practice');
+    });
+
+    it("returns 404 for another owner's project and an unknown id, and renames nothing", async () => {
+      db.insert(usersTable).values({ id: 'someone-else', displayName: 'Someone Else', email: null, role: 'instructor' }).run();
+      projectsRepo.create({ id: 'not-yours', ownerId: 'someone-else', title: 'Not yours' });
+
+      for (const id of ['not-yours', 'no-such-project']) {
+        const res = await request(app()).patch(`/api/projects/${id}`).send({ title: 'Taken over' });
+        expect(res.status).toBe(404);
+        expect(res.body.error.code).toBe('not_found');
+      }
+      expect(projectsRepo.getById('not-yours')?.title).toBe('Not yours');
+      expect(createEventService(createEventsRepo(db)).after('not-yours', 0)).toEqual([]);
+    });
+
+    it('renames while a turn is running', async () => {
+      const projectId = await create();
+      insertTurn('turn-1', projectId, 'running');
+
+      const res = await request(app()).patch(`/api/projects/${projectId}`).send({ title: 'Mitosis review' });
+
+      expect(res.status).toBe(200);
+      expect(projectsRepo.getById(projectId)?.title).toBe('Mitosis review');
+    });
+
+    it('takes a title and an avenue together, and renames nothing when the avenue change is refused', async () => {
+      const projectId = await create();
+
+      const both = await request(app()).patch(`/api/projects/${projectId}`).send({ title: 'Mitosis review', avenue: 'topic' });
+      insertTurn('turn-1', projectId, 'running');
+      const refused = await request(app()).patch(`/api/projects/${projectId}`).send({ title: 'Something else', avenue: 'scorm' });
+
+      expect(both.body.project).toMatchObject({ title: 'Mitosis review', avenue: 'topic' });
+      expect(refused.status).toBe(409);
+      expect(projectsRepo.getById(projectId)).toMatchObject({ title: 'Mitosis review', avenue: 'topic' });
     });
   });
 

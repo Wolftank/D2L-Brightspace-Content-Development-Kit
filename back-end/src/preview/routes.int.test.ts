@@ -55,7 +55,7 @@ describe('preview origin', () => {
     builds = createBuildService({ builds: buildsRepo, projects: projectsRepo, workspaces, events });
     deps = fakeDeps({
       users: createUsersRepo(db),
-      projects: createProjectService({ projects: projectsRepo, workspaces, builds: buildsRepo, turns: createTurnsRepo(db) }),
+      projects: createProjectService({ projects: projectsRepo, workspaces, builds: buildsRepo, turns: createTurnsRepo(db), events }),
       builds,
       events,
       preview: { origin: `http://${PREVIEW_HOST}`, appOrigin: APP_ORIGIN },

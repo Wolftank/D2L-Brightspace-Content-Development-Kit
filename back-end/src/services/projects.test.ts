@@ -21,6 +21,13 @@ function setup() {
         return project?.ownerId === ownerId ? project : undefined;
       }),
       listByOwner: vi.fn((ownerId: string) => [...rows.values()].filter((project) => project.ownerId === ownerId).reverse()),
+      setTitle: vi.fn((id: string, title: string) => {
+        const project = rows.get(id);
+        if (!project) return undefined;
+        const renamed = { ...project, title, updatedAt: project.updatedAt + 1 };
+        rows.set(id, renamed);
+        return renamed;
+      }),
     },
     workspaces: {
       create: vi.fn(async (projectId: string) => {
@@ -30,6 +37,7 @@ function setup() {
     },
     builds: { listByProject: vi.fn((): Build[] => []), latest: vi.fn((_projectId: string): Build | undefined => undefined) },
     turns: { findActive: vi.fn((): Turn | undefined => undefined) },
+    events: { append: vi.fn() },
   } satisfies ProjectServiceDeps;
   return { deps, service: createProjectService(deps), steps };
 }
@@ -140,6 +148,37 @@ describe('project service', () => {
 
     it('is empty for an owner with no projects', () => {
       expect(setup().service.list('owner-1')).toEqual({ items: [] });
+    });
+  });
+
+  describe('rename', () => {
+    it('stores the title and sends project.updated with the renamed project', async () => {
+      const { deps, service } = setup();
+      const project = await service.create('owner-1', { title: 'Cell divison', avenue: 'scorm' });
+
+      const renamed = service.rename('owner-1', project.id, 'Cell division');
+
+      expect(renamed).toMatchObject({ id: project.id, title: 'Cell division', avenue: 'scorm', targetCourse: null });
+      expect(deps.projects.setTitle).toHaveBeenCalledWith(project.id, 'Cell division');
+      expect(deps.events.append).toHaveBeenCalledWith({ projectId: project.id, kind: 'project.updated', payload: { project: renamed } });
+    });
+
+    it('renames while a turn is active, since a turn reads the title when it starts', async () => {
+      const { deps, service } = setup();
+      const project = await service.create('owner-1', { title: 'T', avenue: 'scorm' });
+      deps.turns.findActive.mockReturnValue({ id: 'turn-1', status: 'running' } as Turn);
+
+      expect(service.rename('owner-1', project.id, 'New title').title).toBe('New title');
+    });
+
+    it("throws NotFound for another owner's project and for an unknown id, and stores nothing", async () => {
+      const { deps, service } = setup();
+      const project = await service.create('owner-1', { title: 'T', avenue: 'scorm' });
+
+      expect(() => service.rename('owner-2', project.id, 'Taken over')).toThrow(NotFound);
+      expect(() => service.rename('owner-1', 'missing', 'New title')).toThrow(NotFound);
+      expect(deps.projects.setTitle).not.toHaveBeenCalled();
+      expect(deps.events.append).not.toHaveBeenCalled();
     });
   });
 });
