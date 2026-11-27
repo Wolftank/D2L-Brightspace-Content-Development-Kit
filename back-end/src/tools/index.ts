@@ -1,7 +1,7 @@
 import { readFile, realpath, rm } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { z, type ZodRawShape } from 'zod';
-import type { BuildableAvenue } from '@cdk/contract';
+import type { BuildableAvenue, QaFinding, QaReport } from '@cdk/contract';
 import type { ToolDef, ToolResult, ToolServerSpec } from '../agent/AgentDriver.js';
 import type { ProjectsRepo } from '../db/projects.js';
 import { AVENUE_SKILL, BUILDABLE_AVENUES, KIT_DIR, pickedAvenue } from '../kit.js';
@@ -46,7 +46,7 @@ export function createCdkTools(deps: CdkToolsDeps, projectId: string): ToolServe
       return json({
         title: project.title,
         avenue,
-        latestBuild: latest ? { version: latest.version, status: latest.status, qa: latest.qa, error: latest.error } : null,
+        latestBuild: latest ? { version: latest.version, status: latest.status, qa: latest.qa && withoutExplanations(latest.qa), error: latest.error } : null,
         tenant: avenue ? await tenantLimits(avenue) : null,
       });
     },
@@ -82,7 +82,7 @@ export function createCdkTools(deps: CdkToolsDeps, projectId: string): ToolServe
       if (!project) return failed('This project no longer exists.');
       if (!pickedAvenue(project)) return failed('This project has no output format yet. Set one with set_format first.');
       const result = await deps.builds.checkOutput(projectId);
-      return 'error' in result ? failed(result.error.message) : json(result.qa);
+      return 'error' in result ? failed(result.error.message) : json(withoutExplanations(result.qa));
     },
   });
 
@@ -125,6 +125,11 @@ export function createCdkTools(deps: CdkToolsDeps, projectId: string): ToolServe
 /** Keeps a tool's input fields and its handler's argument type in step. */
 function defineTool<Shape extends ZodRawShape>(def: ToolDef<Shape>): ToolDef<Shape> {
   return def;
+}
+
+/** The QA report as the agent reads it: each finding's technical text, without the instructor's explanation. */
+function withoutExplanations(qa: QaReport): { passed: boolean; findings: Array<Omit<QaFinding, 'explanation'>> } {
+  return { passed: qa.passed, findings: qa.findings.map(({ explanation: _explanation, ...finding }) => finding) };
 }
 
 function json(value: unknown): ToolResult {

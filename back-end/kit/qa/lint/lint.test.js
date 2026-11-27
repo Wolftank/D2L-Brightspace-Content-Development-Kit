@@ -96,6 +96,17 @@ for (const { id } of RULES.filter(r => r.id.startsWith('a11y/'))) {
         JSON.stringify(passing.findings.map(f => f.rule + '@' + f.line)));
 }
 
+console.log('\n== every rule explains itself to an instructor in plain language ==');
+const TECHNICAL = /[<>{}()=_/\\`"]|\.\w|\b(?:SCORM|CORS|API|HTML|CSS|JavaScript|iframe|WCAG|UTF)\b/i;
+for (const rule of RULES) {
+  const text = rule.explanation || '';
+  const sentences = (text.match(/[.?!](?=\s|$)/g) || []).length;
+  check(rule.id + ' has an explanation of one to three plain sentences',
+        sentences >= 1 && sentences <= 3 && !TECHNICAL.test(text), text);
+}
+check('each finding carries its rule\'s explanation',
+      bs.findings.every(f => f.explanation === RULES.find(r => r.id === f.rule).explanation));
+
 console.log('\n== the real probe build passes the gate ==');
 const probe = lint(path.join(__dirname, '..', '..', 'probes', 'scorm12-probe'), 'scorm', profile);
 check('zero errors', errs(probe) === 0,

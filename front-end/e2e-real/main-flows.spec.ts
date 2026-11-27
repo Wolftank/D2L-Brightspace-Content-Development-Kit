@@ -36,7 +36,7 @@ test('a build the QA gate rejects shows its findings and offers no package', asy
 
   const card = buildCard(page, 'QA needs attention');
   await expect(card).toBeVisible({ timeout: TURN_TIMEOUT });
-  await expect(card.getByRole('listitem').first()).toContainText('completed');
+  await expect(card.getByRole('listitem').first()).toContainText('Students would only get one chance at a score.');
   await expect(page.getByRole('link', { name: 'Download SCORM package' })).toHaveCount(0);
 });
 

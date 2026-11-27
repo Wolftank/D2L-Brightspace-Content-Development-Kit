@@ -3,7 +3,9 @@
    ---------------------------------------------------------------------
    Every rule here traces to something measured on our tenant and recorded
    in probes/RESULTS.md. Each carries a `because` explaining what we saw,
-   so a finding teaches rather than just scolds.
+   so a finding teaches rather than just scolds, and an `explanation` that
+   tells an instructor what the problem means for students, in one to three
+   plain sentences.
 
    Thresholds come from tenant-profile.json. When a rule leans on a value
    that has not been verified, it says so in its own output.
@@ -90,7 +92,7 @@ function unwrap(node, fallback) {
 /** Build a finding. `profileRef` marks values that may be unverified guesses. */
 function finding(rule, file, line, message, extra) {
   return Object.assign({ rule: rule.id, severity: rule.severity, file, line, message,
-                         because: rule.because }, extra || {});
+                         because: rule.because, explanation: rule.explanation }, extra || {});
 }
 
 /* Files that are actual code/markup, not assets. */
@@ -168,6 +170,9 @@ const RULES = [
     id: 'scorm/no-api-calls',
     avenues: ['scorm'],
     severity: 'error',
+    explanation: 'This activity asks D2L for information that D2L never gives to an activity ' +
+                 'like this, so that part won\'t work for any student. Ask CDK to rebuild it ' +
+                 'without that request.',
     because: 'A SCORM package runs on content-service.brightspace.com, cross-origin to the tenant. ' +
              'Relative /d2l/api paths hit the content CDN and return 403 MissingKey; absolute tenant ' +
              'URLs fail CORS. There is no path from a package to the Brightspace API.',
@@ -188,6 +193,9 @@ const RULES = [
     id: 'scorm/no-terminate-on-load',
     avenues: ['scorm'],
     severity: 'error',
+    explanation: 'Students would never see the activity. It tells D2L it has finished as soon as ' +
+                 'it opens, so D2L replaces it with a message saying the activity is complete. ' +
+                 'Ask CDK to fix this.',
     because: 'Measured: calling LMSFinish/Terminate makes the D2L player immediately replace the ' +
              'package with "This activity is complete." The learner never sees the content. ' +
              'Commit alone persists data.',
@@ -213,6 +221,9 @@ const RULES = [
     id: 'scorm/no-completed-on-load',
     avenues: ['scorm'],
     severity: 'error',
+    explanation: 'Students would only get one chance at a score. The activity marks itself ' +
+                 'complete as soon as it opens, so D2L ignores anything after the first visit. ' +
+                 'Ask CDK to fix this.',
     because: 'Measured: once an activity reports lesson_status "completed", D2L serves later launches ' +
              'in review mode with credit "no-credit" and rejects every write, silently, with error 0. ' +
              'Marking complete on load gives each student exactly one scoring opportunity and quietly ' +
@@ -237,6 +248,9 @@ const RULES = [
     id: 'scorm/credit-guard',
     avenues: ['scorm'],
     severity: 'warn',
+    explanation: 'D2L saves nothing when you preview this activity, or when a student reopens it ' +
+                 'after finishing. The activity doesn\'t check for that, so it could tell a ' +
+                 'student their work was saved when it wasn\'t. Ask CDK to fix this.',
     because: 'Measured: credit == "no-credit" covers BOTH instructor preview and post-completion ' +
              'review. In those modes every SetValue is discarded and GetLastError still returns 0, so ' +
              'an activity that only checks the error code believes it saved.',
@@ -257,6 +271,8 @@ const RULES = [
     id: 'scorm/commit-before-terminate',
     avenues: ['scorm'],
     severity: 'error',
+    explanation: 'Students\' scores and progress would be lost when they close the activity, ' +
+                 'because it never tells D2L to save them. Ask CDK to fix this.',
     because: 'Without a Commit, everything written during the session is lost when the attempt closes.',
     test(ctx) {
       const code = ctx.files.filter(isCode);
@@ -274,6 +290,9 @@ const RULES = [
     id: 'scorm/suspend-data-cap',
     avenues: ['scorm'],
     severity: 'warn',
+    explanation: 'D2L stores only a small amount of saved progress for each student. This ' +
+                 'activity doesn\'t check that limit, so a student with a lot of progress could ' +
+                 'lose some of it. Ask CDK to keep saved progress within the limit.',
     because: 'Only SCORM 1.2 is exposed on this tenant, so suspend_data is capped. Writing past the ' +
              'cap is rejected or truncated, and it is the classic silent data-loss bug.',
     test(ctx) {
@@ -298,6 +317,8 @@ const RULES = [
     id: 'scorm/storage-key-learner-id',
     avenues: ['scorm'],
     severity: 'warn',
+    explanation: 'On a shared computer, one student could see another student\'s saved progress. ' +
+                 'Ask CDK to keep each student\'s progress separate.',
     because: 'Measured the hard way: package localStorage belongs to the shared content-service origin ' +
              'and is per BROWSER, not per D2L user. Signing out and back in as someone else does not ' +
              'change it. Every SCORM package at SCSU shares that one store.',
@@ -319,6 +340,8 @@ const RULES = [
     id: 'scorm/root-height',
     avenues: ['scorm'],
     severity: 'warn',
+    explanation: 'This activity is taller than the space D2L gives it, and students can\'t ' +
+                 'scroll there, so they may not reach the bottom. Ask CDK to make it shorter.',
     because: 'Measured: the embedded player will not scroll a tall child. Wheel, scrollbar drag, ' +
              'keyboard and parent resize all failed against a 1100px root. Content below the fold was ' +
              'unreachable.',
@@ -343,6 +366,9 @@ const RULES = [
     id: 'scorm/manifest',
     avenues: ['scorm'],
     severity: 'error',
+    explanation: 'D2L may refuse this activity when you upload it, or run it without recording a ' +
+                 'score. The information that describes the activity to D2L is missing or ' +
+                 'incomplete. Ask CDK to fix this.',
     because: 'A SCORM package needs imsmanifest.xml at the ZIP ROOT. Every file it declares must exist ' +
              'or D2L rejects the package with an unhelpful error.',
     test(ctx) {
@@ -372,6 +398,8 @@ const RULES = [
     id: 'topic/no-static-script-src',
     avenues: ['topic'],
     severity: 'error',
+    explanation: 'This activity could appear blank or not respond in some courses. It loads part ' +
+                 'of itself in a way D2L doesn\'t always allow. Ask CDK to fix this.',
     because: 'Measured on two SCSU courses with OPPOSITE results: a static <script src> executed in one ' +
              'and was silently inert in the other. The failure is silent, so build via dynamic injection ' +
              'or fetch, which works either way.',
@@ -392,6 +420,9 @@ const RULES = [
     id: 'topic/unwrapped-storage',
     avenues: ['topic', 'widget'],
     severity: 'error',
+    explanation: 'This activity could appear blank for some students, such as those using a ' +
+                 'private browsing window. It doesn\'t cope with a browser that refuses to save ' +
+                 'progress. Ask CDK to fix this.',
     because: 'Storage THROWS rather than returning null in private mode, under policy, or over quota. ' +
              'An unwrapped call inside init takes the whole activity down and renders blank, with a ' +
              'console error that points nowhere useful.',
@@ -416,6 +447,9 @@ const RULES = [
     id: 'topic/namespaced-storage',
     avenues: ['topic', 'widget'],
     severity: 'warn',
+    explanation: 'This activity saves progress under a name that another activity in D2L could ' +
+                 'also use, so the two could overwrite each other. Ask CDK to give its saved ' +
+                 'progress a unique name.',
     because: 'A content topic is same-origin with the entire LMS, so its storage is shared with every ' +
              'other topic AND with D2L\'s own code.',
     test(ctx) {
@@ -437,6 +471,9 @@ const RULES = [
     id: 'topic/no-storage-for-grades',
     avenues: ['topic', 'scorm', 'widget'],
     severity: 'error',
+    explanation: 'This activity keeps scores or completion in the student\'s browser, where a ' +
+                 'student can change them and where they are missing on any other device. They ' +
+                 'can\'t count toward a grade this way. Ask CDK for a way to record them in D2L.',
     because: 'localStorage is device-local, student-editable, and wiped by clearing browser data. It ' +
              'can never back completion tracking or grades. Those go through D2L\'s own tools.',
     test(ctx) {
@@ -456,6 +493,9 @@ const RULES = [
     id: 'topic/generic-sibling-filename',
     avenues: ['topic'],
     severity: 'warn',
+    explanation: 'One of this activity\'s files has a common name. Uploading it to your course ' +
+                 'could replace a file with the same name that another activity uses. Ask CDK to ' +
+                 'rename it.',
     because: 'Measured: every content-topic build in a course shares one flat Manage Files ' +
              'folder, not a per-build directory. A sibling asset uploaded under a generic name ' +
              'came within one confirm-click of silently overwriting an unrelated, live build\'s ' +
@@ -485,6 +525,9 @@ const RULES = [
     id: 'topic/no-grade-writes',
     avenues: ['topic'],
     severity: 'warn',
+    explanation: 'This activity tries to change grades itself. D2L blocks that for students, so ' +
+                 'no grade is recorded, and the attempt can look like tampering in D2L\'s ' +
+                 'records. Ask CDK to remove it.',
     because: 'Measured: a student session carries a usable XSRF token, and D2L correctly refuses grade ' +
              'writes with 403. So this cannot forge a grade, but it will fail in production and the ' +
              'attempt looks like tampering in the logs.',
@@ -510,6 +553,9 @@ const RULES = [
     id: 'widget/unscoped-css',
     avenues: ['widget'],
     severity: 'error',
+    explanation: 'This widget\'s styling would spill onto the rest of the course homepage and ' +
+                 'change how D2L and other widgets look. Ask CDK to keep the styling inside the ' +
+                 'widget.',
     because: 'Measured: a widget is NOT rendered in an iframe. It sits directly in the LMS page, ' +
              'so a bare selector restyles D2L\'s own chrome and every other widget on the homepage. ' +
              'A content topic is iframed and therefore isolated; a widget has no such protection.',
@@ -542,6 +588,8 @@ const RULES = [
     id: 'widget/global-scope-leak',
     avenues: ['widget'],
     severity: 'error',
+    explanation: 'This widget could interfere with other widgets on the course homepage, or stop ' +
+                 'working because of them. Ask CDK to keep it separate from the rest of the page.',
     because: 'A widget shares global scope with D2L and every other widget on the homepage. ' +
              'A top-level declaration collides with the next widget that picks the same name.',
     test(ctx) {
@@ -569,6 +617,9 @@ const RULES = [
     id: 'widget/unnamespaced-id',
     avenues: ['widget'],
     severity: 'warn',
+    explanation: 'Part of this widget uses a common internal name that something else on the ' +
+                 'course homepage may also use, so the widget could change the wrong part of the ' +
+                 'page. Ask CDK to give it a unique name.',
     because: 'The widget shares one document with D2L and every other widget, so a generic id ' +
              'can be claimed twice. getElementById then returns whichever came first.',
     test(ctx) {
@@ -593,6 +644,9 @@ const RULES = [
     id: 'widget/role-as-boundary',
     avenues: ['widget'],
     severity: 'warn',
+    explanation: 'This widget hides some content depending on who is looking, but the hidden ' +
+                 'content is still sent to everyone, so a student could find it. If students ' +
+                 'must not see it, ask CDK to use a D2L release condition instead.',
     because: 'Measured: {RoleId} is substituted server-side, which is convenient, but the value ' +
              'is baked into HTML the viewer already has. It tells the page who is looking; it does ' +
              'not stop anyone reading the rest. Release conditions are enforced on the server and ' +
@@ -626,6 +680,9 @@ const RULES = [
     id: 'widget/keep-it-short',
     avenues: ['widget'],
     severity: 'warn',
+    explanation: 'This widget is tall for a course homepage, where it shares space with ' +
+                 'everything else. Ask CDK to make it shorter, or to build it as a content topic ' +
+                 'instead.',
     because: 'The course homepage is a commons with a small shared attention budget. A widget has ' +
              'to earn its space against everything else competing for the same glance. If it needs ' +
              'scrolling, it is a content topic.',
@@ -652,6 +709,9 @@ const RULES = [
     id: 'shared/no-viewport-units',
     avenues: ['scorm', 'topic'],
     severity: 'error',
+    explanation: 'This activity\'s layout depends on the size of the browser window, which ' +
+                 'doesn\'t work inside D2L. Parts of it could appear too large, too small, or ' +
+                 'cut off. Ask CDK to fix this.',
     because: 'The D2L content iframe auto-resizes to its content height, so viewport units do not mean ' +
              '"the visible area". Give the root a fixed pixel height instead.',
     test(ctx) {
@@ -670,6 +730,9 @@ const RULES = [
     id: 'shared/external-cdn',
     avenues: ['scorm', 'topic', 'widget'],
     severity: 'warn',
+    explanation: 'Part of this activity loads from another website. If the campus network blocks ' +
+                 'that site, it may not work for some students. Ask CDK to include those files ' +
+                 'in the activity.',
     because: 'Campus network policy may block external hosts, and a SCORM package is already isolated. ' +
              'Vendor the dependency locally and degrade gracefully.',
     test(ctx) {
@@ -690,6 +753,8 @@ const RULES = [
     id: 'a11y/alt',
     avenues: ['scorm', 'topic', 'widget'],
     severity: 'error',
+    explanation: 'Students who use a screen reader won\'t know what an image shows, because it ' +
+                 'has no description. Ask CDK to add one.',
     because: 'WCAG 2.2 SC 1.1.1 (Non-text Content): every image must have a text alternative ' +
              'so screen-reader users know what it shows. Add alt="..." describing the image, or ' +
              'alt="" for decorative images.',
@@ -714,6 +779,8 @@ const RULES = [
     id: 'a11y/lang',
     avenues: ['scorm', 'topic'],
     severity: 'error',
+    explanation: 'A screen reader may pronounce this activity\'s text wrongly, because the ' +
+                 'activity doesn\'t say what language it is in. Ask CDK to fix this.',
     because: 'WCAG 2.2 SC 3.1.1 (Language of Page): the page must declare its language so ' +
              'screen readers use the correct pronunciation. Add lang="en" (or the correct ' +
              'language code) to the <html> tag.',
@@ -734,6 +801,8 @@ const RULES = [
     id: 'a11y/heading-order',
     avenues: ['scorm', 'topic', 'widget'],
     severity: 'warn',
+    explanation: 'The headings skip a level, which can confuse students who use a screen reader ' +
+                 'to move through the page by its headings. Ask CDK to put the headings in order.',
     because: 'WCAG 2.2 SC 1.3.1 (Info and Relationships): skipping heading levels (e.g. jumping ' +
              'from h1 to h3) confuses screen-reader users who navigate by headings and rely on ' +
              'the level sequence to understand the page structure.',
@@ -759,6 +828,8 @@ const RULES = [
     id: 'a11y/control-name',
     avenues: ['scorm', 'topic', 'widget'],
     severity: 'error',
+    explanation: 'A button or link has no text a screen reader can read, so students who use one ' +
+                 'can\'t tell what it does. Ask CDK to give it a name.',
     because: 'WCAG 2.2 SC 4.1.2 (Name, Role, Value) and 2.4.4 (Link Purpose): a button or link ' +
              'with no text is announced as just "button" or "link", so a screen-reader user cannot ' +
              'tell what it does. Give it visible text, or an aria-label for icon-only controls.',
@@ -791,6 +862,8 @@ const RULES = [
     id: 'a11y/form-label',
     avenues: ['scorm', 'topic', 'widget'],
     severity: 'error',
+    explanation: 'A place where students type or choose an answer has no label, so students who ' +
+                 'use a screen reader won\'t know what it is asking for. Ask CDK to label it.',
     because: 'WCAG 2.2 SC 3.3.2 (Labels or Instructions) and 1.3.1 (Info and Relationships): a ' +
              'field with no label is read as "edit text" with no hint of what to enter. Placeholder ' +
              'text does not count, because it disappears as soon as the student types.',
@@ -820,6 +893,9 @@ const RULES = [
     id: 'a11y/iframe-title',
     avenues: ['scorm', 'topic', 'widget'],
     severity: 'error',
+    explanation: 'Something embedded in this activity, such as a video, has no title. Students ' +
+                 'who use a screen reader won\'t know what it is without going into it. Ask CDK ' +
+                 'to add a title.',
     because: 'WCAG 2.2 SC 4.1.2 (Name, Role, Value): screen readers announce an iframe by its title. ' +
              'Without one the student hears "frame" and has to enter it to find out what it holds.',
     test(ctx) {
@@ -839,6 +915,8 @@ const RULES = [
     id: 'a11y/zoom-allowed',
     avenues: ['scorm', 'topic'],
     severity: 'error',
+    explanation: 'Students can\'t zoom in on this activity on a phone or tablet, which makes it ' +
+                 'hard to read for students with low vision. Ask CDK to allow zooming.',
     because: 'WCAG 2.2 SC 1.4.4 (Resize Text): low-vision students zoom to read. user-scalable=no, ' +
              'or a maximum-scale under 2, blocks pinch zoom on phones and tablets.',
     test(ctx) {
@@ -864,6 +942,9 @@ const RULES = [
     id: 'a11y/timed-refresh',
     avenues: ['scorm', 'topic'],
     severity: 'error',
+    explanation: 'This activity reloads itself on a timer. Students who read slowly or use a ' +
+                 'screen reader could lose their place and any unsaved work. Ask CDK to remove ' +
+                 'the timer.',
     because: 'WCAG 2.2 SC 2.2.1 (Timing Adjustable): a timed meta refresh reloads or redirects the ' +
              'page without warning. A student who reads slowly, or uses a screen reader, loses their ' +
              'place and any unsaved work.',
@@ -888,6 +969,8 @@ const RULES = [
     id: 'a11y/no-moving-elements',
     avenues: ['scorm', 'topic', 'widget'],
     severity: 'error',
+    explanation: 'Some text moves or flashes and students can\'t pause it, which is distracting ' +
+                 'and can make the activity hard to read. Ask CDK to make it stay still.',
     because: 'WCAG 2.2 SC 2.2.2 (Pause, Stop, Hide): <marquee> and <blink> move or flash with no ' +
              'way to pause them, which distracts students with attention or reading disabilities.',
     test(ctx) {
@@ -906,6 +989,8 @@ const RULES = [
     id: 'a11y/page-title',
     avenues: ['scorm', 'topic'],
     severity: 'warn',
+    explanation: 'This activity has no title. The title is the first thing a screen reader says ' +
+                 'and what the browser tab shows. Ask CDK to add one.',
     because: 'WCAG 2.2 SC 2.4.2 (Page Titled): the title is the first thing a screen reader says ' +
              'and what a browser tab shows. A page without one is announced by its file name.',
     test(ctx) {
@@ -926,6 +1011,8 @@ const RULES = [
     id: 'a11y/positive-tabindex',
     avenues: ['scorm', 'topic', 'widget'],
     severity: 'warn',
+    explanation: 'Students who use the keyboard to move through this activity would jump around ' +
+                 'out of reading order. Ask CDK to make the keyboard order follow the page.',
     because: 'WCAG 2.2 SC 2.4.3 (Focus Order): a tabindex above 0 pulls the element ahead of ' +
              'everything else in the tab order, so keyboard users jump around the page out of ' +
              'reading order. Use 0 or -1 and order the markup instead.',
@@ -945,6 +1032,9 @@ const RULES = [
     id: 'a11y/video-captions',
     avenues: ['scorm', 'topic', 'widget'],
     severity: 'warn',
+    explanation: 'A video doesn\'t appear to have captions, which deaf and hard-of-hearing ' +
+                 'students need. If the captions are part of the picture, you can ignore this. ' +
+                 'Otherwise, ask CDK to add captions.',
     because: 'WCAG 2.2 SC 1.2.2 (Captions (Prerecorded)): deaf and hard-of-hearing students need ' +
              'captions for any video with sound. A warning, not an error, because the captions may ' +
              'be burned into the video, which the lint cannot see.',
@@ -967,6 +1057,8 @@ const RULES = [
     id: 'a11y/autoplay-audio',
     avenues: ['scorm', 'topic', 'widget'],
     severity: 'warn',
+    explanation: 'Sound starts playing by itself when the activity opens, which talks over a ' +
+                 'student\'s screen reader. Ask CDK to let students start the sound themselves.',
     because: 'WCAG 2.2 SC 1.4.2 (Audio Control): sound that starts on its own talks over the ' +
              'student\'s screen reader. A warning, because a clip under 3 seconds is allowed, and ' +
              'the lint cannot measure length.',
@@ -990,6 +1082,9 @@ const RULES = [
     id: 'shared/missing-assets',
     avenues: ['scorm', 'topic', 'widget'],
     severity: 'error',
+    explanation: 'This activity points to a file that isn\'t part of it, such as an image, so ' +
+                 'students would see a gap or a broken link. Ask CDK to add the file or take out ' +
+                 'the reference to it.',
     because: 'Relative paths resolve against the deployed file. A reference that is missing locally is ' +
              'missing in D2L, where it fails silently.',
     test(ctx) {
@@ -1013,6 +1108,8 @@ const RULES = [
     id: 'shared/script-syntax',
     avenues: ['scorm', 'topic', 'widget'],
     severity: 'error',
+    explanation: 'A mistake in how this activity was built stops it from running, so students ' +
+                 'would see a blank or broken page. Ask CDK to fix this.',
     because: 'A syntax error stops the whole script, so the activity never loads its content or reports ' +
              'a score. The browser shows the error only in its console, which nobody sees in D2L.',
     test(ctx) {
@@ -1037,6 +1134,8 @@ const RULES = [
     id: 'shared/text-encoding',
     avenues: ['scorm', 'topic', 'widget'],
     severity: 'error',
+    explanation: 'Some of this activity\'s text was saved in a way browsers can\'t read, so ' +
+                 'students would see odd symbols in place of some letters. Ask CDK to fix this.',
     because: 'Bytes that are not valid UTF-8 show in the browser as the replacement character, so the ' +
              'text reads as garbage in D2L. Save the file as UTF-8.',
     test(ctx) {
@@ -1053,6 +1152,8 @@ const RULES = [
     id: 'shared/charset-declaration',
     avenues: ['scorm', 'topic'],
     severity: 'warn',
+    explanation: 'Accented letters and symbols such as curly quotes could appear as odd ' +
+                 'characters for some students. Ask CDK to fix this.',
     because: 'Without a UTF-8 declaration a browser can read UTF-8 text as another encoding and show ' +
              '"â€¦" instead of "…". Add <meta charset="utf-8"> to the page head.',
     test(ctx) {

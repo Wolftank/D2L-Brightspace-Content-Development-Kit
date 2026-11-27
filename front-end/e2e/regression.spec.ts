@@ -6,8 +6,8 @@ import JSZip from 'jszip';
 const TURN_TIMEOUT = 15_000;
 
 const QA_FINDING_EXPLANATIONS = [
-  'lesson_status is set to "completed" during load; D2L will lock the learner out after one attempt.',
-  'suspend_data can exceed 4000 characters; the tenant discards writes over 4096.',
+  'Students would only get one chance at a score.',
+  'D2L stores only a small amount of saved progress for each student.',
 ];
 
 /**

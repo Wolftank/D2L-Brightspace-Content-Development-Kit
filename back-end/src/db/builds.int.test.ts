@@ -52,7 +52,7 @@ describe('builds repo', () => {
     const qa = {
       passed: false,
       findings: [
-        { rule: 'scorm/manifest', severity: 'error' as const, file: 'imsmanifest.xml', line: null, message: 'm', because: 'b' },
+        { rule: 'scorm/manifest', severity: 'error' as const, file: 'imsmanifest.xml', line: null, message: 'm', because: 'b', explanation: 'e' },
       ],
     };
 

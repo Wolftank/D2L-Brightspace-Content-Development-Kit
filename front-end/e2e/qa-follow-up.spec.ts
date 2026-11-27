@@ -49,8 +49,8 @@ test('a first request that fails QA shows the findings and no download', async (
   const card = buildCard(page);
   await expect(card).toContainText('Version 1');
   await expect(card.getByRole('listitem')).toHaveText([
-    /^ERROR\s*lesson_status is set to "completed" during load/,
-    /^WARNING\s*suspend_data can exceed 4000 characters/,
+    /^Needs a fix\s*Students would only get one chance at a score\./,
+    /^Worth a look\s*D2L stores only a small amount of saved progress for each student\./,
   ]);
   await expect(card.getByRole('button', { name: 'Ask for a fix' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Download SCORM package' })).toHaveCount(0);
@@ -60,6 +60,27 @@ test('a first request that fails QA shows the findings and no download', async (
     'QA gate reported 2 findings',
     'Build complete',
   ]);
+});
+
+test("Details opens and closes a finding's technical text, by keyboard", async ({ page }) => {
+  await failFirstBuild(page);
+  const finding = buildCard(page).getByRole('listitem').first();
+  const details = finding.locator('details');
+  const message = finding.getByText('lesson_status is set to "completed" during load');
+  const because = finding.getByText('D2L serves later launches in review mode');
+  await expect(message).toBeHidden();
+  await expect(because).toBeHidden();
+  await expect(details).not.toHaveAttribute('open');
+
+  await finding.getByText('Details', { exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await expect(details).toHaveAttribute('open');
+  await expect(message).toBeVisible();
+  await expect(because).toBeVisible();
+
+  await page.keyboard.press('Space');
+  await expect(details).not.toHaveAttribute('open');
+  await expect(message).toBeHidden();
 });
 
 test('a follow-up in the thread starts a new turn that produces a ready second build', async ({ page }) => {

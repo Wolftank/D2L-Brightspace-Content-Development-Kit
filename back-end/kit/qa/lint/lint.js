@@ -90,7 +90,9 @@ function lint(root, avenue, profile) {
     try { got = rule.test(ctx) || []; }
     catch (e) {
       got = [{ rule: rule.id, severity: 'warn', file: '(lint)', line: 0,
-               message: 'Rule threw: ' + e.message, because: 'Lint defect, not a build defect.' }];
+               message: 'Rule threw: ' + e.message, because: 'Lint defect, not a build defect.',
+               explanation: 'One of CDK\'s checks couldn\'t run, so this part of the activity ' +
+                            'wasn\'t checked. It isn\'t a problem with your activity.' }];
     }
     findings.push(...got);
   }
@@ -119,7 +121,7 @@ function report(result, avenue, root, profile) {
     if (unver.length > 8) console.log(`  ${C.d}- ... and ${unver.length - 8} more${C.x}`);
   }
 
-  // Group by rule so the explanation is printed once, not per finding.
+  // Group by rule so the `because` is printed once, not per finding.
   const byRule = new Map();
   for (const f of result.findings) {
     if (!byRule.has(f.rule)) byRule.set(f.rule, []);

@@ -82,7 +82,7 @@ describe('build service', () => {
       expect(build.qa?.passed).toBe(true);
     });
 
-    it('produces a failed build with findings, explanations included, for fixtures/bad-scorm', async () => {
+    it('produces a failed build with findings, each with its `because` and its explanation, for fixtures/bad-scorm', async () => {
       await replaceOutput(BAD_SCORM);
 
       const build = await builds.create(projectId);
@@ -93,6 +93,7 @@ describe('build service', () => {
       const manifestFinding = build.qa?.findings.find((f) => f.rule === 'scorm/manifest');
       expect(manifestFinding).toMatchObject({ severity: 'error', file: 'imsmanifest.xml', line: null });
       expect(manifestFinding?.because).toEqual(expect.any(String));
+      expect(manifestFinding?.explanation).toMatch(/^D2L may refuse this activity/);
     });
 
     it('assigns versions 1, 2, 3 and keeps each version’s files', async () => {
@@ -170,7 +171,7 @@ describe('build service', () => {
         pass: true,
         errorCount: 0,
         findings: [
-          { rule: 'a11y/alt', severity: 'warn', file: 'index.html', line: 12, message: 'm', because: 'b', unverified: true },
+          { rule: 'a11y/alt', severity: 'warn', file: 'index.html', line: 12, message: 'm', because: 'b', explanation: 'e', unverified: true },
         ],
       };
       const service = await withStubGate(`process.stdout.write(${JSON.stringify(JSON.stringify(report))});`);
@@ -180,7 +181,7 @@ describe('build service', () => {
       expect(build.status).toBe('ready');
       expect(build.qa).toEqual({
         passed: true,
-        findings: [{ rule: 'a11y/alt', severity: 'warn', file: 'index.html', line: 12, message: 'm', because: 'b' }],
+        findings: [{ rule: 'a11y/alt', severity: 'warn', file: 'index.html', line: 12, message: 'm', because: 'b', explanation: 'e' }],
       });
     });
 

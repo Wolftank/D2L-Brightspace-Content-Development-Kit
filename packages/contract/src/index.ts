@@ -141,6 +141,8 @@ export interface QaFinding {
   line: number | null;
   message: string;
   because?: string;
+  /** What the finding means for students and what the instructor can do, in plain language. */
+  explanation: string;
 }
 
 export interface QaReport {
