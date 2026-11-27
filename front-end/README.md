@@ -38,7 +38,7 @@ The history shape follows the shared contract: instructor `turn` contains `{ id,
 
 Live progress and the working indicator sit in the build panel. At turn end it collapses to a single outcome line. The instructor and agent messages stay in order. Distinct assistant messages within a turn have separate bubbles, including text before and after tool calls. Send stays disabled while the request runs, and the message box remains editable so the next request can be drafted. Failed sends retain the draft.
 
-The build panel shows the newest build. The preview shows the newest ready build, so a checking or failed build keeps the previous ready preview and its version label. Restart reloads the emulator with a fresh attempt. The desktop layout places chat and build side by side with preview below; narrow windows stack the three regions.
+The build panel shows the newest build. The preview shows the newest ready build, so a checking or failed build keeps the previous ready preview and its version label. Restart reloads the emulator with a fresh attempt. The build card lists QA findings one entry per rule, the ones that need a fix first: "Needs a fix" or "Worth a look", the finding's plain-language explanation, and a Details toggle that holds its technical text. The desktop layout places chat and build side by side with preview below; narrow windows stack the three regions.
 
 An open project's Format menu changes its format between requests. Before a format is set it also shows Let CDK choose. Changing a format that is set asks first, because work that isn't in a version yet is lost, then drafts a request to rebuild in the new format. Until that rebuild, the build card says which format its version is in. Send is disabled while the change saves.
 

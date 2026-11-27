@@ -88,5 +88,9 @@ test.describe('accessibility baseline', () => {
     await expect(card.getByRole('listitem')).toHaveCount(2);
     await expect(page.getByText('Request complete', { exact: true })).toBeVisible({ timeout: TURN_TIMEOUT });
     await scan(page, testInfo, 'QA failed');
+
+    await card.getByText('Details', { exact: true }).first().click();
+    await expect(card.locator('details').first()).toHaveAttribute('open');
+    await scan(page, testInfo, 'QA failed with details open');
   });
 });

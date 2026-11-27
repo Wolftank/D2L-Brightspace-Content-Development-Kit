@@ -15,6 +15,7 @@ import { readFailure } from './api/failure';
 import { BuildDownload } from './d2l/BuildDownload';
 import { ErrorNotice } from './ErrorNotice';
 import { PreviewPanel } from './preview/PreviewPanel';
+import { QaFindings } from './QaFindings';
 
 function messageText(message: Message) {
   return message.content.filter(block => block.type === 'text').map(block => block.text).join('\n');
@@ -53,8 +54,7 @@ function BuildPanel({ build, projectAvenue, turn, statusLines, connection, outco
         {projectAvenue && (build.avenue === 'scorm' || build.avenue === 'topic') && build.avenue !== projectAvenue &&
           <p>{`This version is ${A_FORMAT[build.avenue]}. Send a request to rebuild it as ${A_FORMAT[projectAvenue]}.`}</p>}
         {build.error && <ErrorNotice failure={readFailure(build.error)} disabled={disabled} onAskForFix={onAskForFix} onSendAgain={onSendAgain} onEdit={onEdit} onNewProject={onNewProject} />}
-        {!!build.qa?.findings.length && <ul className="findings">{build.qa.findings.map((finding, index) =>
-          <li key={index}><strong>{finding.severity === 'warn' ? 'WARNING' : 'ERROR'}</strong> {finding.message}{finding.because && <p>{finding.because}</p>}</li>)}</ul>}
+        {!!build.qa?.findings.length && <QaFindings findings={build.qa.findings} />}
         {!!build.suggestions?.length && <section aria-labelledby="build-suggestions-title" className="build-suggestions">
           <h4 id="build-suggestions-title">Suggestions</h4>
           <p>These suggestions are optional and do not affect the download.</p>

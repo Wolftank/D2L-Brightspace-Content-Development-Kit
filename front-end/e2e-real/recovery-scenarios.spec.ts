@@ -15,18 +15,19 @@ const sendButton = (page: Page) => page.getByRole('button', { name: 'Send', exac
 const buildCards = (page: Page) => page.getByRole('region', { name: 'Build', exact: true }).getByRole('article');
 const buildCard = (page: Page, heading: string) => page.getByRole('article', { name: heading });
 
-test('each QA finding on the build card shows its explanation', async ({ page }) => {
+test('each QA finding on the build card shows its explanation, with its technical text behind Details', async ({ page }) => {
   await submitRequest(page, '[qa-fail] Create a practice set on workplace safety.');
 
   const card = buildCard(page, 'QA needs attention');
   await expect(card).toBeVisible({ timeout: TURN_TIMEOUT });
-  const findings = card.getByRole('listitem');
-  await expect(findings.first()).toBeVisible();
-  for (const finding of await findings.all()) {
-    await expect(finding.getByRole('paragraph')).not.toBeEmpty();
-  }
-  await expect(findings.filter({ hasText: 'Writes "completed" at top level' }).getByRole('paragraph'))
-    .toHaveText(/^Measured: once an activity reports lesson_status "completed", D2L serves later launches in review mode/);
+  const finding = card.getByRole('listitem').filter({ hasText: 'Students would only get one chance at a score.' });
+  await expect(finding).toContainText('Needs a fix');
+  const message = finding.getByText('Writes "completed" at top level');
+  await expect(message).toBeHidden();
+
+  await finding.getByText('Details', { exact: true }).click();
+  await expect(message).toBeVisible();
+  await expect(finding.getByText(/^Measured: once an activity reports lesson_status "completed", D2L serves later launches in review mode/)).toBeVisible();
 });
 
 test('a signed-out agent fails the turn, asks the instructor to sign in, and makes no build', async ({ page }) => {
