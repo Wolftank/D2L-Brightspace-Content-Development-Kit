@@ -60,6 +60,7 @@ const gateReportSchema = z.object({
         .transform((line) => (line === 0 ? null : line)),
       message: z.string(),
       because: z.string().optional(),
+      explanation: z.string(),
     }),
   ),
 });

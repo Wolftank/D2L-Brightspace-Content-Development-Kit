@@ -86,6 +86,17 @@ describe('CDK tools', () => {
       expect(after.latestBuild).toMatchObject({ version: 1, status: 'ready', qa: { passed: true }, error: null });
     });
 
+    it("reports a failed build's findings without the instructor's explanations", async () => {
+      const outDir = await addProject('p1', 'Cell division practice');
+      await fs.rm(join(outDir, 'imsmanifest.xml'));
+      const build = await builds.create('p1');
+      expect(build.qa?.findings[0]?.explanation).toEqual(expect.any(String));
+
+      const { latestBuild } = JSON.parse((await call(toolsFor('p1'), 'get_project')).content);
+
+      expect(latestBuild.qa.findings).toEqual(build.qa!.findings.map(({ explanation: _explanation, ...finding }) => finding));
+    });
+
     it('leaves out who measured the tenant and the sections for other avenues', async () => {
       await addProject('p1', 'Cell division practice');
       const { content } = await call(toolsFor('p1'), 'get_project');
@@ -154,7 +165,7 @@ describe('CDK tools', () => {
       expect(await fs.readdir(outDir)).toEqual(before);
     });
 
-    it('returns the findings of an output that fails the QA gate', async () => {
+    it("returns the findings of an output that fails the QA gate, without the instructor's explanations", async () => {
       const outDir = await addProject('p1', 'Cell division practice');
       await fs.rm(join(outDir, 'imsmanifest.xml'));
 
@@ -162,7 +173,14 @@ describe('CDK tools', () => {
 
       const report = JSON.parse(result.content);
       expect(report.passed).toBe(false);
-      expect(report.findings).toContainEqual(expect.objectContaining({ rule: 'scorm/manifest', severity: 'error' }));
+      expect(report.findings).toContainEqual({
+        rule: 'scorm/manifest',
+        severity: 'error',
+        file: '(build)',
+        line: null,
+        message: 'No imsmanifest.xml at the root of the build.',
+        because: expect.stringContaining('imsmanifest.xml at the ZIP ROOT'),
+      });
     });
 
     it('checks a content topic with the topic rules, so the untouched starter passes', async () => {

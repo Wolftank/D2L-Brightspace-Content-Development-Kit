@@ -157,6 +157,8 @@ const FAILED_FINDINGS: QaFinding[] = [
     file: 'index.html',
     line: 42,
     message: 'lesson_status is set to "completed" during load; D2L will lock the learner out after one attempt.',
+    because: 'Once an activity reports "completed", D2L serves later launches in review mode and rejects every write.',
+    explanation: 'Students would only get one chance at a score. The activity marks itself complete as soon as it opens, so D2L ignores anything after the first visit. Ask CDK to fix this.',
   },
   {
     rule: 'scorm/suspend-data-budget',
@@ -164,6 +166,8 @@ const FAILED_FINDINGS: QaFinding[] = [
     file: 'index.html',
     line: 118,
     message: 'suspend_data can exceed 4000 characters; the tenant discards writes over 4096.',
+    because: 'Only SCORM 1.2 is exposed on this tenant, so suspend_data is capped.',
+    explanation: "D2L stores only a small amount of saved progress for each student. This activity doesn't check that limit, so a student with a lot of progress could lose some of it. Ask CDK to keep saved progress within the limit.",
   },
 ];
 
